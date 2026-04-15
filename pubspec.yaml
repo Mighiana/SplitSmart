@@ -1,0 +1,83 @@
+name: Splitsmart
+description: SplitSmart — Bill Splitter & Money Manager. Split bills and track shared expenses effortlessly.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Offline local database
+  sqflite: ^2.3.3
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+  # State management
+  provider: ^6.1.2
+
+  # UI & icons
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10+1
+
+  # Utilities
+  intl: ^0.20.2
+  uuid: ^4.4.0
+  shared_preferences: ^2.2.3
+  share_plus: ^12.0.2
+  image_picker: ^1.2.1
+  flutter_local_notifications: ^21.0.0
+  package_info_plus: ^8.0.0
+
+  # QR code
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
+
+  # Timezone — required for flutter_local_notifications scheduling
+  timezone: ^0.11.0
+
+  # Backup & restore — file picker for selecting JSON backup files
+  file_picker: ^8.1.2
+
+  # Animations
+  flutter_animate: ^4.5.0
+  confetti: ^0.7.0
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  app_settings: ^7.0.0
+  local_auth: ^3.0.1
+  fl_chart: ^1.2.0
+  tutorial_coach_mark: ^1.3.3
+  archive: ^4.0.9
+
+  # Firebase — analytics & crash reporting
+  firebase_core: ^3.12.1
+  firebase_analytics: ^11.6.0
+  firebase_crashlytics: ^4.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  windows:
+    generate: true
+    image_path: "assets/icons/app_icon.png"
+  image_path: "assets/icons/app_icon.png"
+  min_sdk_android: 21
