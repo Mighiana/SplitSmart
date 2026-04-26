@@ -62,7 +62,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
   String _category     = 'Entertainment';
   String _emoji        = '📺';
   String _colorHex     = '#00D68F';
-  String _currency     = 'EUR';
+  late String _currency;
 
   // Validation
   bool _submitted     = false;
@@ -99,6 +99,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
       duration: const Duration(milliseconds: 600),
     )..forward();
 
+    _currency = AppState.currencies.isNotEmpty ? AppState.currencies.first.code : 'USD';
+
     // Pre-fill if editing
     if (_isEdit) {
       final e = widget.existing!;
@@ -134,7 +136,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
   CurrencyData get _selectedCurrency =>
       AppState.currencies.firstWhere(
         (c) => c.code == _currency,
-        orElse: () => CurrencyData('EUR', 'Euro', '🇪🇺', '€'),
+        orElse: () => CurrencyData('USD', 'US Dollar', '🇺🇸', '\$'),
       );
 
   // ── Validation ─────────────────────────────────────────────────────────────

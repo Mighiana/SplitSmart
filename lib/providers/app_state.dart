@@ -44,8 +44,8 @@ class AppState extends ChangeNotifier {
 
   // ─── Currency / static data ──────────────────────────────────────────────
   static const List<CurrencyData> currencies = [
-    CurrencyData('EUR', 'Euro', '🇪🇺', '€'),
     CurrencyData('USD', 'US Dollar', '🇺🇸', '\$'),
+    CurrencyData('EUR', 'Euro', '🇪🇺', '€'),
     CurrencyData('GBP', 'Pound Sterling', '🇬🇧', '£'),
     CurrencyData('HUF', 'Hungarian Forint', '🇭🇺', 'Ft'),
     CurrencyData('PKR', 'Pakistani Rupee', '🇵🇰', '₨'),

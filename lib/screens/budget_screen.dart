@@ -68,7 +68,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (activeCurs.isEmpty && state.transactions.isNotEmpty) {
       activeCurs.add(state.transactions.first.currency);
     } else if (activeCurs.isEmpty) {
-      activeCurs.add('EUR');
+      activeCurs.add(state.currencies.isNotEmpty ? state.currencies.first.code : 'USD');
     }
 
     int totalBudgeted = 0;

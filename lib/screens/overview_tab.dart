@@ -119,10 +119,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         if (groupTx.isNotEmpty) {
           _selectedCurrency = groupTx.first.currency;
         } else {
-          _selectedCurrency = 'EUR';
+          _selectedCurrency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD';
         }
       } else {
-        _selectedCurrency = 'EUR';
+        _selectedCurrency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD';
       }
     }
 

@@ -44,7 +44,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
       } else if (state.transactions.isNotEmpty) {
         setState(() => _currency = state.transactions.first.currency);
       } else {
-        setState(() => _currency = 'EUR');
+        setState(() => _currency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD');
       }
     });
   }
