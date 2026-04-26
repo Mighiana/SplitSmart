@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../providers/app_state.dart';
 import 'auth_service.dart';
@@ -221,6 +220,14 @@ class FirestoreService {
       'inviteCode': inviteCode,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    
+    // SEC-C5: Store code mapping in separate collection to prevent group scraping
+    try {
+      await _db.collection('inviteCodes').doc(inviteCode).set({'groupId': doc.id});
+    } catch (e) {
+      debugPrint('[Firestore] Failed to save invite code mapping: $e');
+    }
+    
     _docIdCache[g.id] = doc.id; // Map local ID to Firestore doc ID
     return {'docId': doc.id, 'inviteCode': inviteCode};
   }
@@ -439,24 +446,50 @@ class FirestoreService {
   /// SEC-H4: Maximum group members allowed.
   static const int _maxGroupMembers = 50;
 
-  /// Join a group via invite code using secure Cloud Function.
+  /// Join a group via invite code (Client-side secure pattern).
   Future<GroupData?> joinGroupByInviteCode(String code, String memberName) async {
     try {
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('joinGroup');
-      final result = await callable.call(<String, dynamic>{
-        'inviteCode': code,
-        'memberName': memberName,
-      });
-
-      final String groupId = result.data['groupId'] as String;
+      final cleanCode = code.toUpperCase().trim();
       
-      // Load the joined group directly by ID
+      // 1. Fetch the groupId from the secure inviteCodes mapping
+      final mappingDoc = await _db.collection('inviteCodes').doc(cleanCode).get();
+      if (!mappingDoc.exists) {
+        debugPrint('[Firestore] Invalid invite code or mapping not found.');
+        return null;
+      }
+      final String groupId = mappingDoc.data()?['groupId'] ?? '';
+      
+      // 2. Fetch the actual group to verify
       final doc = await _groupsCol.doc(groupId).get();
       if (!doc.exists) return null;
-      
+
+      final data = doc.data() as Map<String, dynamic>;
+      final memberUids = List<String>.from(data['memberUids'] ?? []);
+      final members = List<String>.from(data['members'] ?? []);
+
+      // SEC-H4: Enforce member cap locally (Rules will enforce it server-side)
+      if (memberUids.length >= _maxGroupMembers) {
+        debugPrint('[Firestore] Group full: ${memberUids.length} >= $_maxGroupMembers');
+        return null;
+      }
+
+      if (!memberUids.contains(_uid)) {
+        memberUids.add(_uid);
+        // Sanitize member name length
+        final safeName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
+        members.add(safeName);
+        
+        // SEC-C1: Pass the code to prove we know it, bypassing member-only lock
+        await doc.reference.update({
+          'memberUids': memberUids,
+          'members': members,
+          'joinAttemptCode': cleanCode, 
+        });
+      }
+
       return await _groupFromDocFull(doc);
     } catch (e) {
-      debugPrint('[Firestore] joinGroupByInviteCode Cloud Function error: $e');
+      debugPrint('[Firestore] joinGroupByInviteCode error: $e');
       return null;
     }
   }
