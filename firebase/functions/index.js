@@ -7,6 +7,7 @@
  */
 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -205,3 +206,62 @@ exports.onSettlementCreated = onDocumentCreated(
     }, memberUids);
   }
 );
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. JOIN GROUP VIA INVITE CODE (Secure server-side operation)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+exports.joinGroup = onCall(async (request) => {
+  // 1. Verify authentication
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "User must be logged in to join a group.");
+  }
+  
+  const uid = request.auth.uid;
+  const inviteCode = request.data.inviteCode;
+  let memberName = request.data.memberName || "Unknown";
+
+  if (!inviteCode || typeof inviteCode !== 'string') {
+    throw new HttpsError("invalid-argument", "A valid invite code is required.");
+  }
+
+  // Sanitize member name
+  memberName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
+  const cleanCode = inviteCode.toUpperCase().trim();
+
+  // 2. Query the group with admin privileges (bypassing client security rules)
+  const groupsRef = db.collection("groups");
+  const snap = await groupsRef.where("inviteCode", "==", cleanCode).limit(1).get();
+
+  if (snap.empty) {
+    throw new HttpsError("not-found", "Invalid invite code or group does not exist.");
+  }
+
+  const doc = snap.docs[0];
+  const groupData = doc.data();
+  const memberUids = groupData.memberUids || [];
+  const members = groupData.members || [];
+
+  // 3. SEC-H4: Enforce member cap
+  if (memberUids.length >= 50) {
+    throw new HttpsError("failed-precondition", "This group has reached the maximum member limit.");
+  }
+
+  // 4. Add user if not already a member
+  if (!memberUids.includes(uid)) {
+    memberUids.push(uid);
+    members.push(memberName);
+    
+    await doc.ref.update({
+      memberUids: memberUids,
+      members: members
+    });
+    console.log(`[Join] Added user ${uid} to group ${doc.id}`);
+  } else {
+    console.log(`[Join] User ${uid} is already in group ${doc.id}`);
+  }
+
+  // Return the group ID so the client app can load it natively
+  return { groupId: doc.id };
+});
+
