@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 11,
+      version: 13,
       onCreate: _create,
       onUpgrade: _upgrade,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
@@ -45,12 +45,13 @@ class DatabaseService {
     // groups
     batch.execute('''
       CREATE TABLE groups (
-        id         INTEGER PRIMARY KEY,
-        name       TEXT    NOT NULL,
-        emoji      TEXT    NOT NULL DEFAULT "💰",
-        currency   TEXT    NOT NULL DEFAULT "USD",
-        sym        TEXT    NOT NULL DEFAULT "\$",
-        is_archived INTEGER NOT NULL DEFAULT 0
+        id           INTEGER PRIMARY KEY,
+        name         TEXT    NOT NULL,
+        emoji        TEXT    NOT NULL DEFAULT "💰",
+        currency     TEXT    NOT NULL DEFAULT "USD",
+        sym          TEXT    NOT NULL DEFAULT "\$",
+        is_archived  INTEGER NOT NULL DEFAULT 0,
+        firestore_id TEXT
       )''');
 
     // group members
@@ -75,6 +76,8 @@ class DatabaseService {
         receipt      INTEGER NOT NULL DEFAULT 0,
         receipt_path TEXT,
         split_json   TEXT,
+        created_by   TEXT,
+        updated_by   TEXT,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
       )''');
 
@@ -237,9 +240,8 @@ class DatabaseService {
       } catch (e) { debugPrint('[DB] migration v7 reminders failed: $e'); }
     }
     if (oldVersion < 8) {
-      try {
-        await db.execute('ALTER TABLE groups ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0');
-      } catch (e) { debugPrint('[DB] migration v8 groups is_archived failed: $e'); }
+      // BUG-8 fix: is_archived was already added in v2 migration.
+      // This block intentionally left empty to preserve migration version numbering.
     }
     if (oldVersion < 9) {
       try {
@@ -266,6 +268,19 @@ class DatabaseService {
       try {
         await db.execute('ALTER TABLE saving_goals ADD COLUMN target_date TEXT');
       } catch (e) { debugPrint('[DB] migration v11 saving_goals target_date failed: $e'); }
+    }
+    if (oldVersion < 12) {
+      try {
+        await db.execute('ALTER TABLE expenses ADD COLUMN created_by TEXT');
+        await db.execute('ALTER TABLE expenses ADD COLUMN updated_by TEXT');
+      } catch (e) { debugPrint('[DB] migration v12 expenses authorship failed: $e'); }
+    }
+    if (oldVersion < 13) {
+      // Store Firestore doc ID in SQLite so _docIdCache can be rebuilt after
+      // app kills. This column is NULL for pre-v13 rows until next cloud sync.
+      try {
+        await db.execute('ALTER TABLE groups ADD COLUMN firestore_id TEXT');
+      } catch (e) { debugPrint('[DB] migration v13 groups.firestore_id failed: $e'); }
     }
   }
 
@@ -305,6 +320,8 @@ class DatabaseService {
           receipt:     (r['receipt'] as int) == 1,
           receiptPath: r['receipt_path'] as String?,
           splits:      splits,
+          createdBy:   r['created_by'] as String?,
+          updatedBy:   r['updated_by'] as String?,
         );
       }).toList();
 
@@ -329,6 +346,7 @@ class DatabaseService {
         expenses:    expenses,
         settlements: settlements,
         isArchived:  (row['is_archived'] as int? ?? 0) == 1,
+        firestoreId: row['firestore_id'] as String?,
       ));
     }
     return groups;
@@ -337,18 +355,92 @@ class DatabaseService {
   Future<void> insertGroup(GroupData g) async {
     final db = await _database;
     await db.insert('groups', {
-      'id':          g.id,
-      'name':        g.name,
-      'emoji':       g.emoji,
-      'currency':    g.currency,
-      'sym':         g.sym,
-      'is_archived': g.isArchived ? 1 : 0,
+      'id':           g.id,
+      'name':         g.name,
+      'emoji':        g.emoji,
+      'currency':     g.currency,
+      'sym':          g.sym,
+      'is_archived':  g.isArchived ? 1 : 0,
+      'firestore_id': g.firestoreId,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     // members
     for (final name in g.members) {
       await db.insert('group_members', {'group_id': g.id, 'name': name});
     }
+  }
+
+  /// Atomically replace ALL synced group data in a single SQLite transaction.
+  /// Because it is a transaction, an app kill mid-operation triggers a rollback
+  /// — the OLD data is preserved rather than leaving the table empty.
+  Future<void> atomicReplaceGroups(List<GroupData> groups) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      // Delete FK children before parent
+      await txn.delete('settlements');
+      await txn.delete('expenses');
+      await txn.delete('group_members');
+      await txn.delete('groups');
+
+      for (final g in groups) {
+        await txn.insert('groups', {
+          'id':           g.id,
+          'name':         g.name,
+          'emoji':        g.emoji,
+          'currency':     g.currency,
+          'sym':          g.sym,
+          'is_archived':  g.isArchived ? 1 : 0,
+          'firestore_id': g.firestoreId,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+        for (final m in g.members) {
+          await txn.insert('group_members', {'group_id': g.id, 'name': m});
+        }
+        for (final e in g.expenses) {
+          await txn.insert('expenses', {
+            'id':           e.id,
+            'group_id':     g.id,
+            'desc':         e.desc,
+            'amount':       e.amount,
+            'cat':          e.cat,
+            'paid_by':      e.paidBy,
+            'date':         e.date,
+            'receipt':      e.receipt ? 1 : 0,
+            'receipt_path': e.receiptPath,
+            'split_json':   e.splitsJson,
+            'created_by':   e.createdBy,
+            'updated_by':   e.updatedBy,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        for (final s in g.settlements) {
+          await txn.insert('settlements', {
+            'group_id': g.id,
+            'from_m':   s.from,
+            'to_m':     s.to,
+            'amount':   s.amount,
+            'method':   s.method,
+            'date':     s.date,
+          });
+        }
+      }
+    });
+    debugPrint('[DB] atomicReplaceGroups committed — ${groups.length} groups');
+  }
+
+  Future<void> updateGroup(GroupData g) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.update('groups', {
+        'name':  g.name,
+        'emoji': g.emoji,
+      }, where: 'id = ?', whereArgs: [g.id]);
+
+      // Replace members
+      await txn.delete('group_members', where: 'group_id = ?', whereArgs: [g.id]);
+      for (final name in g.members) {
+        await txn.insert('group_members', {'group_id': g.id, 'name': name});
+      }
+    });
   }
 
   Future<void> setGroupArchived(int id, bool archived) async {
@@ -377,6 +469,8 @@ class DatabaseService {
       'receipt':      e.receipt ? 1 : 0,
       'receipt_path': e.receiptPath,
       'split_json':   e.splitsJson,
+      'created_by':   e.createdBy,
+      'updated_by':   e.updatedBy,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -392,6 +486,8 @@ class DatabaseService {
       'receipt':      e.receipt ? 1 : 0,
       'receipt_path': e.receiptPath,
       'split_json':   e.splitsJson,
+      'created_by':   e.createdBy,
+      'updated_by':   e.updatedBy,
     }, where: 'id = ?', whereArgs: [e.id]);
   }
 
@@ -652,12 +748,14 @@ class DatabaseService {
 
   Future<int> insertReminder(ReminderData r) async {
     final db = await _database;
-    return db.insert('reminders', {
+    final map = <String, dynamic>{
       'title':        r.title,
       'amount_str':   r.amountStr,
       'date':         r.date.toIso8601String(),
       'is_completed': r.isCompleted ? 1 : 0,
-    });
+    };
+    if (r.id > 0) map['id'] = r.id;
+    return db.insert('reminders', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> updateReminder(ReminderData r) async {
@@ -673,6 +771,22 @@ class DatabaseService {
   Future<void> deleteReminder(int id) async {
     final db = await _database;
     await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> atomicReplaceReminders(List<ReminderData> reminders) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('reminders');
+      for (final r in reminders) {
+        await txn.insert('reminders', {
+          'id':           r.id,
+          'title':        r.title,
+          'amount_str':   r.amountStr,
+          'date':         r.date.toIso8601String(),
+          'is_completed': r.isCompleted ? 1 : 0,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
   // ─── Saving Goals ─────────────────────────────────────────────────────────
@@ -705,7 +819,28 @@ class DatabaseService {
   // ─── Utility ──────────────────────────────────────────────────────────────
 
 
-  /// Wipe everything — useful for dev reset.
+  /// Wipe only cloud-synced tables — used by _cacheToSQLite() so that
+  /// local-only data (subscriptions, reminders) is preserved.
+  Future<void> clearSyncedData() async {
+    final db = await _database;
+    final batch = db.batch();
+    // FK children of groups — delete before groups
+    batch.delete('settlements');
+    batch.delete('expenses');
+    batch.delete('group_members');
+    batch.delete('groups');
+    // Cloud-synced standalone tables
+    batch.delete('transactions');
+    batch.delete('wallets');
+    batch.delete('group_wallets');
+    batch.delete('budget_limits');
+    batch.delete('saving_goals');
+    batch.delete('reminders'); // REMINDERS ARE NOW SYNCED
+    // NOTE: subscriptions are NOT cleared — they are local-only
+    await batch.commit(noResult: true);
+  }
+
+  /// Wipe everything — useful for dev reset / full account data clear.
   /// Order: FK children first (settlements → expenses → group_members → groups),
   /// then standalone tables, so foreign key constraints are never violated.
   Future<void> clearAll() async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
@@ -62,6 +64,7 @@ class _SummaryScreenState extends State<SummaryScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final transactions = context.select<AppState, List<TransactionData>>((s) => s.transactions);
     final txns = transactions.where((t) {
       final d = t.rawDate;
@@ -122,7 +125,7 @@ class _SummaryScreenState extends State<SummaryScreen>
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text('Spending Analytics',
+                        child: Text(l.spendingAnalytics,
                             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
                                 color: TC.text(context))),
                       ),
@@ -152,11 +155,11 @@ class _SummaryScreenState extends State<SummaryScreen>
                         ),
                         Column(
                           children: [
-                            Text(AppDateUtils.monthLabel(_month),
+                            Text(AppDateUtils.monthLabel(_month, l.locale.languageCode),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                             if (_isCurrentMonth)
-                              const Text('Current month',
-                                  style: TextStyle(fontSize: 10, color: AppColors.green)),
+                              Text(l.currentMonth,
+                                  style: const TextStyle(fontSize: 10, color: AppColors.green)),
                           ],
                         ),
                         GestureDetector(
@@ -186,8 +189,8 @@ class _SummaryScreenState extends State<SummaryScreen>
               child: Center(
                 child: EmptyState(
                   icon: '📊',
-                  title: 'No data for ${AppDateUtils.monthLabel(_month)}',
-                  subtitle: 'Add transactions to see your spending analytics',
+                  title: '${l.noDataFor} ${AppDateUtils.monthLabel(_month, l.locale.languageCode)}',
+                  subtitle: l.addTransactionsSummary,
                 ),
               ),
             )
@@ -226,7 +229,7 @@ class _SummaryScreenState extends State<SummaryScreen>
                             child: Column(
                               children: [
                                 Text(
-                                  netBalance >= 0 ? '🟢 Positive Month' : '🔴 Overspending',
+                                  netBalance >= 0 ? l.positiveMonth : l.overspending,
                                   style: const TextStyle(fontSize: 12, color: AppColors.text2, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 8),
@@ -240,7 +243,7 @@ class _SummaryScreenState extends State<SummaryScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Net balance for ${AppDateUtils.monthLabel(_month)}',
+                                  '${l.netBalanceFor} ${AppDateUtils.monthLabel(_month, l.locale.languageCode)}',
                                   style: const TextStyle(fontSize: 12, color: AppColors.text3),
                                 ),
                               ],
@@ -254,13 +257,13 @@ class _SummaryScreenState extends State<SummaryScreen>
                     // Income / Expense row
                     Row(children: [
                       Expanded(child: _OverviewTile(
-                        label: 'Total Income', value: totalIncome,
+                        label: l.totalIncome, value: totalIncome,
                         color: AppColors.green, icon: '💚',
                         anim: _anim,
                       )),
                       const SizedBox(width: 10),
                       Expanded(child: _OverviewTile(
-                        label: 'Total Spent', value: totalExpense,
+                        label: l.totalSpent, value: totalExpense,
                         color: AppColors.red, icon: '💸',
                         anim: _anim,
                       )),
@@ -275,14 +278,14 @@ class _SummaryScreenState extends State<SummaryScreen>
                     ],
 
                     // ─── Day of Week Bar Chart ────────────────────────────
-                    _SectionHeader('Spending by Day of Week'),
+                    _SectionHeader(l.spendByDay),
                     const SizedBox(height: 12),
-                    _DayBarChart(dayTotals: dayTotals, anim: _anim),
+                    _DayBarChart(dayTotals: dayTotals, anim: _anim, locale: l.locale.languageCode),
                     const SizedBox(height: 20),
 
                     // ─── Category breakdown ───────────────────────────────
                     if (sorted.isNotEmpty) ...[
-                      _SectionHeader('Category Breakdown'),
+                      _SectionHeader(l.catBreakdown),
                       const SizedBox(height: 12),
                       ...sorted.asMap().entries.map((entry) {
                         final i   = entry.key;
@@ -360,27 +363,27 @@ class _SummaryScreenState extends State<SummaryScreen>
 
                     // ─── Top Insights ─────────────────────────────────────
                     if (sorted.isNotEmpty) ...[
-                      _SectionHeader('Insights'),
+                      _SectionHeader(l.insights),
                       const SizedBox(height: 12),
                       _InsightCard(
                         icon: '🏆',
-                        title: 'Biggest expense category',
+                        title: l.biggestCat,
                         value: '${sorted.first.key} — ${sorted.first.value.toStringAsFixed(2)}',
                         color: AppColors.amber,
                       ),
                       const SizedBox(height: 8),
                       _InsightCard(
                         icon: '📆',
-                        title: 'Transactions this month',
-                        value: '${txns.length} recorded',
+                        title: l.transThisMonth,
+                        value: '${txns.length} ${l.recorded}',
                         color: AppColors.blue,
                       ),
                       if (totalIncome > 0 && totalExpense > totalIncome) ...[
                         const SizedBox(height: 8),
                         _InsightCard(
                           icon: '⚠️',
-                          title: 'Overspending alert',
-                          value: 'You\'ve spent ${((totalExpense / totalIncome - 1) * 100).toStringAsFixed(0)}% more than earned',
+                          title: l.overspendingAlert,
+                          value: '${((totalExpense / totalIncome - 1) * 100).toStringAsFixed(0)}% more than earned',
                           color: AppColors.red,
                         ),
                       ],
@@ -388,7 +391,7 @@ class _SummaryScreenState extends State<SummaryScreen>
                         const SizedBox(height: 8),
                         _InsightCard(
                           icon: '🌟',
-                          title: 'Great savings!',
+                          title: '🌟 Great savings!',
                           value: 'Saving ${((1 - totalExpense / totalIncome) * 100).toStringAsFixed(0)}% of income this month',
                           color: AppColors.green,
                         ),
@@ -483,6 +486,7 @@ class _SavingsRateTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final rate = ((income - expense) / income).clamp(0.0, 1.0);
     final pct  = (rate * 100).toStringAsFixed(0);
     final color = rate > 0.3 ? AppColors.green : rate > 0 ? AppColors.amber : AppColors.red;
@@ -504,7 +508,7 @@ class _SavingsRateTile extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('SAVINGS RATE',
+                  Text(l.savingsRate,
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
                           color: TC.text3(context), letterSpacing: 2)),
                   Text('$pct%',
@@ -525,12 +529,12 @@ class _SavingsRateTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 rate > 0.3
-                    ? '🌟 Excellent savings this month!'
+                    ? l.excellentSavings
                     : rate > 0.1
-                        ? '👍 On track — keep it up'
+                        ? l.onTrack
                         : rate > 0
-                            ? '⚠️ Low savings — try to cut back'
-                            : '🔴 Spending exceeds income',
+                            ? l.lowSavings
+                            : l.spendingExceedsIncome,
                 style: TextStyle(fontSize: 12, color: color),
               ),
             ],
@@ -545,12 +549,19 @@ class _SavingsRateTile extends StatelessWidget {
 class _DayBarChart extends StatelessWidget {
   final List<double> dayTotals; // length 7: Sun=0 … Sat=6
   final Animation<double> anim;
-  const _DayBarChart({required this.dayTotals, required this.anim});
+  final String locale;
+  const _DayBarChart({required this.dayTotals, required this.anim, required this.locale});
 
   @override
   Widget build(BuildContext context) {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     final maxVal = dayTotals.reduce((a, b) => a > b ? a : b);
+    // Generate short day names for Sun(0)..Sat(6) using intl
+    final dayNames = List.generate(7, (i) {
+      // Create a known Sunday (2024-01-07) and offset by i
+      final d = DateTime(2024, 1, 7 + i);
+      return DateFormat.E(locale).format(d);
+    });
+
 
     return AnimatedBuilder(
       animation: anim,
@@ -591,7 +602,7 @@ class _DayBarChart extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(days[i],
+                    Text(dayNames[i],
                         style: TextStyle(
                           fontSize: 9, fontWeight: FontWeight.w600,
                           color: isToday ? AppColors.green : TC.text3(context),

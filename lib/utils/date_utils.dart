@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 // Date formatting centralized
 class AppDateUtils {
   /// Always returns ISO format "YYYY-MM-DD" so rawDate can parse it reliably.
@@ -9,11 +11,7 @@ class AppDateUtils {
         '${now.day.toString().padLeft(2, '0')}';
   }
 
-  static String monthLabel(DateTime d) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return '${months[d.month - 1]} ${d.year}';
+  static String monthLabel(DateTime d, String locale) {
+    return DateFormat.yMMMM(locale).format(d);
   }
 }

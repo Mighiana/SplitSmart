@@ -7,12 +7,13 @@ import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../main.dart';
-import '../widgets/common_widgets.dart';
+import '../l10n/app_localizations.dart';
 
 // ─── Premium Chart Screen ─────────────────────────────────────────────────────
 class MoneyChartsScreen extends StatefulWidget {
   final String? initialCurrency;
-  const MoneyChartsScreen({super.key, this.initialCurrency});
+  final bool? isGroupFilter;
+  const MoneyChartsScreen({super.key, this.initialCurrency, this.isGroupFilter});
 
   @override
   State<MoneyChartsScreen> createState() => _MoneyChartsScreenState();
@@ -87,7 +88,11 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
     double currentMonthActual = 0;
     double previousMonthActual = 0;
 
-    final allTxns = state.allTransactionsWithGroupShares;
+    final allTxns = state.allTransactionsWithGroupShares.where((t) {
+      if (widget.isGroupFilter == true) return t.isGroupShare == true;
+      if (widget.isGroupFilter == false) return t.isGroupShare == false || t.isGroupShare == null;
+      return true;
+    }).toList();
     for (int i = 0; i < months.length; i++) {
       final m = months[i];
       final val = allTxns
@@ -171,7 +176,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                 color: TC.text(context), size: 20),
                           ),
                           Expanded(
-                            child: Text('Financial Overview',
+                            child: Text(AppLocalizations.of(context).financialOverview,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                     color: TC.text(context),
@@ -215,7 +220,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                               for (final g in state.activeGroups) {
                                 available.add(g.currency);
                               }
-                              for (final t in state.allTransactionsWithGroupShares) {
+                              for (final t in allTxns) {
                                 available.add(t.currency);
                               }
                               return available
@@ -250,7 +255,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                       child: Row(
                         children: [
                           _TogglePill(
-                            label: 'Expenses',
+                            label: AppLocalizations.of(context).expenses,
                             active: !_showIncome,
                             color: const Color(0xFFFF4D6D),
                             onTap: () {
@@ -261,7 +266,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                             },
                           ),
                           _TogglePill(
-                            label: 'Income',
+                            label: AppLocalizations.of(context).income,
                             active: _showIncome,
                             color: const Color(0xFF00D68F),
                             onTap: () {
@@ -282,8 +287,8 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                         children: [
                           Text(
                             _showIncome
-                                ? 'Total Income This Month'
-                                : 'Total Spent This Month',
+                                ? '${AppLocalizations.of(context).totalIncome} ${AppLocalizations.of(context).thisMonth}'
+                                : '${AppLocalizations.of(context).totalSpent} ${AppLocalizations.of(context).thisMonth}',
                             style: TextStyle(
                                 fontSize: 13, color: TC.text2(context)),
                           ),
@@ -367,7 +372,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                   Row(
                     children: [
                       _StatCard(
-                        label: 'Previous Month',
+                        label: '${AppLocalizations.of(context).periodMonth} -1',
                         value: '$sym${AppCurrencyUtils.formatAmount(previousMonthActual, 0)}',
                         icon: Icons.calendar_month,
                         color: const Color(0xFF4D9EFF),
@@ -376,8 +381,8 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                       const SizedBox(width: 10),
                       _StatCard(
                         label: monthlyBudget > 0
-                            ? 'Budget Used'
-                            : '6-Mo Average',
+                            ? '${AppLocalizations.of(context).budget} %'
+                            : '6-Mo Avg',
                         value: monthlyBudget > 0
                             ? '${pct.toStringAsFixed(0)}%'
                             : '$sym${AppCurrencyUtils.formatAmount(totalActual / 6, 0)}',
@@ -434,7 +439,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Text('6-Month Trend',
+                              child: Text(AppLocalizations.of(context).trendMonth,
                                   style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
@@ -460,6 +465,18 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                   )
                       .animate()
                       .fade(delay: 250.ms, duration: 500.ms)
+                      .slideY(begin: 0.08),
+
+                  const SizedBox(height: 20),
+
+                  // ── Income vs Expense Histogram ────────────────────────────────
+                  _TrendHistogram(
+                    transactions: allTxns,
+                    currency: _currency,
+                    isDark: isDark,
+                  )
+                      .animate()
+                      .fade(delay: 300.ms, duration: 500.ms)
                       .slideY(begin: 0.08),
 
                   const SizedBox(height: 20),
@@ -496,13 +513,13 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Text('Category Breakdown',
+                              child: Text(AppLocalizations.of(context).catBreakdown,
                                   style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: TC.text(context))),
                             ),
-                            Text('This Month',
+                            Text(AppLocalizations.of(context).thisMonth,
                                 style: TextStyle(
                                     fontSize: 11, color: TC.text3(context))),
                           ],
@@ -660,7 +677,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                     style: const TextStyle(fontSize: 40)),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'No ${_showIncome ? 'income' : 'expenses'} this month',
+                                  'No ${_showIncome ? AppLocalizations.of(context).income.toLowerCase() : AppLocalizations.of(context).expenses.toLowerCase()} ${AppLocalizations.of(context).thisMonth.toLowerCase()}',
                                   style: TextStyle(
                                       color: TC.text2(context), fontSize: 14),
                                 ),
@@ -703,7 +720,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Set a Monthly Budget',
+                                    AppLocalizations.of(context).budget,
                                     style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
@@ -747,7 +764,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                 Icon(Icons.speed,
                                     color: primaryColor, size: 20),
                                 const SizedBox(width: 8),
-                                Text('Monthly Budget',
+                                Text(AppLocalizations.of(context).budget,
                                     style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
@@ -1334,4 +1351,296 @@ class _AnimatedDonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AnimatedDonutPainter old) => true;
+}
+
+// ─── Income vs Expense Trend Histogram ───────────────────────────────────────
+class _TrendHistogram extends StatelessWidget {
+  final List<TransactionData> transactions;
+  final String? currency;
+  final bool isDark;
+
+  const _TrendHistogram({
+    required this.transactions,
+    required this.currency,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final int barCount = 6;
+    final now = DateTime.now();
+    final labels = <String>[];
+    final incomeData = <double>[];
+    final expenseData = <double>[];
+
+    final filtered = currency != null
+        ? transactions.where((t) => t.currency == currency).toList()
+        : transactions;
+
+    for (int i = barCount - 1; i >= 0; i--) {
+      final periodStart = DateTime(now.year, now.month - i, 1);
+      final periodEnd = DateTime(now.year, now.month - i + 1, 1);
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      final label = i == 0 ? 'Now' : months[periodStart.month - 1];
+
+      double inc = 0, exp = 0;
+      for (final t in filtered) {
+        final d = t.rawDate;
+        if (d == null) continue;
+        if (!d.isBefore(periodStart) && d.isBefore(periodEnd)) {
+          if (t.type == 'income') inc += t.amount;
+          else exp += t.amount;
+        }
+      }
+      labels.add(label);
+      incomeData.add(inc);
+      expenseData.add(exp);
+    }
+
+    double maxVal = 1;
+    for (int i = 0; i < barCount; i++) {
+      if (incomeData[i] > maxVal) maxVal = incomeData[i];
+      if (expenseData[i] > maxVal) maxVal = expenseData[i];
+    }
+    final hasData = incomeData.any((v) => v > 0) || expenseData.any((v) => v > 0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: TC.border(context)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.35)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ────────────────────────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.blueDim,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.bar_chart_rounded,
+                    size: 18, color: AppColors.blue),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l.trendMonth,
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: TC.text3(context),
+                            letterSpacing: 1.5)),
+                    const SizedBox(height: 2),
+                    Text(l.incomeVsExpenses,
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: TC.text(context))),
+                  ],
+                ),
+              ),
+              // Legend
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _LegendDot(color: AppColors.green, label: l.income),
+                  const SizedBox(width: 12),
+                  _LegendDot(color: const Color(0xFFFF4D6D), label: l.expense),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── Chart ─────────────────────────────────────────────────────────
+          if (!hasData)
+            SizedBox(
+              height: 160,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('📊', style: TextStyle(fontSize: 40)),
+                    const SizedBox(height: 10),
+                    Text(l.noDataPeriod,
+                        style: TextStyle(
+                            color: TC.text3(context),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 220,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxVal * 1.15,
+                  minY: 0,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      tooltipBorderRadius: BorderRadius.circular(10),
+                      getTooltipItem: (group, _, rod, rodIndex) {
+                        final isIncome = rodIndex == 0;
+                        return BarTooltipItem(
+                          '${isIncome ? l.income : l.expense}\n${AppCurrencyUtils.formatAmount(rod.toY)}',
+                          TextStyle(
+                            color: isIncome
+                                ? AppColors.green
+                                : const Color(0xFFFF4D6D),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: maxVal / 4 > 0 ? maxVal / 4 : 1,
+                    getDrawingHorizontalLine: (v) => FlLine(
+                      color: TC.border(context).withValues(alpha: 0.5),
+                      strokeWidth: 0.8,
+                      dashArray: [4, 4],
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 44,
+                        getTitlesWidget: (value, _) {
+                          if (value == 0 || value > maxVal * 1.1) {
+                            return const SizedBox.shrink();
+                          }
+                          final formatted = value >= 1000
+                              ? '${(value / 1000).toStringAsFixed(1)}K'
+                              : value.toStringAsFixed(0);
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Text(formatted,
+                                style: TextStyle(
+                                    color: TC.text3(context),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600)),
+                          );
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 28,
+                        getTitlesWidget: (value, _) {
+                          final idx = value.toInt();
+                          if (idx >= 0 && idx < labels.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(labels[idx],
+                                  style: TextStyle(
+                                      color: TC.text2(context),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700)),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: List.generate(barCount, (i) {
+                    return BarChartGroupData(
+                      x: i,
+                      barsSpace: 4,
+                      barRods: [
+                        BarChartRodData(
+                          toY: incomeData[i],
+                          color: AppColors.green,
+                          width: 16,
+                          borderRadius:
+                              const BorderRadius.vertical(top: Radius.circular(5)),
+                          backDrawRodData: BackgroundBarChartRodData(
+                            show: true,
+                            toY: maxVal * 1.15,
+                            color: AppColors.green
+                                .withValues(alpha: isDark ? 0.07 : 0.04),
+                          ),
+                        ),
+                        BarChartRodData(
+                          toY: expenseData[i],
+                          color: const Color(0xFFFF4D6D),
+                          width: 16,
+                          borderRadius:
+                              const BorderRadius.vertical(top: Radius.circular(5)),
+                          backDrawRodData: BackgroundBarChartRodData(
+                            show: true,
+                            toY: maxVal * 1.15,
+                            color: const Color(0xFFFF4D6D)
+                                .withValues(alpha: isDark ? 0.07 : 0.04),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Legend dot helper ─────────────────────────────────────────────────────────
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+              color: color, borderRadius: BorderRadius.circular(3)),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 10,
+                color: TC.text3(context),
+                fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
 }

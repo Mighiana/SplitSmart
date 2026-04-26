@@ -171,6 +171,8 @@ class _SettleUpScreenState extends State<SettleUpScreen>
                 final i = entry.key;
                 final p = entry.value;
                 final method = _methods[i] ?? '';
+                // Only the payer or receiver can record the payment
+                final canRecord = p.from == 'You' || p.to == 'You';
 
                 return FadeTransition(
                   opacity: _fadeFor(i + 2),
@@ -182,9 +184,11 @@ class _SettleUpScreenState extends State<SettleUpScreen>
                       method: method,
                       group: g,
                       isSettling: _isSettling,
+                      canRecord: canRecord,
                       onMethodChanged: (m) => setState(() => _methods[i] = m),
-                      onConfirm: () =>
-                          _confirm(context, i, p.from, p.to, p.amount, g),
+                      onConfirm: canRecord
+                          ? () => _confirm(context, i, p.from, p.to, p.amount, g)
+                          : null,
                     ),
                   ),
                 );
@@ -240,10 +244,14 @@ class _SettleUpScreenState extends State<SettleUpScreen>
         ),
       );
 
+      if (!mounted) return;
       final state = context.read<AppState>();
       final remaining = state.buildSettlePlan(g);
       if (remaining.isEmpty) {
-        Navigator.pop(context);
+        // Defer pop to avoid '!_debugLocked' assertion during SnackBar transition
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -300,7 +308,8 @@ class _SettledAllBadgeState extends State<_SettledAllBadge>
         ),
         child: Column(
           children: [
-            Text('✅', style: TextStyle(fontSize: 42 + _pulse.value * 4)),
+            Icon(Icons.check_circle_rounded,
+                size: 48 + _pulse.value * 8, color: AppColors.green),
             const SizedBox(height: 12),
             Text(
               'All settled up!',
@@ -330,8 +339,9 @@ class _PaymentCard extends StatefulWidget {
   final String method;
   final GroupData group;
   final bool isSettling;
+  final bool canRecord;
   final void Function(String) onMethodChanged;
-  final VoidCallback onConfirm;
+  final VoidCallback? onConfirm;
 
   const _PaymentCard({
     required this.index,
@@ -339,6 +349,7 @@ class _PaymentCard extends StatefulWidget {
     required this.method,
     required this.group,
     required this.isSettling,
+    required this.canRecord,
     required this.onMethodChanged,
     required this.onConfirm,
   });
@@ -354,6 +365,7 @@ class _PaymentCardState extends State<_PaymentCard>
   @override
   Widget build(BuildContext context) {
     final p = widget.pair;
+    final canRecord = widget.canRecord;
     final g = widget.group;
 
     return Container(
@@ -431,108 +443,144 @@ class _PaymentCardState extends State<_PaymentCard>
             ),
 
             // ── Method label ─────────────────────────────────────────────────
-            Text(
-              'PAYMENT METHOD',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: TC.text3(context),
-                letterSpacing: 1.5,
+            if (canRecord) ...[
+              Text(
+                'PAYMENT METHOD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: TC.text3(context),
+                  letterSpacing: 1.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-            // ── Method chips ─────────────────────────────────────────────────
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: AppState.settleMethods.map((m) {
-                final active = widget.method == m;
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    widget.onMethodChanged(m);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.blueDim : TC.card2(context),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: active ? AppColors.blue : TC.border(context),
-                        width: 1.5,
+              // ── Method chips ─────────────────────────────────────────────────
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: AppState.settleMethods.map((m) {
+                  final active = widget.method == m;
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      widget.onMethodChanged(m);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
                       ),
-                    ),
-                    child: Text(
-                      m,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: active ? AppColors.blue : TC.text2(context),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-
-            // ── Confirm button with bounce ────────────────────────────────────
-            GestureDetector(
-              onTapDown: widget.isSettling ? null : (_) => setState(() => _btnScale = 0.96),
-              onTapUp: widget.isSettling ? null : (_) {
-                setState(() => _btnScale = 1.0);
-                HapticFeedback.mediumImpact();
-                widget.onConfirm();
-              },
-              onTapCancel: widget.isSettling ? null : () => setState(() => _btnScale = 1.0),
-              child: AnimatedScale(
-                scale: _btnScale,
-                duration: const Duration(milliseconds: 120),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: widget.isSettling ? 0.6 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    decoration: BoxDecoration(
-                      color: AppColors.green,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.green.withValues(alpha: 0.35),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
+                      decoration: BoxDecoration(
+                        color: active ? AppColors.blueDim : TC.card2(context),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: active ? AppColors.blue : TC.border(context),
+                          width: 1.5,
                         ),
-                      ],
+                      ),
+                      child: Text(
+                        m,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: active ? AppColors.blue : TC.text2(context),
+                        ),
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: widget.isSettling
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.black,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            '✓ Confirm: ${p.from} paid ${p.to} ${g.sym}${p.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                            ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
+
+              // ── Confirm button with bounce ────────────────────────────────────
+              GestureDetector(
+                onTapDown: widget.isSettling ? null : (_) => setState(() => _btnScale = 0.96),
+                onTapUp: widget.isSettling ? null : (_) {
+                  setState(() => _btnScale = 1.0);
+                  HapticFeedback.mediumImpact();
+                  widget.onConfirm?.call();
+                },
+                onTapCancel: widget.isSettling ? null : () => setState(() => _btnScale = 1.0),
+                child: AnimatedScale(
+                  scale: _btnScale,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOut,
+                  child: AnimatedOpacity(
+                    opacity: widget.isSettling ? 0.6 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      decoration: BoxDecoration(
+                        color: AppColors.green,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.green.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                           ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: widget.isSettling
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.check_circle_outline_rounded, color: Colors.black, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Confirm: ${p.from} paid ${p.to} ${g.sym}${p.amount.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ] else ...[
+              // ── Not your payment — show disabled info ─────────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: TC.card2(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: TC.border(context)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline_rounded, size: 18, color: TC.text3(context)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Only ${p.from} or ${p.to} can record this payment',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: TC.text3(context),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../main.dart';
+import '../utils/theme_utils.dart';
 import '../services/analytics_service.dart';
 
 /// 3-page swipeable onboarding — shown only on first launch.
@@ -38,7 +40,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: TC.bg(context),
       body: SafeArea(
         child: Stack(
           children: [
@@ -68,14 +70,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       vertical: 7,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: TC.card(context),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: TC.border(context)),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Skip',
                       style: TextStyle(
-                        color: AppColors.text2,
+                        color: TC.text2(context),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -106,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         decoration: BoxDecoration(
                           color: _page == i
                               ? AppColors.green
-                              : AppColors.border,
+                              : TC.border(context),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -205,10 +207,10 @@ class _PageShell extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             headline,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 38,
               fontWeight: FontWeight.w800,
-              color: AppColors.text,
+              color: TC.text(context),
               height: 1.1,
               letterSpacing: -0.5,
             ),
@@ -216,9 +218,9 @@ class _PageShell extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             subtext,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
-              color: AppColors.text2,
+              color: TC.text2(context),
               height: 1.6,
             ),
           ),
@@ -269,12 +271,12 @@ class _Page3 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _PageShell(
-      badge: '🛡️  Privacy First',
+      badge: '☁️  Cloud Sync',
       badgeColor: AppColors.green,
       badgeBg: AppColors.greenDim,
-      headline: 'Your Data,\nYour Control.',
+      headline: 'Sync Across\nAll Devices.',
       subtext:
-          'No cloud accounts required. Your financial data lives entirely on your device.',
+          'Sign in to sync your data securely via Firebase. Your financial data is encrypted and private.',
       illustration: _PrivacyIllustration(),
     );
   }
@@ -292,6 +294,7 @@ class _SplitIllustration extends StatelessWidget {
       width: 280,
       height: 220,
       child: Stack(
+        clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
           // Glow background
@@ -314,12 +317,12 @@ class _SplitIllustration extends StatelessWidget {
             width: 140,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: TC.card(context),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: TC.border(context)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: TC.shadow(context),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -330,10 +333,10 @@ class _SplitIllustration extends StatelessWidget {
               children: [
                 const Text('🍽️', style: TextStyle(fontSize: 28)),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Dinner',
                   style: TextStyle(
-                    color: AppColors.text,
+                    color: TC.text(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
@@ -348,11 +351,11 @@ class _SplitIllustration extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Container(height: 1, color: AppColors.border),
+                Container(height: 1, color: TC.border(context)),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '÷ 3 people',
-                  style: TextStyle(color: AppColors.text2, fontSize: 11),
+                  style: TextStyle(color: TC.text2(context), fontSize: 11),
                 ),
                 const SizedBox(height: 4),
                 const Text(
@@ -389,9 +392,9 @@ class _BudgetIllustration extends StatelessWidget {
       width: 280,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: TC.card(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: TC.border(context)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -399,10 +402,10 @@ class _BudgetIllustration extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
-                'Apr 2026',
+              Text(
+                DateFormat('MMM yyyy').format(DateTime.now()),
                 style: TextStyle(
-                  color: AppColors.text,
+                  color: TC.text(context),
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -439,8 +442,8 @@ class _BudgetIllustration extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         b.$2,
-                        style: const TextStyle(
-                          color: AppColors.text2,
+                        style: TextStyle(
+                          color: TC.text2(context),
                           fontSize: 11,
                         ),
                       ),
@@ -460,7 +463,7 @@ class _BudgetIllustration extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     child: LinearProgressIndicator(
                       value: b.$3,
-                      backgroundColor: AppColors.border,
+                      backgroundColor: TC.border(context),
                       valueColor: AlwaysStoppedAnimation(b.$4),
                       minHeight: 6,
                     ),

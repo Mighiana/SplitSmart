@@ -12,7 +12,20 @@
           "package_name": "com.splitsmart.splitsmart"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "698180984926-vnf0qja1m27tr5eedckjt3mkrq6dvg3q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.splitsmart.splitsmart",
+            "certificate_hash": "b7b372bfdb2f6bd4b184d0ebfe9e3763334cc482"
+          }
+        },
+        {
+          "client_id": "698180984926-usqs3pcvjl47ffgamhf4ing9ar740nt4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBdqQTvTrtlsRaSbQ7wkFcsw7KwvKm060U"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "698180984926-usqs3pcvjl47ffgamhf4ing9ar740nt4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

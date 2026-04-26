@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── Group Receipts ──────────────────────────────────────────────────────
+    // Path: groups/{groupId}/receipts/{filename}
+    // Only authenticated members of the group can upload/read/delete receipts.
+    match /groups/{groupId}/receipts/{filename} {
+      // Helper function to check membership
+      function isGroupMember() {
+        return request.auth != null && request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberUids;
+      }
+
+      // Read: only group members
+      allow read: if isGroupMember();
+
+      // Write: group members, file < 10MB, must be an image
+      allow write: if isGroupMember()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Delete: only group members
+      allow delete: if isGroupMember();
+    }
+
+    // ─── User Profile Images (future) ────────────────────────────────────────
+    match /users/{userId}/profile/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+
+    // ─── Default deny ────────────────────────────────────────────────────────
+    // Everything not matched above is denied by default.
+  }
+}

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,10 +15,11 @@ import 'personal_transactions_screen.dart';
 import 'subscriptions_screen.dart';
 import 'reminders_screen.dart';
 import 'saving_goals_screen.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../widgets/app_tour.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'settings_screen.dart';
-import '../widgets/app_drawer.dart';
+import '../l10n/app_localizations.dart';
+
 
 // ─── Period enum ─────────────────────────────────────────────────────────────
 enum _Period { day, week, month, year }
@@ -77,9 +78,7 @@ class _MoneyTabState extends State<MoneyTab> {
   DateTime _selectedDate =
       DateTime(DateTime.now().year, DateTime.now().month, 1);
 
-  final GlobalKey _settingsKey = GlobalKey();
-  final GlobalKey _drawerKey = GlobalKey();
-  final GlobalKey _balanceKey = GlobalKey();
+
 
   int _touchedIndex = -1;
 
@@ -95,81 +94,11 @@ class _MoneyTabState extends State<MoneyTab> {
   }
 
   void _showTutorial() {
-    final targets = [
-      TargetFocus(
-        identify: "Balance",
-        keyTarget: _balanceKey,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text("Personal Finances", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 24)),
-                SizedBox(height: 10),
-                Text("Here is your net balance. You can see your charts and all your personal transactions below.", style: TextStyle(color: Colors.white, fontSize: 16)),
-              ],
-            ),
-          )
-        ],
-      ),
-      TargetFocus(
-        identify: "Drawer",
-        keyTarget: _drawerKey,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text("Powerful Menu", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 24)),
-                SizedBox(height: 10),
-                Text("Check this menu to select Subscriptions, Reminders, Saving Goals, and navigate to other screens.", style: TextStyle(color: Colors.white, fontSize: 16)),
-              ],
-            ),
-          )
-        ],
-      ),
-      TargetFocus(
-        identify: "Settings",
-        keyTarget: _settingsKey,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text("Settings & Export", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 24)),
-                SizedBox(height: 10),
-                Text("Tap here to enable App Lock, manage data, or export your transactions to PDF & CSV.", style: TextStyle(color: Colors.white, fontSize: 16)),
-              ],
-            ),
-          )
-        ],
-      ),
-    ];
-
-    TutorialCoachMark(
-      targets: targets,
-      colorShadow: Colors.black,
-      textSkip: "SKIP",
-      paddingFocus: 10,
-      opacityShadow: 0.85,
-      onFinish: () {
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setBool('tour_seen', true);
-        });
-      },
-      onSkip: () {
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setBool('tour_seen', true);
-        });
-        return true;
-      },
-    ).show(context: context);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AppTourDialog(),
+    );
   }
 
   Future<void> _checkTour() async {
@@ -312,12 +241,16 @@ class _MoneyTabState extends State<MoneyTab> {
         context.select<AppState, Map<String, double>>((s) => s.wallets);
     final state = context.read<AppState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final l = AppLocalizations.of(context);
 
     // All unique currencies in this period
     final periodAll = _filterByPeriod(transactions);
     final currencies = _getCurrencies(periodAll);
 
-    // Auto-select first wallet if nothing selected
+    // Auto-select first wallet if nothing selected.
+    // IMPORTANT: only pick from wallets the user explicitly created.
+    // Do NOT fall back to AppState.currencies.first (would show fake EUR 0
+    // after a data reset or on first launch before any wallet exists).
     String? activeCur = _selectedCurrency;
     if (activeCur == null && wallets.keys.isNotEmpty) {
       activeCur = wallets.keys.first;
@@ -325,9 +258,9 @@ class _MoneyTabState extends State<MoneyTab> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedCurrency = wallets.keys.first);
       });
-    } else if (activeCur == null && AppState.currencies.isNotEmpty) {
-      activeCur = AppState.currencies.first.code;
     }
+    // If still null (no wallets created yet), leave activeCur as null —
+    // the UI will prompt the user to add a transaction / create a wallet.
 
     // Filter to currency + type
     final currencyFiltered = activeCur != null
@@ -349,10 +282,11 @@ class _MoneyTabState extends State<MoneyTab> {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     // Symbol for active currency
+    final String safeActiveCur = activeCur ?? '';
     final CurrencyData? activeCurData = activeCur != null
         ? AppState.currencies.firstWhere(
             (c) => c.code == activeCur,
-            orElse: () => CurrencyData(activeCur!, activeCur!, '💱', activeCur!),
+            orElse: () => CurrencyData(safeActiveCur, safeActiveCur, '💱', safeActiveCur),
           )
         : null;
     final sym = activeCurData?.sym ?? '\$';
@@ -369,10 +303,10 @@ class _MoneyTabState extends State<MoneyTab> {
         child: Column(
           children: [
             // ── Header ───────────────────────────────────────────────────────
-            _buildHeader(context, overallBalance, headerSym, state, isDark, activeCur),
+            _buildHeader(context, overallBalance, headerSym, state, isDark, activeCur, l),
 
             // ── EXPENSES / INCOME tabs ───────────────────────────────────────
-            _buildTypeTabs(context, isDark),
+            _buildTypeTabs(context, isDark, l),
 
             // ── Period selector ──────────────────────────────────────────────
             _buildPeriodSelector(context, isDark),
@@ -385,6 +319,7 @@ class _MoneyTabState extends State<MoneyTab> {
                   // Donut chart
                   _buildChartCard(context, totalAmount, sortedCats, sym,
                       activeCur, isDark, state),
+
 
                   // Category list
                   if (sortedCats.isNotEmpty)
@@ -427,16 +362,10 @@ class _MoneyTabState extends State<MoneyTab> {
     );
   }
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning ☀️';
-    if (hour < 17) return 'Good afternoon 🌤️';
-    return 'Good evening 🌙';
-  }
 
   // ─── Header bar ──────────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context, double balance, String sym,
-      AppState state, bool isDark, String? activeCur) {
+      AppState state, bool isDark, String? activeCur, AppLocalizations l) {
     return Container(
       decoration: BoxDecoration(
         color: TC.bg(context),
@@ -449,12 +378,7 @@ class _MoneyTabState extends State<MoneyTab> {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => const AppDrawer(),
-                  );
+                  _showDrawer(context, state);
                 },
                 child: Container(
                   width: 44, height: 44,
@@ -472,12 +396,30 @@ class _MoneyTabState extends State<MoneyTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_greeting().toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 1.5)),
+                    Text(_formattedGreeting.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 1.5)),
                     const SizedBox(height: 2),
-                    Text('Money 💰', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: TC.text(context), letterSpacing: -0.5)),
+                    Text(l.moneyManager, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: TC.text(context), letterSpacing: -0.5)),
                   ],
                 ),
               ),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  state.toggleTheme();
+                },
+                child: Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: TC.card(context),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: TC.border(context)),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(isDark ? '☀️' : '🌙', style: const TextStyle(fontSize: 18)),
+                ),
+              ),
+              const SizedBox(width: 10),
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
@@ -520,7 +462,7 @@ class _MoneyTabState extends State<MoneyTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('VIRTUAL ASSETS'.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 1.2)),
+                        Text(l.virtualAssets.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 1.2)),
                         const Icon(Icons.contactless_outlined, color: Colors.black54, size: 20),
                       ],
                     ),
@@ -532,9 +474,9 @@ class _MoneyTabState extends State<MoneyTab> {
                     const SizedBox(height: 20),
                     Row(
                       children: [
-                        _buildQuickDataIcon(Icons.insights_rounded, 'Analysis', () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: activeCur)))),
+                        _buildQuickDataIcon(Icons.insights_rounded, l.analysisLabel, () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: activeCur, isGroupFilter: false)))),
                         const SizedBox(width: 12),
-                        _buildQuickDataIcon(Icons.history_edu_rounded, 'History', () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: activeCur)))),
+                        _buildQuickDataIcon(Icons.history_edu_rounded, l.historyLabel, () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: activeCur, isGroupFilter: false)))),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -571,7 +513,7 @@ class _MoneyTabState extends State<MoneyTab> {
   }
 
   // ─── EXPENSES / INCOME tabs ───────────────────────────────────────────────
-  Widget _buildTypeTabs(BuildContext context, bool isDark) {
+  Widget _buildTypeTabs(BuildContext context, bool isDark, AppLocalizations l) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.all(4),
@@ -597,7 +539,7 @@ class _MoneyTabState extends State<MoneyTab> {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  'EXPENSES',
+                  l.expenses.toUpperCase(),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -623,7 +565,7 @@ class _MoneyTabState extends State<MoneyTab> {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  'INCOME',
+                  l.income.toUpperCase(),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -641,6 +583,7 @@ class _MoneyTabState extends State<MoneyTab> {
 
   // ─── Period selector ──────────────────────────────────────────────────────
   Widget _buildPeriodSelector(BuildContext context, bool isDark) {
+    final l = AppLocalizations.of(context);
     return Container(
       color: TC.card(context),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -678,7 +621,7 @@ class _MoneyTabState extends State<MoneyTab> {
                         : null,
                   ),
                   child: Text(
-                    p.name[0].toUpperCase() + p.name.substring(1),
+                    _periodName(p, l),
                     style: TextStyle(
                       color: isActive
                           ? AppColors.green
@@ -746,6 +689,7 @@ class _MoneyTabState extends State<MoneyTab> {
     bool isDark,
     AppState state,
   ) {
+    final l = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       padding: const EdgeInsets.all(16),
@@ -781,6 +725,7 @@ class _MoneyTabState extends State<MoneyTab> {
               Expanded(
                 flex: 3,
                 child: Stack(
+                  clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
                     SizedBox(
@@ -848,7 +793,7 @@ class _MoneyTabState extends State<MoneyTab> {
                           ),
                         ),
                         Text(
-                          _showExpenses ? 'expenses' : 'income',
+                          _showExpenses ? l.expenses : l.income,
                           style: TextStyle(
                               color: TC.text3(context), fontSize: 10),
                         ),
@@ -912,7 +857,7 @@ class _MoneyTabState extends State<MoneyTab> {
                 child: GestureDetector(
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: activeCur)));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: activeCur, isGroupFilter: false)));
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -930,12 +875,12 @@ class _MoneyTabState extends State<MoneyTab> {
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.insights_rounded, color: Colors.white, size: 16),
                         SizedBox(width: 6),
-                        Text('Charts', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+                        Text(l.charts, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
                       ],
                     ),
                   ),
@@ -946,7 +891,7 @@ class _MoneyTabState extends State<MoneyTab> {
                 child: GestureDetector(
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: activeCur)));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: activeCur, isGroupFilter: false)));
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -961,7 +906,7 @@ class _MoneyTabState extends State<MoneyTab> {
                       children: [
                         Icon(Icons.receipt_long_outlined, color: TC.text2(context), size: 16),
                         const SizedBox(width: 6),
-                        Text('All Transactions', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context))),
+                        Text(l.allTransactions, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context))),
                       ],
                     ),
                   ),
@@ -974,6 +919,16 @@ class _MoneyTabState extends State<MoneyTab> {
     );
   }
 
+  String _periodName(_Period p, AppLocalizations l) {
+    switch (p) {
+      case _Period.day:   return l.periodDay;
+      case _Period.week:  return l.periodWeek;
+      case _Period.month: return l.periodMonth;
+      case _Period.year:  return l.periodYear;
+    }
+  }
+
+
   // ─── Category breakdown list ──────────────────────────────────────────────
   Widget _buildCategoryList(
     BuildContext context,
@@ -982,6 +937,7 @@ class _MoneyTabState extends State<MoneyTab> {
     String sym,
     String? activeCur,
   ) {
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -990,7 +946,7 @@ class _MoneyTabState extends State<MoneyTab> {
           child: Row(
             children: [
               Text(
-                'BY CATEGORY',
+                l.byCategory,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
@@ -1036,6 +992,7 @@ class _MoneyTabState extends State<MoneyTab> {
                   builder: (_) => MoneyTransactionsScreen(
                     filterCat: cat.key,
                     filterCurrency: activeCur,
+                    isGroupFilter: false,
                   ),
                 ),
               );
@@ -1146,7 +1103,7 @@ class _MoneyTabState extends State<MoneyTab> {
     if (!mounted || result == null) return;
     switch (result) {
       case 'Charts':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _selectedCurrency)));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _selectedCurrency, isGroupFilter: false)));
       case 'Subscriptions':
         Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionsScreen()));
       case 'Reminders':
@@ -1256,13 +1213,14 @@ class _MoneyTabState extends State<MoneyTab> {
   }
 
   void _showAddAccountSheet(BuildContext parentCtx, AppState state) {
+    final sheetBgColor = TC.card(parentCtx);
     Future.delayed(const Duration(milliseconds: 200), () {
       if (!parentCtx.mounted) return;
       final existing = state.wallets.keys.toSet();
       final available = AppState.currencies.where((c) => !existing.contains(c.code)).toList();
       showModalBottomSheet(
         context: parentCtx,
-        backgroundColor: TC.card(parentCtx),
+        backgroundColor: sheetBgColor,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         builder: (sheetCtx) {
@@ -1322,6 +1280,7 @@ class _MoneyTabState extends State<MoneyTab> {
   }
 
   void _showBudgetSetupSheet(BuildContext parentCtx, AppState state, CurrencyData c) {
+    final sheetBgColor = TC.card(parentCtx);
     Future.delayed(const Duration(milliseconds: 200), () {
       if (!parentCtx.mounted) return;
       double amount = 0;
@@ -1329,7 +1288,7 @@ class _MoneyTabState extends State<MoneyTab> {
 
       showModalBottomSheet(
         context: parentCtx,
-        backgroundColor: TC.card(parentCtx),
+        backgroundColor: sheetBgColor,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         builder: (sheetCtx) {
@@ -1337,9 +1296,10 @@ class _MoneyTabState extends State<MoneyTab> {
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     const SizedBox(height: 8),
                     Container(width: 36, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2))),
                     const SizedBox(height: 16),
@@ -1450,7 +1410,8 @@ class _MoneyTabState extends State<MoneyTab> {
                   ],
                 ),
               ),
-            );
+            ),
+          );
           });
         },
       );
@@ -1458,85 +1419,7 @@ class _MoneyTabState extends State<MoneyTab> {
   }
 }
 
-// ─── Tab widget ───────────────────────────────────────────────────────────────
-class _TypeTab extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _TypeTab(
-      {required this.label, required this.active, required this.onTap});
 
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: active ? TC.text(context) : TC.text3(context),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 2,
-              color: active ? AppColors.green : Colors.transparent,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Pill button ──────────────────────────────────────────────────────────────
-class _PillButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _PillButton(
-      {required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: AppColors.greenDim,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: AppColors.green.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppColors.green, size: 14),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.green,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ─── Side Drawer ──────────────────────────────────────────────────────────────
 class _MoneyDrawer extends StatelessWidget {
@@ -1544,12 +1427,13 @@ class _MoneyDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final items = [
-      _DrawerItem(Icons.account_balance_wallet_outlined, 'Accounts'),
-      _DrawerItem(Icons.bar_chart_rounded, 'Charts'),
-      _DrawerItem(Icons.repeat_rounded, 'Subscriptions'),
-      _DrawerItem(Icons.notifications_outlined, 'Reminders'),
-      _DrawerItem(Icons.track_changes_outlined, 'Saving Goals'),
+      _DrawerItem(Icons.account_balance_wallet_outlined, l.accountsLabel, 'Accounts'),
+      _DrawerItem(Icons.bar_chart_rounded, l.charts, 'Charts'),
+      _DrawerItem(Icons.repeat_rounded, l.subscriptions, 'Subscriptions'),
+      _DrawerItem(Icons.notifications_outlined, l.remindersLabel, 'Reminders'),
+      _DrawerItem(Icons.track_changes_outlined, l.savingGoals, 'Saving Goals'),
     ];
 
     return SafeArea(
@@ -1583,7 +1467,7 @@ class _MoneyDrawer extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Money Manager',
+                  l.moneyManager,
                   style: TextStyle(
                     color: TC.text(context),
                     fontSize: 18,
@@ -1608,7 +1492,7 @@ class _MoneyDrawer extends StatelessWidget {
                       )),
                   onTap: () {
                     HapticFeedback.selectionClick();
-                    Navigator.pop(context, item.label);
+                    Navigator.pop(context, item.key);
                   },
                 );
               }).toList(),
@@ -1624,76 +1508,7 @@ class _MoneyDrawer extends StatelessWidget {
 class _DrawerItem {
   final IconData icon;
   final String label;
-  const _DrawerItem(this.icon, this.label);
+  final String key;
+  const _DrawerItem(this.icon, this.label, this.key);
 }
 
-// ─── Donut Chart Painter ──────────────────────────────────────────────────────
-class _DonutSlice {
-  final double value; // 0..1
-  final Color color;
-  const _DonutSlice({required this.value, required this.color});
-}
-
-class _DonutPainter extends CustomPainter {
-  final List<_DonutSlice> slices;
-  final Color ringColor;
-  final Color bgColor;
-
-  const _DonutPainter({
-    required this.slices,
-    required this.ringColor,
-    required this.bgColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final outerR = size.width / 2 - 4;
-    const strokeW = 26.0;
-    const gap = 0.020;
-
-    if (slices.isEmpty) {
-      // Dashed empty ring
-      final paint = Paint()
-        ..color = ringColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeW;
-      canvas.drawCircle(center, outerR - strokeW / 2, paint);
-      return;
-    }
-
-    double startAngle = -math.pi / 2;
-    for (final slice in slices) {
-      final sweepAngle = slice.value * 2 * math.pi - gap;
-      if (sweepAngle <= 0) {
-        startAngle += slice.value * 2 * math.pi;
-        continue;
-      }
-      final paint = Paint()
-        ..color = slice.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeW
-        ..strokeCap = StrokeCap.butt;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: outerR - strokeW / 2),
-        startAngle + gap / 2,
-        sweepAngle,
-        false,
-        paint,
-      );
-      startAngle += slice.value * 2 * math.pi;
-    }
-
-    // Inner fill
-    canvas.drawCircle(
-        center,
-        outerR - strokeW,
-        Paint()
-          ..color = bgColor
-          ..style = PaintingStyle.fill);
-  }
-
-  @override
-  bool shouldRepaint(_DonutPainter old) =>
-      old.slices != slices || old.ringColor != ringColor;
-}

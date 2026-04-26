@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; // For AppColors
+import '../utils/theme_utils.dart'; // For TC
 
 class AppTourDialog extends StatefulWidget {
   const AppTourDialog({super.key});
@@ -16,34 +17,54 @@ class _AppTourDialogState extends State<AppTourDialog> {
 
   final List<Map<String, String>> _tourSteps = [
     {
-      'title': 'Welcome to SplitSmart!',
-      'desc': 'Let\'s take a quick tour so you know where everything is.',
-      'icon': '👋',
+      'title': 'Welcome to SplitSmart! 🎉',
+      'desc': 'Your all-in-one money manager.\nSplit bills, track spending, scan receipts — all offline & free.',
+      'icon': '💚',
     },
     {
-      'title': 'Personal Finances',
-      'desc': 'This main screen tracks your wallets, expenses, and income. Tap the FAB to add transactions quickly.',
+      'title': 'Personal Finance',
+      'desc': 'The 🏠 Home tab is your personal finance dashboard. Track wallets, expenses, and income across 90+ currencies. Tap + to add transactions.',
       'icon': '💰',
     },
     {
-      'title': 'Powerful Menu',
-      'desc': 'Tap the top left menu grid on the Finance screen to easily access Subscriptions, Reminders, and Saving Goals.',
-      'icon': '🎛️',
-    },
-    {
-      'title': 'Settings & Export',
-      'desc': 'Tap the top right gear icon to enable Dark Mode, activate Biometric App Lock, or export your data to PDF/CSV.',
-      'icon': '⚙️',
-    },
-    {
-      'title': 'Group Overview',
-      'desc': 'The second tab (📊) is your Dashboard. See exactly who owes you and who you owe across all your groups.',
+      'title': 'Dashboard Overview',
+      'desc': 'The 📊 Overview tab shows your global balances across all groups. See who owes you, who you owe, and your spending breakdown at a glance.',
       'icon': '📊',
     },
     {
-      'title': 'Manage Groups',
-      'desc': 'The third tab (👥) is where you add Groups, Split Bills, and settle debts. Swipe lists to Archive old groups!',
+      'title': 'Group Splitting',
+      'desc': 'The 👥 Groups tab is where you create groups, split bills, and settle debts. Tap the ⚙️ inside any group to edit name and members.',
       'icon': '👥',
+    },
+    {
+      'title': 'Smart Entry',
+      'desc': 'When adding expenses, tap 📷 to scan receipts with AI, or tap 🎤 to use voice input. SplitSmart auto-fills amounts and descriptions!',
+      'icon': '🧠',
+    },
+    {
+      'title': 'Share & Invite',
+      'desc': 'Long-press any group to share it via QR code. Friends scan to join instantly — no sign-up needed!',
+      'icon': '🔗',
+    },
+    {
+      'title': 'Activity & History',
+      'desc': 'The 📋 Activity tab shows your complete financial history — personal transactions, group expenses, and settlements — all in one timeline.',
+      'icon': '📋',
+    },
+    {
+      'title': 'Powerful Tools',
+      'desc': 'Tap the menu ☰ on the finance screen to manage Subscriptions, Reminders, Saving Goals, and Budgets. Use ⚙️ for App Lock, Dark Mode, and Exports.',
+      'icon': '🎛️',
+    },
+    {
+      'title': 'Multi-Language Support',
+      'desc': 'SplitSmart supports 8 languages including Arabic, Urdu, and Hindi with full RTL support. Change language from Settings.',
+      'icon': '🌍',
+    },
+    {
+      'title': 'You\'re All Set!',
+      'desc': 'Start by creating your first group or adding a transaction. Your data is stored locally and synced to the cloud when you sign in.',
+      'icon': '🚀',
     },
   ];
 
@@ -57,20 +78,31 @@ class _AppTourDialogState extends State<AppTourDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.card2 : Colors.white;
-    final text = isDark ? AppColors.text : Colors.black;
-    final text2 = isDark ? AppColors.text2 : Colors.black54;
+    final isLast = _currentPage == _tourSteps.length - 1;
 
     return Dialog(
-      backgroundColor: bg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: SizedBox(
-          height: 420,
-          child: Column(
-            children: [
+      backgroundColor: TC.card(context),
+      surfaceTintColor: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: SizedBox(
+        height: 460,
+        child: Column(
+          children: [
+              // Skip button
+              Align(
+                alignment: Alignment.topRight,
+                child: GestureDetector(
+                  onTap: _finishTour,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 12, 16, 0),
+                    child: Text(
+                      'Skip',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)),
+                    ),
+                  ),
+                ),
+              ),
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
@@ -79,18 +111,27 @@ class _AppTourDialogState extends State<AppTourDialog> {
                   itemBuilder: (context, i) {
                     final step = _tourSteps[i];
                     return Padding(
-                      padding: const EdgeInsets.all(32),
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(step['icon']!, style: const TextStyle(fontSize: 64)),
+                          Container(
+                            width: 90, height: 90,
+                            decoration: BoxDecoration(
+                              color: AppColors.greenDim,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.green.withValues(alpha: 0.3), width: 3),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(step['icon']!, style: const TextStyle(fontSize: 44)),
+                          ),
                           const SizedBox(height: 24),
                           Text(
                             step['title']!,
                             style: TextStyle(
-                              fontSize: 22,
+                              fontSize: 20,
                               fontWeight: FontWeight.w800,
-                              color: text,
+                              color: TC.text(context),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -98,10 +139,10 @@ class _AppTourDialogState extends State<AppTourDialog> {
                           Text(
                             step['desc']!,
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: text2,
-                              height: 1.4,
+                              color: TC.text2(context),
+                              height: 1.5,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -111,53 +152,75 @@ class _AppTourDialogState extends State<AppTourDialog> {
                   },
                 ),
               ),
+              // Progress + Button
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Row(
-                      children: List.generate(
-                        _tourSteps.length,
-                        (i) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: const EdgeInsets.only(right: 6),
-                          width: _currentPage == i ? 24 : 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: _currentPage == i ? AppColors.green : AppColors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
+                    // Progress bar
+                    Container(
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: TC.border(context),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: LayoutBuilder(
+                        builder: (_, constraints) {
+                          final width = constraints.maxWidth * ((_currentPage + 1) / _tourSteps.length);
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              width: width,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: AppColors.green,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        if (_currentPage < _tourSteps.length - 1) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        } else {
-                          _finishTour();
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.green,
-                          borderRadius: BorderRadius.circular(12),
+                    Row(
+                      children: [
+                        // Step counter
+                        Text(
+                          '${_currentPage + 1} / ${_tourSteps.length}',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text3(context)),
                         ),
-                        child: Text(
-                          _currentPage < _tourSteps.length - 1 ? 'Next' : 'Done',
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            if (!isLast) {
+                              _pageController.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            } else {
+                              _finishTour();
+                            }
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: isLast ? 32 : 24, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: AppColors.green,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [BoxShadow(color: AppColors.green.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                            ),
+                            child: Text(
+                              isLast ? 'Get Started' : 'Next →',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -165,7 +228,6 @@ class _AppTourDialogState extends State<AppTourDialog> {
             ],
           ),
         ),
-      ),
     );
   }
 }

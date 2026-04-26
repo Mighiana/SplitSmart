@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 
 import '../main.dart';
@@ -19,6 +20,7 @@ import 'archived_groups_screen.dart';
 import '../services/export_service.dart';
 import '../services/security_service.dart';
 import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
 // ─── Settings Screen ──────────────────────────────────────────────────────────
 
@@ -93,7 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'SETTINGS',
+              l.settingsHeader,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
@@ -103,7 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Preferences',
+              l.preferences,
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w900,
@@ -113,10 +115,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Customize your workspace and manage data',
+              l.customizeWorkspace,
               style: TextStyle(fontSize: 13, color: TC.text2(context), fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 28),
+
+            // ── Account ───────────────────────────────────────────────────
+            _SectionTitle(l.account),
+            _AccountCard(),
 
             // ── Appearance ─────────────────────────────────────────────────
             _SectionTitle(l.appearance),
@@ -146,27 +152,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             // ── Data Backup ────────────────────────────────────────────────
-            _SectionTitle('DATA BACKUP'),
+            _SectionTitle(l.dataBackup),
             const _BackupSection(),
 
             // ── Notifications ──────────────────────────────────────────────
-            _SectionTitle('NOTIFICATIONS'),
+            _SectionTitle(l.notifications),
             _TappableSettingCard(
               icon: '🔔',
-              title: 'Notification Settings',
-              subtitle: 'Manage subscription reminders',
+              title: l.notificationSettings,
+              subtitle: l.manageReminders,
               onTap: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 HapticFeedback.lightImpact();
                 AppSettings.openAppSettings(type: AppSettingsType.notification);
               },
             ),
 
             // ── Storage ────────────────────────────────────────────────────
-            _SectionTitle('STORAGE'),
-            const _SettingCard(
-              icon: '💿',
-              title: 'Database',
-              subtitle: 'splitsmart_v3.db · all data stored locally',
+            _SectionTitle(l.storage),
+            _SettingCard(
+              icon: AuthService.instance.isSignedIn ? '☁️' : '💿',
+              title: AuthService.instance.isSignedIn ? l.cloudSync : l.database,
+              subtitle: AuthService.instance.isSignedIn
+                  ? l.cloudSyncSub
+                  : l.databaseSub,
             ),
 
             // ── About ──────────────────────────────────────────────────────
@@ -221,11 +230,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             // ── Support ───────────────────────────────────────────────────
-            _SectionTitle('SUPPORT'),
+            _SectionTitle(l.support),
             _TappableSettingCard(
               icon: '🐞',
-              title: 'Report an Issue',
-              subtitle: 'Share app logs with the developer',
+              title: l.reportIssue,
+              subtitle: l.reportIssueSub,
               onTap: _shareSupportLogs,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -251,24 +260,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             // ── Legal ──────────────────────────────────────────────────
-            _SectionTitle('Legal'),
+            _SectionTitle(l.legal),
             _TappableSettingCard(
               icon: '🔒',
-              title: 'Privacy Policy',
-              subtitle: 'How we handle your data',
-              onTap: () {
-                // TODO: Replace with your actual privacy policy URL
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Privacy Policy: All data is stored locally on your device. No data is collected or sent to any server.'),
-                    duration: Duration(seconds: 5),
+              title: l.privacyPolicy,
+              subtitle: l.privacyPolicySub,
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                // BLOCK-2 FIX: Open local dialog instead of 404 URL until a real policy is hosted.
+                if (!context.mounted) return;
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: TC.bg(context),
+                    title: Text(l.privacyPolicy, style: TextStyle(color: TC.text(context), fontWeight: FontWeight.bold)),
+                    content: Text('Your data is securely stored locally on your device and synced via Firebase. We do not sell or share your personal data with third parties.', style: TextStyle(color: TC.text2(context))),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close', style: TextStyle(color: AppColors.green, fontWeight: FontWeight.bold)),
+                      )
+                    ],
                   ),
                 );
               },
             ),
             _TappableSettingCard(
               icon: 'ℹ️',
-              title: 'App Version',
+              title: l.appVersion,
               subtitle: 'SplitSmart v$_appVersion',
               onTap: () {
                 HapticFeedback.lightImpact();
@@ -299,8 +318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-            ),
-          ],
+            ).animate().fade(delay: 600.ms).scale(begin: const Offset(0.8, 0.8)),
+          ].animate(interval: 50.ms).fade(duration: 300.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOut),
         ),
       ),
     );
@@ -316,8 +335,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!await file.exists() || (await file.length()) == 0) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No error logs found — your app is running cleanly.'),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('No error logs found — your app is running cleanly.')),
+              ],
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -352,12 +377,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _clearLogs() async {
     HapticFeedback.mediumImpact();
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: TC.card(context),
-        title: const Text('Clear Logs?'),
-        content: const Text('This will delete all saved error logs from this device.'),
+        title: Text('Clear Logs?', style: TextStyle(color: TC.text(context), fontWeight: FontWeight.w700)),
+        content: Text('This will permanently delete all error logs from this device.', style: TextStyle(color: TC.text2(context))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -376,17 +402,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final directory = await getApplicationDocumentsDirectory();
         final path = p.join(directory.path, 'app_errors.log');
         final file = File(path);
-        if (await file.exists()) {
-          await file.delete();
-        }
+        if (await file.exists()) await file.delete();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Logs cleared successfully.')),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Logs cleared successfully.')),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error clearing logs: $e')),
+          SnackBar(content: Text('Error clearing logs: $e'), behavior: SnackBarBehavior.floating),
         );
       }
     }
@@ -461,6 +494,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showLanguagePicker(BuildContext context, AppState state) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
@@ -615,6 +649,11 @@ class _BackupSectionState extends State<_BackupSection> {
     _loadPrefs();
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _loadPrefs() async {
     final enabled = await BackupService.isAutoBackupEnabled();
     final last = await BackupService.lastAutoBackupDate();
@@ -629,16 +668,27 @@ class _BackupSectionState extends State<_BackupSection> {
   String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  void _snack(String msg, {Color? color, SnackBarAction? action}) {
+  void _snack(String msg, {Color? color, SnackBarAction? action, IconData? icon, Color? iconColor}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          msg,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
+        content: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: iconColor ?? AppColors.green, size: 20),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Text(
+                msg,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: TC.text(context),
+                ),
+              ),
+            ),
+          ],
         ),
         backgroundColor: color ?? TC.card(context),
         behavior: SnackBarBehavior.floating,
@@ -646,7 +696,7 @@ class _BackupSectionState extends State<_BackupSection> {
           borderRadius: BorderRadius.circular(12),
         ),
         action: action,
-        duration: const Duration(seconds: 5),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -659,7 +709,8 @@ class _BackupSectionState extends State<_BackupSection> {
       final file = await BackupService.createBackup();
       if (!mounted) return;
       _snack(
-        '✅  Backup saved!\n${file.path}',
+        'Backup saved!\n${file.path}',
+        icon: Icons.check_circle_rounded,
         action: SnackBarAction(
           label: 'Share',
           textColor: AppColors.green,
@@ -668,7 +719,7 @@ class _BackupSectionState extends State<_BackupSection> {
       );
       AnalyticsService.logBackupCreated();
     } catch (e) {
-      _snack('❌  Backup failed: $e');
+      _snack('Backup failed: $e', icon: Icons.error_outline, iconColor: AppColors.red);
     } finally {
       if (mounted) setState(() => _isWorking = false);
     }
@@ -684,7 +735,7 @@ class _BackupSectionState extends State<_BackupSection> {
       await BackupService.shareBackup(file, context);
       AnalyticsService.logBackupShared();
     } catch (e) {
-      _snack('❌  Share failed: $e');
+      _snack('Share failed: $e', icon: Icons.error_outline, iconColor: AppColors.red);
     } finally {
       if (mounted) setState(() => _isWorking = false);
     }
@@ -781,13 +832,13 @@ class _BackupSectionState extends State<_BackupSection> {
       final ok = await BackupService.restoreFromFile(file, appState);
       if (!mounted) return;
       if (ok) {
-        _snack('✅  Restore complete! All data recovered.');
+        _snack('Restore complete! All data recovered.', icon: Icons.check_circle_rounded);
         AnalyticsService.logBackupRestored();
       } else {
-        _snack('❌  Restore failed. File may be corrupted.');
+        _snack('Restore failed. File may be corrupted.', icon: Icons.error_outline, iconColor: AppColors.red);
       }
     } catch (e) {
-      _snack('❌  Restore error: $e');
+      _snack('Restore error: $e', icon: Icons.error_outline, iconColor: AppColors.red);
     } finally {
       if (mounted) setState(() => _isWorking = false);
     }
@@ -795,6 +846,7 @@ class _BackupSectionState extends State<_BackupSection> {
 
   Future<void> _exportToPdf() async {
     if (_isWorking) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     HapticFeedback.lightImpact();
 
     final appState = context.read<AppState>();
@@ -916,8 +968,10 @@ class _BackupSectionState extends State<_BackupSection> {
     setState(() => _autoEnabled = value);
     _snack(
       value
-          ? '✅  Auto-backup ON — runs every 7 days'
-          : '🔕  Auto-backup disabled',
+          ? 'Auto-backup ON — runs every 7 days'
+          : 'Auto-backup disabled',
+      icon: value ? Icons.check_circle_rounded : Icons.notifications_off_rounded,
+      iconColor: value ? AppColors.green : AppColors.red,
     );
   }
 
@@ -935,12 +989,13 @@ class _BackupSectionState extends State<_BackupSection> {
       );
     }
 
+    final l = AppLocalizations.of(context);
     return Column(
       children: [
         _BackupActionCard(
           icon: '💾',
-          title: 'Backup Now',
-          subtitle: 'Export .db and receipts into .zip',
+          title: l.backupNow,
+          subtitle: l.backupNowSub,
           color: AppColors.green,
           isWorking: _isWorking,
           onTap: _backupNow,
@@ -948,8 +1003,8 @@ class _BackupSectionState extends State<_BackupSection> {
         const SizedBox(height: 8),
         _BackupActionCard(
           icon: '♻️',
-          title: 'Restore from Backup',
-          subtitle: 'Select a .zip backup file to restore',
+          title: l.restoreBackup,
+          subtitle: l.restoreBackupSub,
           color: AppColors.blue,
           isWorking: _isWorking,
           onTap: _restore,
@@ -957,8 +1012,8 @@ class _BackupSectionState extends State<_BackupSection> {
         const SizedBox(height: 8),
         _BackupActionCard(
           icon: '📤',
-          title: 'Share Backup',
-          subtitle: 'Send to Drive, WhatsApp, email…',
+          title: l.shareBackup,
+          subtitle: l.shareBackupSub,
           color: AppColors.purple,
           isWorking: _isWorking,
           onTap: _shareBackup,
@@ -966,8 +1021,8 @@ class _BackupSectionState extends State<_BackupSection> {
         const SizedBox(height: 8),
         _BackupActionCard(
           icon: '📄',
-          title: 'Export to PDF',
-          subtitle: 'Download a PDF report of your data',
+          title: l.exportPdf,
+          subtitle: l.exportPdfSub,
           color: AppColors.blue,
           isWorking: _isWorking,
           onTap: _exportToPdf,
@@ -992,7 +1047,7 @@ class _BackupSectionState extends State<_BackupSection> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Auto Backup',
+                          l.autoBackup,
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
@@ -1001,7 +1056,7 @@ class _BackupSectionState extends State<_BackupSection> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Every 7 days · keeps last 3',
+                          l.autoBackupSub,
                           style: TextStyle(
                             fontSize: 12,
                             color: TC.text2(context),
@@ -1435,6 +1490,220 @@ class _PrivacyLockCardState extends State<_PrivacyLockCard> {
             activeTrackColor: AppColors.purple,
             inactiveThumbColor: TC.text2(context),
             inactiveTrackColor: Theme.of(context).scaffoldBackgroundColor,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Account Card ─────────────────────────────────────────────────────────────
+
+class _AccountCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final auth = AuthService.instance;
+    final isSignedIn = auth.isSignedIn;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: TC.border(context)),
+      ),
+      child: isSignedIn
+          ? Column(
+              children: [
+                Row(
+                  children: [
+                    // Avatar
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.greenDim,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.green.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: auth.photoUrl != null
+                          ? ClipOval(
+                              child: Image.network(
+                                auth.photoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Text(
+                                    (auth.currentUser?.displayName ?? 'U')[0].toUpperCase(),
+                                    style: const TextStyle(
+                                      color: AppColors.green,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                (auth.currentUser?.displayName ?? 'U')[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: AppColors.green,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 20,
+                                ),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            auth.currentUser?.displayName ?? 'User',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: TC.text(context),
+                            ),
+                          ),
+                          if (auth.email != null)
+                            Text(
+                              auth.email!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: TC.text2(context),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.greenDim,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '● Synced',
+                        style: TextStyle(
+                          color: AppColors.green,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Sign Out button
+                GestureDetector(
+                  onTap: () => _confirmSignOut(context),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.redDim,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.red.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: AppColors.red,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: TC.card2(context),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.person_outline_rounded,
+                      color: TC.text3(context), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Guest Mode',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: TC.text(context),
+                        ),
+                      ),
+                      Text(
+                        'Data stored locally only',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: TC.text2(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context) {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TC.card(context),
+        title: Text(
+          'Sign Out?',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: TC.text(context),
+          ),
+        ),
+        content: Text(
+          'Your cloud data will remain safe. You can sign back in anytime.',
+          style: TextStyle(color: TC.text2(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: TextStyle(color: TC.text2(context))),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await AuthService.instance.signOut();
+              if (context.mounted) {
+                // Navigate back to root to trigger auth gate
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+            child: const Text('Sign Out',
+                style: TextStyle(
+                    color: AppColors.red, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

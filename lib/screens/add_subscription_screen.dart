@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
 import '../services/notification_service.dart';
-import '../widgets/common_widgets.dart';
+
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
 
@@ -170,7 +170,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
         isActive:     widget.existing!.isActive,
       );
       await context.read<AppState>().updateSubscription(updated);
-      await NotificationService.scheduleForSub(updated);
+      // Schedule notification — but never let it block the save
+      try { await NotificationService.scheduleForSub(updated); } catch (_) {}
     } else {
       final sub = SubscriptionData(
         id:           0, // auto-assigned by DB
@@ -190,9 +191,11 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
       await context.read<AppState>().addSubscription(sub);
       AnalyticsService.logSubscriptionAdded(_cycle);
 
-      // Schedule notifications for the newly saved subscription (get real id)
-      final saved = context.read<AppState>().subscriptions.first;
-      await NotificationService.scheduleForSub(saved);
+      // Schedule notifications — but never let it block the save
+      try {
+        final saved = context.read<AppState>().subscriptions.first;
+        await NotificationService.scheduleForSub(saved);
+      } catch (_) {}
 
       // Auto-create a recurring expense in Money Manager
       _autoCreateExpense(sub, cur);

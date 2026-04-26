@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SplitSmart — Privacy Policy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.7;
+      color: #1a1a2e;
+      background: #f4f6fa;
+      padding: 24px;
+    }
+    .container { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    h1 { font-size: 28px; margin-bottom: 8px; color: #060608; }
+    h2 { font-size: 20px; margin-top: 28px; margin-bottom: 8px; color: #060608; }
+    h3 { font-size: 16px; margin-top: 20px; margin-bottom: 6px; color: #060608; }
+    p, li { font-size: 15px; color: #444; margin-bottom: 10px; }
+    ul { padding-left: 24px; }
+    .badge { display: inline-block; background: #00e69b; color: #000; font-weight: 700; font-size: 12px; padding: 3px 10px; border-radius: 8px; margin-bottom: 16px; }
+    .date { color: #888; font-size: 13px; margin-bottom: 24px; display: block; }
+    a { color: #00a3ff; }
+    hr { border: none; border-top: 1px solid #e8e8e8; margin: 24px 0; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<h1>🔒 SplitSmart Privacy Policy</h1>
+<span class="badge">Version 1.0</span>
+<span class="date">Effective Date: April 17, 2026</span>
+
+<p>SplitSmart ("the App", "we", "us") is committed to protecting your privacy. This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+
+<hr>
+
+<h2>1. Information We Collect</h2>
+
+<h3>1.1 Account Information</h3>
+<p>When you sign in with Google or create an Email/Password account, we receive:</p>
+<ul>
+  <li><strong>Display name</strong> and <strong>email address</strong> — used to identify you within groups.</li>
+  <li><strong>Profile photo URL</strong> (Google Sign-In only) — displayed in the app UI.</li>
+</ul>
+<p>We do <strong>not</strong> store your password. Authentication is handled entirely by Firebase Authentication.</p>
+
+<h3>1.2 Financial Data</h3>
+<p>You enter personal transactions, group expenses, budget limits, saving goals, and subscription details. This data is:</p>
+<ul>
+  <li>Stored locally on your device (SQLite) when you are not signed in.</li>
+  <li>Synced to Google Cloud Firestore when you are signed in, enabling cross-device access.</li>
+</ul>
+<p><strong>We never sell, share, or monetize your financial data.</strong></p>
+
+<h3>1.3 Receipt Images</h3>
+<p>If you attach receipt photos to expenses, they are:</p>
+<ul>
+  <li>Processed <strong>on-device</strong> by Google ML Kit for text recognition (OCR). No image data is sent to any server for OCR.</li>
+  <li>Optionally uploaded to Firebase Cloud Storage so they are accessible across your devices.</li>
+</ul>
+
+<h3>1.4 Analytics (Privacy-Safe)</h3>
+<p>We use Firebase Analytics and Firebase Crashlytics to understand app usage and fix crashes. We track <strong>feature usage only</strong>:</p>
+<ul>
+  <li>Examples: "group_created", "expense_added", "theme_toggled", "language_changed".</li>
+  <li><strong>No financial amounts, no names, no descriptions, no personally identifiable information (PII) is ever logged to analytics.</strong></li>
+</ul>
+
+<h3>1.5 Push Notification Tokens</h3>
+<p>If you grant notification permission, we store your Firebase Cloud Messaging (FCM) device token in Firestore to send you push notifications when a group member adds an expense. Tokens are automatically cleaned up when they become invalid.</p>
+
+<hr>
+
+<h2>2. How We Use Your Information</h2>
+<ul>
+  <li><strong>Core functionality:</strong> Splitting bills, tracking personal finances, syncing data across devices.</li>
+  <li><strong>Push notifications:</strong> Alerting you when a group member adds an expense or records a settlement.</li>
+  <li><strong>Crash reporting:</strong> Diagnosing and fixing bugs to improve app stability.</li>
+  <li><strong>Analytics:</strong> Understanding which features are used so we can improve the app.</li>
+</ul>
+
+<hr>
+
+<h2>3. Data Storage & Security</h2>
+<ul>
+  <li>Cloud data is stored in <strong>Google Cloud Firestore</strong> and <strong>Firebase Storage</strong>, protected by Firebase Security Rules that restrict access to authorized users only.</li>
+  <li>Local data is stored in an <strong>encrypted SQLite database</strong> on your device.</li>
+  <li>All network communication uses <strong>HTTPS/TLS encryption</strong>.</li>
+  <li>Biometric authentication (fingerprint/FaceID) can be enabled to protect app access.</li>
+</ul>
+
+<hr>
+
+<h2>4. Data Sharing</h2>
+<p>We do <strong>not</strong> sell, rent, or share your personal data with third parties, except:</p>
+<ul>
+  <li><strong>Group members:</strong> When you join a group, your name and expenses within that group are visible to other group members.</li>
+  <li><strong>Firebase services:</strong> Data is processed by Google Firebase infrastructure (Auth, Firestore, Storage, Analytics, Crashlytics, Cloud Messaging) under <a href="https://firebase.google.com/terms/data-processing-terms" target="_blank">Google's Data Processing Terms</a>.</li>
+</ul>
+
+<hr>
+
+<h2>5. Your Rights</h2>
+<ul>
+  <li><strong>Access & Export:</strong> You can export your data as a PDF report or a compressed backup file at any time from the Settings screen.</li>
+  <li><strong>Deletion:</strong> You can delete all your data from the Settings screen ("Reset All Data"). This removes all local and cloud data.</li>
+  <li><strong>Account Deletion:</strong> You can sign out at any time. To delete your Firebase account, contact us.</li>
+  <li><strong>Offline Use:</strong> You can use the app without signing in. All data stays on your device.</li>
+</ul>
+
+<hr>
+
+<h2>6. Children's Privacy</h2>
+<p>SplitSmart is not directed to children under 13. We do not knowingly collect personal information from children.</p>
+
+<hr>
+
+<h2>7. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. Changes will be posted in the app and on this page. Continued use of the app constitutes acceptance of the updated policy.</p>
+
+<hr>
+
+<h2>8. Contact</h2>
+<p>If you have questions about this Privacy Policy, please contact us at:</p>
+<p><strong>Email:</strong> <a href="mailto:support@splitsmart.app">support@splitsmart.app</a></p>
+
+<hr>
+<p style="text-align:center; color:#aaa; font-size:13px; margin-top:20px;">
+  © 2026 SplitSmart · Made with ❤️ for financial transparency.
+</p>
+
+</div>
+</body>
+</html>

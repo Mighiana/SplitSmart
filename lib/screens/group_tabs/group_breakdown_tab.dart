@@ -782,6 +782,33 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
                 );
               }),
               const SizedBox(height: 16),
+              // View All Transactions Button
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.pop(context);
+                  _showAllGroupTransactions(context, g);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: TC.card(context),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('📋', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text('View All Transactions', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.green)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
             ],
             if (sortedPayers.isNotEmpty) ...[
               Text(
@@ -904,5 +931,55 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
         ],
       ),
     );
+  }
+
+  void _showAllGroupTransactions(BuildContext context, GroupData g) {
+    // The group detail screen already has an expenses tab, but since we are 
+    // inside the group detail screen (on the breakdown tab), we can just 
+    // tell the parent GroupDetailScreen to switch tabs. However, we don't have
+    // direct access to the parent state. 
+    // Instead, we can push a new simple screen that just shows the expenses list.
+    Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+      backgroundColor: TC.bg(context),
+      appBar: AppBar(
+        backgroundColor: TC.bg(context),
+        elevation: 0,
+        title: Text('${g.name} Transactions', style: TextStyle(color: TC.text(context), fontSize: 16, fontWeight: FontWeight.w700)),
+        iconTheme: IconThemeData(color: TC.text(context)),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 100),
+        itemCount: g.expenses.length,
+        itemBuilder: (ctx, i) {
+          final e = g.expenses[i];
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: TC.card(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: TC.border(context)),
+            ),
+            child: Row(
+              children: [
+                EmojiBox(emoji: e.cat, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e.desc, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: TC.text(context))),
+                      const SizedBox(height: 4),
+                      Text('Paid by ${e.paidBy} · ${TransactionData.formatDate(e.date)}', style: TextStyle(color: TC.text2(context), fontSize: 11)),
+                    ],
+                  ),
+                ),
+                Text('${g.sym}${e.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.green)),
+              ],
+            ),
+          );
+        },
+      ),
+    )));
   }
 }

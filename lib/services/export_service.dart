@@ -160,6 +160,7 @@ class ExportService {
           sharePositionOrigin: origin,
         ),
        );
+       AnalyticsService.logExportedPDF();
        // SEC-12: Clean up temp file after sharing
        try { await file.delete(); } catch (_) {}
     }
@@ -250,7 +251,11 @@ class ExportService {
     );
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/SplitSmart_Group_${g.name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    // SEC-L4: Safe filename — replace any non-alphanumeric/non-underscore chars,
+    // then fallback to 'group' if result is empty (e.g. all-emoji names).
+    var safeName = g.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_|_$'), '');
+    if (safeName.isEmpty) safeName = 'group_${g.id}';
+    final file = File('${dir.path}/SplitSmart_Group_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf');
     final bytes = await pdf.save();
     await file.writeAsBytes(bytes);
 
@@ -265,6 +270,7 @@ class ExportService {
           sharePositionOrigin: origin,
         ),
        );
+       AnalyticsService.logExportedPDF();
        // SEC-12: Clean up temp file after sharing
        try { await file.delete(); } catch (_) {}
     }

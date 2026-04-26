@@ -17,8 +17,9 @@ enum _TPeriod { day, week, month, year, period }
 // ─── MoneyTransactionsScreen ─────────────────────────────────────────────────
 class MoneyTransactionsScreen extends StatefulWidget {
   final String? filterCat;
-  final String? filterCurrency; // optional currency filter passed from MoneyTab
-  const MoneyTransactionsScreen({super.key, this.filterCat, this.filterCurrency});
+  final String? filterCurrency;
+  final bool? isGroupFilter;
+  const MoneyTransactionsScreen({super.key, this.filterCat, this.filterCurrency, this.isGroupFilter});
 
   @override
   State<MoneyTransactionsScreen> createState() =>
@@ -31,13 +32,18 @@ class _MoneyTransactionsScreenState extends State<MoneyTransactionsScreen> {
   DateTime _selectedDate =
       DateTime(DateTime.now().year, DateTime.now().month, 1);
   bool _sortByDate = true; // false = by amount
-  String? _sortOrder; // for bottom sheet
+
   String? _activeCurrencyFilter;
 
   @override
   void initState() {
     super.initState();
     _activeCurrencyFilter = widget.filterCurrency ?? 'ALL';
+    // If a currency filter is passed from the donut chart, show ALL time
+    // transactions (not just current month) so user can see their full history.
+    if (widget.filterCurrency != null || widget.filterCat != null) {
+      _period = _TPeriod.period;
+    }
   }
 
   // ── Period navigation ─────────────────────────────────────────────────────
@@ -196,9 +202,14 @@ class _MoneyTransactionsScreenState extends State<MoneyTransactionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final transactions =
-        context.select<AppState, List<TransactionData>>((s) => s.transactions);
     final state = context.read<AppState>();
+    final allTxns = context.select<AppState, List<TransactionData>>((s) => s.allTransactionsWithGroupShares);
+    
+    final transactions = allTxns.where((t) {
+      if (widget.isGroupFilter == true) return t.isGroupShare;
+      if (widget.isGroupFilter == false) return !t.isGroupShare;
+      return true;
+    }).toList();
 
     final filtered = _filterTransactions(transactions);
     final totalAmount = filtered.fold(0.0, (s, t) => s + t.amount);
@@ -265,7 +276,7 @@ class _MoneyTransactionsScreenState extends State<MoneyTransactionsScreen> {
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.lightImpact();
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _activeCurrencyFilter)));
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _activeCurrencyFilter, isGroupFilter: widget.isGroupFilter)));
                         },
                         child: Icon(Icons.pie_chart_outline,
                             color: TC.text(context), size: 22),
@@ -720,20 +731,7 @@ class _TxnCard extends StatelessWidget {
       },
     );
 
-    return Dismissible(
-      key: Key('txn_list_${t.id}'),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (_) async {
-        _confirmDelete(context, state);
-        return false;
-      },
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.red.withValues(alpha: 0.2),
-        child: const Icon(Icons.delete_outline, color: Colors.red),
-      ),
-      child: GestureDetector(
+    final cardBody = GestureDetector(
         onTap: () => _showActions(context, state),
         onLongPress: () => _showActions(context, state),
         child: Container(
@@ -775,7 +773,7 @@ class _TxnCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Main', // Account name placeholder
+                      t.isGroupShare == true ? 'Group Expense' : 'Main',
                       style: TextStyle(
                         fontSize: 12,
                         color: TC.text2(context),
@@ -796,11 +794,31 @@ class _TxnCard extends StatelessWidget {
             ],
           ),
         ),
+      );
+
+    return (t.isGroupShare == true) 
+      ? cardBody.animate(delay: delay)
+        .slideX(begin: 0.1, duration: 300.ms, curve: Curves.easeOutCubic)
+        .fadeIn(duration: 300.ms)
+      : Dismissible(
+      key: Key('txn_list_${t.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        _confirmDelete(context, state);
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red.withValues(alpha: 0.2),
+        child: const Icon(Icons.delete_outline, color: Colors.red),
       ),
+      child: cardBody,
     )
         .animate(delay: delay)
         .slideX(begin: 0.1, duration: 300.ms, curve: Curves.easeOutCubic)
         .fadeIn(duration: 300.ms);
+
   }
 
   void _confirmDelete(BuildContext context, AppState state) {
@@ -905,36 +923,37 @@ class _TxnCard extends StatelessWidget {
               ),
               
               const SizedBox(height: 24),
-              // Actions
-              Container(height: 1, color: TC.border(context)),
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: TC.card(context), shape: BoxShape.circle),
-                  child: Icon(Icons.edit_outlined, color: TC.text(context), size: 20),
+              if (t.isGroupShare != true) ...[
+                Container(height: 1, color: TC.border(context)),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: TC.card(context), shape: BoxShape.circle),
+                    child: Icon(Icons.edit_outlined, color: TC.text(context), size: 20),
+                  ),
+                  title: Text('Edit Transaction', style: TextStyle(color: TC.text(context), fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => AddTransactionScreen(existing: t)));
+                  },
                 ),
-                title: Text('Edit Transaction', style: TextStyle(color: TC.text(context), fontWeight: FontWeight.w600)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => AddTransactionScreen(existing: t)));
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: AppColors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.delete_outline, color: AppColors.red, size: 20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: AppColors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
+                    child: const Icon(Icons.delete_outline, color: AppColors.red, size: 20),
+                  ),
+                  title: const Text('Delete Transaction', style: TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmDelete(context, state);
+                  },
                 ),
-                title: const Text('Delete Transaction', style: TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _confirmDelete(context, state);
-                },
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
+              ],
             ],
           ),
         ),

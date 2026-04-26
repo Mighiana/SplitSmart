@@ -6,7 +6,7 @@ import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
 import 'group_detail_screen.dart';
-import '../widgets/common_widgets.dart';
+
 
 class NewGroupScreen extends StatefulWidget {
   const NewGroupScreen({super.key});

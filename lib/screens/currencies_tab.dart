@@ -34,8 +34,6 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
                 c.sym.contains(_search))
             .toList();
 
-    // Count active wallets
-    final activeCount = wallets.length;
 
     return SafeArea(
       bottom: false,
@@ -68,25 +66,6 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Stats row
-                Row(
-                  children: [
-                    _StatChip(
-                      icon: Icons.account_balance_wallet_rounded,
-                      label: '$activeCount Active',
-                      color: AppColors.green,
-                      isDark: isDark,
-                    ),
-                    const SizedBox(width: 10),
-                    _StatChip(
-                      icon: Icons.public_rounded,
-                      label: '${AppState.currencies.length} Available',
-                      color: AppColors.blue,
-                      isDark: isDark,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
                 // Search bar
                 TextField(
                   style: TextStyle(fontSize: 15, color: TC.text(context)),
@@ -235,7 +214,7 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
                       ],
                     ),
                   ),
-                );
+                ).animate().fade(duration: 250.ms, delay: Duration(milliseconds: 30 * (i < 15 ? i : 15))).slideX(begin: 0.05, end: 0, curve: Curves.easeOut);
               },
             ),
           ),
@@ -263,12 +242,13 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
             right: 20,
             top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Drag handle
-            Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag handle
+              Center(
               child: Container(
                   width: 36,
                   height: 4,
@@ -441,6 +421,7 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
             ],
           ],
         ),
+        ),
       ),
     );
   }
@@ -481,40 +462,4 @@ class _CurrenciesTabState extends State<CurrenciesTab> {
   }
 }
 
-// ── Stat Chip ──────────────────────────────────────────────────────────────
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool isDark;
 
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.1 : 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w800, color: color)),
-          ],
-        ),
-      ),
-    );
-  }
-}

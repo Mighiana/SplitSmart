@@ -136,86 +136,123 @@ class _TappableExpenseCard extends StatefulWidget {
 }
 
 class _TappableExpenseCardState extends State<_TappableExpenseCard> {
-  void _onLongPress() {
+  void _onLongPress() => _showExpenseDetail(context);
+
+  void _showExpenseDetail(BuildContext context) {
     if (widget.isArchived) return;
     HapticFeedback.mediumImpact();
-    final springCtrl = AnimationController(
-      vsync: Navigator.of(context),
-      duration: const Duration(milliseconds: 450),
-    );
+    final e = widget.e;
+    final g = widget.g;
+    final isAuthor = e.createdBy == null || e.createdBy == 'You';
+    final memberAmounts = <String, double>{};
+    for (final m in g.members) {
+      memberAmounts[m] = (e.splits != null && e.splits!.containsKey(m))
+          ? e.splits![m]!
+          : (g.members.isEmpty ? 0 : e.amount / g.members.length);
+    }
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: TC.surface(context),
-      transitionAnimationController: springCtrl,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (_, ctrl) => ListView(
+          controller: ctrl,
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           children: [
-            const SizedBox(height: 8),
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            // Header
+            Row(children: [
+              Container(width: 52, height: 52, decoration: BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle), alignment: Alignment.center, child: Text(e.cat, style: const TextStyle(fontSize: 26))),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(e.desc, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
+                const SizedBox(height: 2),
+                Text('${g.sym}${e.amount.toStringAsFixed(2)} · ${e.date}', style: TextStyle(fontSize: 13, color: TC.text2(context))),
+              ])),
+            ]),
+            const SizedBox(height: 14),
+            // Paid by
             Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: TC.border(context),
-                borderRadius: BorderRadius.circular(2),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(color: AppColors.greenDim, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.green.withValues(alpha: 0.25))),
+              child: Row(children: [
+                AvatarCircle(label: e.paidBy, size: 28),
+                const SizedBox(width: 10),
+                Expanded(child: Text('${e.paidBy} paid', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.green))),
+                Text('${g.sym}${e.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.green, fontSize: 15)),
+              ]),
             ),
             const SizedBox(height: 16),
-            Text(
-              widget.e.desc,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: TC.text(context),
-              ),
-            ),
-            Text(
-              '${widget.g.sym}${widget.e.amount.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 13, color: TC.text2(context)),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Text('✏️', style: TextStyle(fontSize: 22)),
-              title: const Text(
-                'Edit Expense',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.pop(context);
-                widget.state.currentGroup = widget.g;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AddExpenseScreen(existing: widget.e),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Text('🗑', style: TextStyle(fontSize: 22)),
-              title: const Text(
-                'Delete Expense',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.red,
-                ),
-              ),
-              onTap: () {
-                HapticFeedback.heavyImpact();
-                Navigator.pop(context);
-                _confirmDelete(context);
-              },
-            ),
+            Text('WHO OWES WHAT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 2)),
             const SizedBox(height: 8),
+            ...g.members.map((m) {
+              final owes = memberAmounts[m] ?? 0;
+              final isPayer = m == e.paidBy;
+              final net = isPayer ? (e.amount - owes) : -owes;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(12), border: Border.all(color: TC.border(context))),
+                child: Row(children: [
+                  AvatarCircle(label: m, size: 32),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(m, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: TC.text(context))),
+                    Text(isPayer ? 'Paid the bill' : 'Share: ${g.sym}${owes.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: TC.text2(context))),
+                  ])),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: net >= 0 ? AppColors.greenDim : AppColors.redDim, borderRadius: BorderRadius.circular(8)),
+                    child: Text(net >= 0 ? 'gets back ${g.sym}${net.toStringAsFixed(2)}' : 'owes ${g.sym}${net.abs().toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: net >= 0 ? AppColors.green : AppColors.red)),
+                  ),
+                ]),
+              );
+            }),
+            if (e.createdBy != null) ...[
+              const SizedBox(height: 6),
+              Text(e.updatedBy != null ? '✏️ Edited by ${e.updatedBy}' : '👤 Added by ${e.createdBy}',
+                  style: TextStyle(fontSize: 11, color: TC.text3(context))),
+            ],
+            const SizedBox(height: 16),
+            Divider(color: TC.border(context)),
+            if (!isAuthor)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text('Only the author (${e.createdBy}) can edit this expense.',
+                    style: TextStyle(color: TC.text3(context), fontSize: 13), textAlign: TextAlign.center),
+              )
+            else ...[
+              ListTile(
+                leading: const Text('✏️', style: TextStyle(fontSize: 22)),
+                title: const Text('Edit Expense', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.pop(context);
+                  widget.state.currentGroup = widget.g;
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => AddExpenseScreen(existing: e)));
+                },
+              ),
+              ListTile(
+                leading: const Text('🗑', style: TextStyle(fontSize: 22)),
+                title: const Text('Delete Expense', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.red)),
+                onTap: () { HapticFeedback.heavyImpact(); Navigator.pop(context); _confirmDelete(context); },
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+
 
   void _confirmDelete(BuildContext context) {
     showDialog(
@@ -300,6 +337,15 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
                     '${widget.e.paidBy} paid',
                     style: TextStyle(fontSize: 12, color: TC.text2(context)),
                   ),
+                  if (widget.e.createdBy != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.e.updatedBy != null
+                          ? '✏️ Edited by ${widget.e.updatedBy}'
+                          : '👤 Added by ${widget.e.createdBy}',
+                      style: TextStyle(fontSize: 10, color: TC.text3(context)),
+                    ),
+                  ],
                 ],
               ),
             ),

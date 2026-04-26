@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Prevent the Android resource shrinker from removing the notification icon.
+     flutter_local_notifications requires icons to be in res/drawable/. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_launcher,@drawable/launch_background" />

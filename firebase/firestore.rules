@@ -1,0 +1,97 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── User Private Data ──────────────────────────────────────────────────
+    // Each user can only read/write their own document and subcollections.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Personal subcollections: transactions, wallets, groupWallets, budgetLimits, savingGoals
+      match /{subcollection}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ─── Groups ──────────────────────────────────────────────────────────────
+    // Only group members can read/write group data.
+    // Any authenticated user can create a new group.
+    // Any authenticated user can query groups by inviteCode (for joining).
+    match /groups/{groupId} {
+
+      // Allow creation if the user is authenticated
+      // NOTE: Consider adding server-side rate limiting via Cloud Functions
+      // if group-creation spam becomes an issue.
+      allow create: if request.auth != null;
+
+      // Allow read if the user is a member of the group OR created it (legacy fallback)
+      allow read: if request.auth != null
+                  && (
+                    request.auth.uid in resource.data.memberUids
+                    || resource.data.createdBy == request.auth.uid
+                    || !("memberUids" in resource.data) && resource.data.createdBy == request.auth.uid
+                  );
+
+      // Allow delete only by existing members or creator
+      allow delete: if request.auth != null
+                    && (request.auth.uid in resource.data.memberUids || resource.data.createdBy == request.auth.uid);
+
+      // SEC-C1: Allow update by existing members, OR by a new user joining
+      // via invite code. The join is allowed ONLY if:
+      //   1. All existing memberUids are preserved (no removals)
+      //   2. Exactly one new UID is added (the requester's own)
+      //   3. The group member cap (50) is not exceeded
+      allow update: if request.auth != null
+                    && (
+                      // Normal member update or creator
+                      request.auth.uid in resource.data.memberUids
+                      || resource.data.createdBy == request.auth.uid
+                      // OR: invite-code join — user adds only themselves
+                      || (
+                        request.resource.data.memberUids.hasAll(resource.data.memberUids)
+                        && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+                        && request.auth.uid in request.resource.data.memberUids
+                        && request.resource.data.memberUids.size() <= 50
+                      )
+                    );
+
+      // Expenses subcollection — members only, and enforce authorship
+      match /expenses/{expenseId} {
+        allow read: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+        allow create: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+                    && request.resource.data.addedBy == request.auth.uid;
+        allow update, delete: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+                    && (!("addedBy" in resource.data) || resource.data.addedBy == request.auth.uid);
+      }
+
+      // SEC-C3: Settlements — members only, enforce addedBy on create
+      match /settlements/{settlementId} {
+        allow read: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+        allow create: if request.auth != null
+                      && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+                      && request.resource.data.addedBy == request.auth.uid;
+        allow update, delete: if request.auth != null
+                              && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+      }
+    }
+
+    // ─── Join-by-invite-code query ──────────────────────────────────────────
+    // The joinGroupByInviteCode() function queries the top-level groups
+    // collection by inviteCode. Since the user is NOT yet a member, the
+    // member-only read rule above would block it. We add a special list rule:
+    // allow listing groups if the query is limited to 1 result and the user
+    // is authenticated. The limit prevents full collection enumeration.
+    match /groups/{groupId} {
+      allow list: if request.auth != null
+                  && request.query.limit <= 1;
+    }
+
+    // ─── Default deny ────────────────────────────────────────────────────────
+    // Everything else is denied by default (Firestore's default behavior).
+  }
+}

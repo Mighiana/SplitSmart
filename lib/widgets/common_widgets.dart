@@ -464,19 +464,38 @@ class ReceiptViewer extends StatelessWidget {
       ),
       body: Center(
         child: InteractiveViewer(
-          child: Image.file(
-            File(imagePath),
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.broken_image, color: Colors.white54, size: 60),
-                SizedBox(height: 12),
-                Text('Image not available',
-                    style: TextStyle(color: Colors.white54, fontSize: 14)),
-              ],
-            ),
-          ),
+          child: imagePath.startsWith('http')
+              ? Image.network(
+                  imagePath,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const Center(
+                          child: CircularProgressIndicator(
+                              color: Colors.white54, strokeWidth: 2)),
+                  errorBuilder: (_, __, ___) => const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white54, size: 60),
+                      SizedBox(height: 12),
+                      Text('Image not available',
+                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    ],
+                  ),
+                )
+              : Image.file(
+                  File(imagePath),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white54, size: 60),
+                      SizedBox(height: 12),
+                      Text('Image not available',
+                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    ],
+                  ),
+                ),
         ),
       ),
     );

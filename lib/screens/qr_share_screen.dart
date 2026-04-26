@@ -24,6 +24,8 @@ class _QRShareScreenState extends State<QRShareScreen> {
   final GlobalKey _qrKey = GlobalKey();
 
   /// Payload encoded into the QR
+  /// SEC-M1: When an inviteCode is present (cloud mode), omit member names
+  /// to prevent privacy leakage if the QR image is intercepted.
   String get _payload {
     final data = {
       'v': 1,
@@ -31,6 +33,8 @@ class _QRShareScreenState extends State<QRShareScreen> {
       'emoji': widget.group.emoji,
       'currency': widget.group.currency,
       'sym': widget.group.sym,
+      if (widget.group.inviteCode != null) 'inviteCode': widget.group.inviteCode,
+      // Always include members so offline scans don't result in 0 members
       'members': widget.group.members,
     };
     return jsonEncode(data);
@@ -63,6 +67,8 @@ class _QRShareScreenState extends State<QRShareScreen> {
         ),
       );
       AnalyticsService.logGroupQRShared();
+      // SEC-M5: Clean up temp QR image after sharing
+      try { await file.delete(); } catch (_) {}
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

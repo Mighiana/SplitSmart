@@ -42,7 +42,7 @@ class NotificationService {
     }
 
     const initSettings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings('@mipmap/launcher_icon'),
       iOS: DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: false,
@@ -53,16 +53,18 @@ class NotificationService {
     // v21: initialize() uses named `settings` param
     await _plugin.initialize(settings: initSettings);
 
-    // Request Android 13+ notification permission
+    // Request Android 13+ notification permission (delayed so it doesn't block runApp)
     final androidImpl = _plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
-    try {
-      await androidImpl?.requestNotificationsPermission();
-      await androidImpl?.requestExactAlarmsPermission();
-    } catch (_) {
-      // Permission denied — notifications won't fire but app won't crash
-    }
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        await androidImpl?.requestNotificationsPermission();
+        await androidImpl?.requestExactAlarmsPermission();
+      } catch (_) {
+        // Permission denied — notifications won't fire but app won't crash
+      }
+    });
 
     _initialized = true;
   }
@@ -82,21 +84,21 @@ class NotificationService {
       channelDescription: _channelDesc,
       importance: Importance.high,
       priority:   Priority.high,
-      icon:       '@mipmap/ic_launcher',
+      icon:       '@mipmap/launcher_icon',
     );
     const details = NotificationDetails(android: androidDetails);
 
-    // Notification ID scheme:
-    //   sub.id * 10       → billing day notification
-    //   sub.id * 10 + 1   → 3-day warning notification
-    //   200000 + r.id     → custom reminder notification
+    // Notification ID scheme (BUG-4 fix: safe modular arithmetic to avoid int32 overflow):
+    //   _safeSubId(sub.id)       → billing day notification
+    //   _safeSubId(sub.id) + 1   → 3-day warning notification
+    //   _safeRemId(r.id)         → custom reminder notification
     //   IDs 0–9 reserved for future app-level notifications
     // ── 3-day warning ─────────────────────────────────────────────────────
     if (threeDayWarn.isAfter(now)) {
       final tzWarn = tz.TZDateTime.from(threeDayWarn, tz.local);
       // v21: zonedSchedule() uses named params; no uiLocalNotificationDateInterpretation on Android
       await _plugin.zonedSchedule(
-        id:                   sub.id * 10 + 1,
+        id:                   _safeSubId(sub.id) + 1,
         title:                '⚠️ ${sub.name} — due in 3 days',
         body:                 '${sub.sym}${sub.amount.toStringAsFixed(2)} will be '
                               'charged on ${_fmtDate(nextBilling)}',
@@ -111,7 +113,7 @@ class NotificationService {
     if (nextBilling.isAfter(now)) {
       final tzBilling = tz.TZDateTime.from(nextBilling, tz.local);
       await _plugin.zonedSchedule(
-        id:                   sub.id * 10,
+        id:                   _safeSubId(sub.id),
         title:                '💳 ${sub.name} — ${sub.sym}${sub.amount.toStringAsFixed(2)} due today',
         body:                 'Your ${sub.name} subscription renews today',
         scheduledDate:        tzBilling,
@@ -126,8 +128,8 @@ class NotificationService {
   static Future<void> cancelForSub(int subId) async {
     if (!_initialized) await init();
     // v21: cancel() uses named `id` param
-    await _plugin.cancel(id: subId * 10);
-    await _plugin.cancel(id: subId * 10 + 1);
+    await _plugin.cancel(id: _safeSubId(subId));
+    await _plugin.cancel(id: _safeSubId(subId) + 1);
   }
 
   // ─── Reschedule everything (e.g. on app start / after reboot) ─────────────
@@ -165,12 +167,12 @@ class NotificationService {
         channelDescription: _channelDesc,
         importance: Importance.high,
         priority:   Priority.high,
-        icon:       '@mipmap/ic_launcher',
+        icon:       '@mipmap/launcher_icon',
       );
       const details = NotificationDetails(android: androidDetails);
 
       await _plugin.zonedSchedule(
-        id:                   200000 + r.id,
+        id:                   _safeRemId(r.id),
         title:                '🔔 Reminder: ${r.title}',
         body:                 r.amountStr.isNotEmpty ? 'Amount: ${r.amountStr}' : 'You have a scheduled reminder today.',
         scheduledDate:        tzTime,
@@ -183,7 +185,7 @@ class NotificationService {
 
   static Future<void> cancelReminder(int rId) async {
     if (!_initialized) await init();
-    await _plugin.cancel(id: 200000 + rId);
+    await _plugin.cancel(id: _safeRemId(rId));
   }
 
   static Future<void> rescheduleAllReminders(List<ReminderData> reminders) async {
@@ -209,4 +211,12 @@ class NotificationService {
     ];
     return '${d.day} ${months[d.month - 1]}';
   }
+
+  /// Safe notification ID for subscriptions: stays within int32 range.
+  /// Maps sub.id into the 10–199_998 range (even numbers for billing, +1 for warnings).
+  static int _safeSubId(int subId) => 10 + (subId.abs() % 99995) * 2;
+
+  /// Safe notification ID for reminders: stays within int32 range.
+  /// Maps r.id into the 200_000–299_999 range.
+  static int _safeRemId(int rId) => 200000 + (rId.abs() % 100000);
 }

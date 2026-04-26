@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,10 +10,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'l10n/app_localizations.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/lock_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/auth_screen.dart';
+import 'services/auth_service.dart';
+import 'services/firestore_service.dart';
 import 'providers/app_state.dart';
 import 'services/notification_service.dart';
 import 'services/backup_service.dart';
@@ -26,58 +31,50 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize Firebase FIRST — required before Crashlytics/Analytics
-  await Firebase.initializeApp();
+  // Allow runtime font fetching — fonts are loaded from Google's CDN on
+  // first launch, then cached locally for subsequent offline use.
+  // If fetch fails (no network), the app gracefully falls back to system fonts.
+  GoogleFonts.config.allowRuntimeFetching = true;
+
+  // 1. Initialize Firebase — wrap in try/catch so a config error never
+  //    prevents the app from rendering its first frame.
+  try {
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: "AIzaSyBdqQTvTrtlsRaSbQ7wkFcsw7KwvKm060U",
+          appId: "1:698180984926:web:dummy_app_id_to_prevent_crash",
+          messagingSenderId: "698180984926",
+          projectId: "splitsmart-3898",
+          storageBucket: "splitsmart-3898.firebasestorage.app",
+        ),
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
+  } catch (e) {
+    debugPrint('[main] Firebase init failed: $e');
+  }
 
   // 2. Layer 1: Catch Flutter framework errors (Widget build, synchronous, etc.)
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    // Send to Crashlytics
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-    // Also keep local backup log
+    try {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    } catch (_) {}
     _logError(details.exceptionAsString(), details.stack.toString());
   };
 
   // 3. Layer 2: Catch ALL other errors (Async, Futures, Platform-level)
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    try {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    } catch (_) {}
     _logError(error.toString(), stack.toString());
     return true; // Error was handled
   };
 
-  await NotificationService.init();
-
-  final prefs = await SharedPreferences.getInstance();
-
-  final savedLocale = prefs.getString('locale') ?? 'en';
-  final savedDarkMode = prefs.getBool('dark_mode') ?? true;
-
-  final appState = AppState(
-    initialLocale: Locale(savedLocale),
-    initialDarkMode: savedDarkMode,
-  );
-
-  await appState.loadInitialData();
-
-  // Reschedule all subscription notifications on every app open.
-  // This is essential for yearly subscriptions: they use a one-shot schedule
-  // (no DateTimeComponents repeat), so after the notification fires it must
-  // be rescheduled manually. Monthly/weekly subs repeat automatically but
-  // calling rescheduleAll for them is harmless and ensures stale schedules
-  // are always replaced with fresh ones.
-  await NotificationService.rescheduleAll(appState.subscriptions);
-  await NotificationService.rescheduleAllReminders(appState.reminders);
-
-  await BackupService.checkAutoBackup();
-
-  // Set anonymous user properties for analytics segmentation
-  AnalyticsService.setUserProperties({
-    'total_groups': appState.groups.length.toString(),
-    'total_wallets': appState.wallets.length.toString(),
-    'locale': savedLocale,
-    'theme': savedDarkMode ? 'dark' : 'light',
-  });
-
+  // 4. Orientation & status bar — lightweight, safe to do before runApp
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -90,6 +87,31 @@ Future<void> main() async {
     ),
   );
 
+  // 5. Read only the two prefs needed to construct AppState — fast
+  final prefs = await SharedPreferences.getInstance();
+  final savedDarkMode = prefs.getBool('dark_mode') ?? false; // Default: light theme for new users
+
+  // Auto-detect device language on first launch, fall back to 'en'
+  final supportedCodes = {'en', 'ur', 'ar', 'fr', 'es', 'de', 'tr', 'hi'};
+  final savedLocale = prefs.getString('locale');
+  String initialLocaleCode;
+  if (savedLocale != null) {
+    // User explicitly chose a language before
+    initialLocaleCode = savedLocale;
+  } else {
+    // First launch — use device system locale if we support it
+    final systemCode = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    initialLocaleCode = supportedCodes.contains(systemCode) ? systemCode : 'en';
+  }
+
+  final appState = AppState(
+    initialLocale: Locale(initialLocaleCode),
+    initialDarkMode: savedDarkMode,
+  );
+
+  // 6. *** Call runApp IMMEDIATELY — the splash screen will show while
+  //    heavy initialization (DB, notifications, Firestore, backup) runs
+  //    in the background via _AppGate. ***
   runApp(
     ChangeNotifierProvider.value(
       value: appState,
@@ -102,6 +124,10 @@ Future<void> main() async {
 /// Persists both framework and async errors to the local log file.
 /// Rotates the log file when it exceeds 1 MB to prevent unbounded growth.
 Future<void> _logError(String error, String stack) async {
+  if (kIsWeb) {
+    debugPrint('Web Error Log: $error\n$stack');
+    return;
+  }
   try {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/app_errors.log');
@@ -175,18 +201,21 @@ class SplitSmartApp extends StatelessWidget {
         onSurface: text,
         onError: Colors.white,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme(
-        isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-      ).apply(
-        bodyColor: text,
-        displayColor: text,
-      ),
+      textTheme: _safeTextTheme(isDark),
       cardTheme: CardThemeData(
         color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
           side: BorderSide(color: border),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: card,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: border, width: 1.5),
         ),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -220,15 +249,46 @@ class SplitSmartApp extends StatelessWidget {
         foregroundColor: text,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: text,
-        ),
+        titleTextStyle: _safeTitleStyle(text),
         systemOverlayStyle:
             isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       ),
     );
+  }
+
+  /// Build text theme with PlusJakartaSans, falling back to system font
+  /// if the Google Font isn't available (e.g. first launch without network).
+  static TextTheme _safeTextTheme(bool isDark) {
+    final base = isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme;
+    final Color textColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A);
+    try {
+      return GoogleFonts.plusJakartaSansTextTheme(base).apply(
+        bodyColor: textColor,
+        displayColor: textColor,
+      );
+    } catch (_) {
+      return base.apply(
+        bodyColor: textColor,
+        displayColor: textColor,
+      );
+    }
+  }
+
+  /// AppBar title style with safe GoogleFonts fallback.
+  static TextStyle _safeTitleStyle(Color color) {
+    try {
+      return GoogleFonts.plusJakartaSans(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: color,
+      );
+    } catch (_) {
+      return TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: color,
+      );
+    }
   }
 }
 
@@ -243,7 +303,9 @@ class _AppGateState extends State<_AppGate>
     with SingleTickerProviderStateMixin {
   bool? _onboardingDone;
   bool? _nameRecorded;
+  bool? _isAuthenticated;
   bool _splashFinished = false;
+  late final StreamSubscription<dynamic> _authSub;
   late AnimationController _splashCtrl;
   late Animation<double> _logoScale;
   late Animation<double> _logoFade;
@@ -259,6 +321,31 @@ class _AppGateState extends State<_AppGate>
   void initState() {
     super.initState();
     _checkOnboarding();
+
+    // Listen for auth state changes (sign-out triggers redirect)
+    _authSub = AuthService.instance.authStateChanges.listen((user) async {
+      if (!mounted) return;
+      
+      final wasAuthenticated = _isAuthenticated;
+      final isNowAuthenticated = user != null;
+      
+      // If user just logged in during this session, initialize cloud data
+      if (wasAuthenticated == false && isNowAuthenticated == true) {
+        try {
+          await FirestoreService.instance.ensureUserDocument();
+        } catch (e) {
+          debugPrint('[AppGate] Firestore init error: $e');
+        }
+        if (mounted) {
+          final state = context.read<AppState>();
+          await state.reloadFromDatabase();
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isAuthenticated = isNowAuthenticated);
+      }
+    });
 
     _splashCtrl = AnimationController(
       vsync: this,
@@ -289,10 +376,83 @@ class _AppGateState extends State<_AppGate>
     _splashCtrl.forward().then((_) {
       if (mounted) setState(() => _splashFinished = true);
     });
+
+    // Heavy init runs in background AFTER the first frame is painted
+    // (avoids notifyListeners() during the build phase)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeApp();
+    });
   }
+
+  /// Runs all heavy async initialization (DB, notifications, backup,
+  /// analytics) in the background while the splash animation plays.
+  /// Every step is wrapped in try/catch so a single failure can never
+  /// prevent the app from opening.
+  Future<void> _initializeApp() async {
+    final appState = context.read<AppState>();
+
+    // 1. Load data from SQLite / Firestore
+    try {
+      await appState.loadInitialData();
+    } catch (e) {
+      debugPrint('[AppGate] loadInitialData failed: $e');
+    }
+
+    // 2. Notification service (timezone init + plugin init)
+    try {
+      await NotificationService.init();
+    } catch (e) {
+      debugPrint('[AppGate] NotificationService.init failed: $e');
+    }
+
+    // 3. Reschedule subscription & reminder notifications
+    try {
+      await NotificationService.rescheduleAll(appState.subscriptions);
+      await NotificationService.rescheduleAllReminders(appState.reminders);
+    } catch (e) {
+      debugPrint('[AppGate] Notification reschedule failed: $e');
+    }
+
+    // 4. Auto-backup check
+    try {
+      await BackupService.checkAutoBackup();
+    } catch (e) {
+      debugPrint('[AppGate] Auto-backup check failed: $e');
+    }
+
+    // 5. Analytics user properties (fire-and-forget)
+    try {
+      AnalyticsService.setUserProperties({
+        'total_groups': appState.groups.length.toString(),
+        'total_wallets': appState.wallets.length.toString(),
+        'locale': appState.locale.languageCode,
+        'theme': appState.isDark ? 'dark' : 'light',
+      });
+    } catch (e) {
+      debugPrint('[AppGate] Analytics properties failed: $e');
+    }
+
+    // 6. Clear stale error logs from previous versions (one-time)
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final logFile = File('${dir.path}/app_errors.log');
+      if (await logFile.exists()) {
+        final content = await logFile.readAsString();
+        // If the log only contains pre-fix errors (before today), clear it
+        if (!content.contains(DateTime.now().toIso8601String().substring(0, 10))) {
+          await logFile.delete();
+          debugPrint('[AppGate] Cleared stale error logs');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppGate] Log cleanup failed: $e');
+    }
+  }
+
 
   @override
   void dispose() {
+    _authSub.cancel();
     _splashCtrl.dispose();
     super.dispose();
   }
@@ -309,14 +469,28 @@ class _AppGateState extends State<_AppGate>
   }
 
   Future<void> _checkOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    final done = prefs.getBool('onboarding_done') ?? false;
-    final hasNameKey = prefs.containsKey('user_first_name');
-    if (mounted) {
-      setState(() {
-         _onboardingDone = done;
-         _nameRecorded = hasNameKey;
-      });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final done = prefs.getBool('onboarding_done') ?? false;
+      final hasNameKey = prefs.containsKey('user_first_name');
+      final isAuth = AuthService.instance.isSignedIn;
+      if (mounted) {
+        setState(() {
+           _onboardingDone = done;
+           _nameRecorded = hasNameKey;
+           _isAuthenticated = isAuth;
+        });
+      }
+    } catch (e) {
+      debugPrint('[AppGate] _checkOnboarding failed: $e');
+      // Set safe defaults so the app doesn't stay stuck on splash
+      if (mounted) {
+        setState(() {
+          _onboardingDone = false;
+          _nameRecorded = false;
+          _isAuthenticated = false;
+        });
+      }
     }
   }
 
@@ -332,7 +506,7 @@ class _AppGateState extends State<_AppGate>
   Widget build(BuildContext context) {
     final loading = context.select<AppState, bool>((s) => s.isLoading);
 
-    if (loading || _onboardingDone == null || _nameRecorded == null || !_splashFinished) {
+    if (loading || _onboardingDone == null || _nameRecorded == null || _isAuthenticated == null || !_splashFinished) {
       return Scaffold(
         backgroundColor: AppColors.bg,
         body: Center(
@@ -437,6 +611,15 @@ class _AppGateState extends State<_AppGate>
       return _WelcomeNameScreen(onDone: () {
         if (mounted) setState(() => _nameRecorded = true);
       });
+    }
+
+    // Auth gate — require sign-in before entering the app
+    if (!_isAuthenticated!) {
+      return AuthScreen(
+        onAuthenticated: () {
+          // Handled by authStateChanges listener above
+        },
+      );
     }
 
     return _AppLockGate(child: const HomeScreen());

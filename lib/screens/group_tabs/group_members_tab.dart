@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../providers/app_state.dart';
-import '../../widgets/common_widgets.dart';
+
 import '../../utils/app_utils.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../main.dart';
 
 class GroupMembersTab extends StatelessWidget {
@@ -16,6 +18,49 @@ class GroupMembersTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 100),
       children: [
+        if (g.inviteCode != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 24),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.greenDim,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.group_add_rounded, color: Colors.black, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Invite Code', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: TC.text2(context))),
+                      Text(g.inviteCode!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 2)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, color: AppColors.green),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Clipboard.setData(ClipboardData(text: g.inviteCode!));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite code copied!')));
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.ios_share_rounded, color: AppColors.green),
+                  onPressed: () {
+                    SharePlus.instance.share(ShareParams(text: 'Join my SplitSmart group "${g.name}" using this invite code: ${g.inviteCode!}'));
+                  },
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(

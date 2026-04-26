@@ -30,12 +30,25 @@ class BackupService {
     final name = 'splitsmart_backup_${now.year}_${now.month.toString().padLeft(2, "0")}_${now.day.toString().padLeft(2, "0")}.zip';
     final zipFile = File(p.join(docs.path, name));
 
+    // Close DB connection to flush WAL and release locks before zipping
+    await DatabaseService.instance.closeDatabase();
+
     final encoder = ZipFileEncoder();
     encoder.create(zipFile.path);
     
     // Add DB
     if (await dbFile.exists()) {
       encoder.addFile(dbFile, 'splitsmart.db');
+    }
+    
+    // Add WAL and SHM if they exist
+    final dbWalFile = File(p.join(dbDir, 'splitsmart_v3.db-wal'));
+    final dbShmFile = File(p.join(dbDir, 'splitsmart_v3.db-shm'));
+    if (await dbWalFile.exists()) {
+      encoder.addFile(dbWalFile, 'splitsmart.db-wal');
+    }
+    if (await dbShmFile.exists()) {
+      encoder.addFile(dbShmFile, 'splitsmart.db-shm');
     }
     
     // Add Receipts
@@ -45,6 +58,10 @@ class BackupService {
     }
     
     encoder.close();
+
+    // The database will be re-opened automatically on the next query
+    // by DatabaseService.instance.get _database
+    
     return zipFile;
   }
 
@@ -64,6 +81,8 @@ class BackupService {
     final docs = await getApplicationDocumentsDirectory();
     final logFile = File(p.join(docs.path, 'app_errors.log'));
     if (!await logFile.exists()) {
+      // Capture messenger before any await gap
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No crash logs found! Your app is running perfectly.', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -74,6 +93,7 @@ class BackupService {
       return;
     }
 
+    if (!context.mounted) return;
     final box = context.findRenderObject() as RenderBox?;
     await SharePlus.instance.share(
       ShareParams(
@@ -127,6 +147,12 @@ class BackupService {
         if (file.isFile) {
           if (file.name == 'splitsmart.db') {
             await targetDbFile.writeAsBytes(file.content as List<int>, flush: true);
+          } else if (file.name == 'splitsmart.db-wal') {
+            final targetWal = File(p.join(dbDir, 'splitsmart_v3.db-wal'));
+            await targetWal.writeAsBytes(file.content as List<int>, flush: true);
+          } else if (file.name == 'splitsmart.db-shm') {
+            final targetShm = File(p.join(dbDir, 'splitsmart_v3.db-shm'));
+            await targetShm.writeAsBytes(file.content as List<int>, flush: true);
           } else if (file.name.startsWith('receipts/')) {
              // SEC-4: Sanitize filename to prevent path traversal attacks
              final safeName = p.basename(file.name);

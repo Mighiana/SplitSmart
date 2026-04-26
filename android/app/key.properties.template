@@ -1,0 +1,9 @@
+# SEC-1: Production keystore configuration
+# 1. Generate your keystore:
+#    keytool -genkey -v -keystore splitsmart-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias splitsmart
+# 2. Copy this file to key.properties (NEVER commit key.properties to git!)
+# 3. Fill in the values below.
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=splitsmart
+storeFile=../splitsmart-release.jks

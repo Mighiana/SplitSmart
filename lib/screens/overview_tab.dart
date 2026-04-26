@@ -6,17 +6,17 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/app_state.dart';
 import '../main.dart';
 import '../utils/app_utils.dart';
+import '../l10n/app_localizations.dart';
 import '../services/export_service.dart';
+import '../utils/date_utils.dart';
 import 'group_detail_screen.dart';
 import 'new_group_screen.dart';
 import 'transaction_type_screen.dart';
-import 'settings_screen.dart';
 import 'personal_charts_screen.dart';
 import 'personal_transactions_screen.dart';
 import 'budget_screen.dart';
 import 'currencies_tab.dart';
 import 'groups_screen.dart';
-import '../widgets/app_drawer.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -41,18 +41,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning ☀️';
-    if (hour < 17) return 'Good afternoon 🌤️';
-    return 'Good evening 🌙';
-  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final isDark = state.isDark;
     final activeGroups = state.activeGroups;
+    final l = AppLocalizations.of(context);
 
     // 1. Wallets logic
     final netBalanceByCur = <String, double>{};
@@ -66,17 +61,30 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       ..sort((a,b) => b.value.abs().compareTo(a.value.abs()));
 
     // 2. Who owes you logic
-    final List<_BalItem> owedItems = [];
-    final List<_BalItem> oweItems = [];
+    final Map<String, _BalItem> owedMap = {};
+    final Map<String, _BalItem> oweMap = {};
     for (final g in activeGroups) {
       final plan = state.buildSettlePlan(g);
       for (final p in plan) {
-        if (p.to == 'You') owedItems.add(_BalItem(g.name, g.emoji, p.from, p.amount, g.sym, g.currency));
-        else if (p.from == 'You') oweItems.add(_BalItem(g.name, g.emoji, p.to, p.amount, g.sym, g.currency));
+        if (p.to == 'You') {
+          final key = '${p.from}_${g.currency}';
+          if (owedMap.containsKey(key)) {
+            owedMap[key] = _BalItem('', '', p.from, owedMap[key]!.amount + p.amount, g.sym, g.currency);
+          } else {
+            owedMap[key] = _BalItem('', '', p.from, p.amount, g.sym, g.currency);
+          }
+        } else if (p.from == 'You') {
+          final key = '${p.to}_${g.currency}';
+          if (oweMap.containsKey(key)) {
+            oweMap[key] = _BalItem('', '', p.to, oweMap[key]!.amount + p.amount, g.sym, g.currency);
+          } else {
+            oweMap[key] = _BalItem('', '', p.to, p.amount, g.sym, g.currency);
+          }
+        }
       }
     }
-    owedItems.sort((a, b) => b.amount.compareTo(a.amount));
-    oweItems.sort((a, b) => b.amount.compareTo(a.amount));
+    final List<_BalItem> owedItems = owedMap.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+    final List<_BalItem> oweItems = oweMap.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
 
     // Group totals by currency to avoid mixing different currencies
     String _buildCurrencyTotal(List<_BalItem> items) {
@@ -125,73 +133,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 100),
           children: [
-            const SizedBox(height: 16),
-            // Greeting header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const AppDrawer(),
-                      );
-                    },
-                    child: Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        color: TC.card(context),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: TC.border(context)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(Icons.menu_rounded, color: TC.text(context), size: 22),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _greeting().toUpperCase(),
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.green, letterSpacing: 2),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Home 🏠',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: TC.text(context), letterSpacing: -0.5),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                    },
-                    child: Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        color: TC.card(context),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: TC.border(context)),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('⚙️', style: TextStyle(fontSize: 20)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
             
             // Your balances
-            _buildSectionHeader('GLOBAL BALANCES', 'View all', () => _showAllWalletsSheet(context, walletEntries, groupCountByCur, isDark), isDark),
+            _buildSectionHeader(l.globalBalances, l.viewAll, () => _showAllWalletsSheet(context, walletEntries, groupCountByCur, isDark), isDark),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
@@ -226,13 +171,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                             Text('AVAILABLE CAPITAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: TC.text3(context), letterSpacing: 1.2)),
+                             Text(l.availableCapital, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: TC.text3(context), letterSpacing: 1.2)),
                              Icon(Icons.account_balance_wallet_rounded, color: AppColors.green, size: 16),
                           ],
                         ),
                         const SizedBox(height: 16),
                         if (walletEntries.isEmpty) 
-                           Text('No active balances.\nCreate a group to see your net worth.', style: TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w600, color: TC.text2(context)))
+                           Text(l.noBalances, style: TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w600, color: TC.text2(context)))
                         else ...[
                           ListView.builder(
                             shrinkWrap: true,
@@ -243,7 +188,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                           if (walletEntries.length > 2)
                              Padding(
                                padding: const EdgeInsets.only(top: 12),
-                               child: Text('+ ${walletEntries.length - 2} other currencies', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.green)),
+                               child: Text('+ ${walletEntries.length - 2} ${l.otherCurrencies}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.green)),
                              ),
                         ],
                         const SizedBox(height: 20),
@@ -261,7 +206,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                                border: Border.all(color: TC.border(context).withValues(alpha: 0.5)),
                             ),
                             alignment: Alignment.center,
-                            child: Text('＋ Manage Wallets', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
+                            child: Text(l.manageWallets, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
                           ),
                         ),
                       ],
@@ -274,7 +219,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 24),
 
             // Who owes you
-            _buildSectionHeader('DEBT MONITOR', 'Analytics ›', () => _showAllOwesSheet(context, owedItems, oweItems, isDark), isDark),
+            _buildSectionHeader(l.debtMonitor, l.analytics, () => _showAllOwesSheet(context, owedItems, oweItems, isDark), isDark),
             Row(
               children: [
                 const SizedBox(width: 16),
@@ -289,10 +234,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('COLLECTABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 1)),
+                        Text(l.collectable, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 1)),
                         const SizedBox(height: 8),
                         if (owedItems.isEmpty)
-                          Text('Clean slate', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
+                          Text(l.cleanSlate, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
                         else ...[
                           Text(owedTotal, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: TC.text(context))),
                           const SizedBox(height: 12),
@@ -315,10 +260,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('PAYABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.red, letterSpacing: 1)),
+                        Text(l.payable, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.red, letterSpacing: 1)),
                         const SizedBox(height: 8),
                         if (oweItems.isEmpty)
-                          Text('All settled', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
+                          Text(l.allSettled, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
                         else ...[
                           Text(oweTotal, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: TC.text(context))),
                           const SizedBox(height: 12),
@@ -341,7 +286,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 24),
 
             // Your groups
-            _buildSectionHeader('Your groups', 'See all ›', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupsTab())), isDark),
+            _buildSectionHeader(l.groups.toUpperCase(), l.seeAll, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupsTab())), isDark),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(4),
@@ -354,7 +299,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                    if (activeGroups.isEmpty)
                      const Padding(padding: EdgeInsets.all(20), child: Text('No groups yet.')),
                    for (int i=0; i < (activeGroups.length > 3 ? 3 : activeGroups.length); i++) ...[
-                     _buildGroupRow(activeGroups[i], state, isDark),
+                     _buildGroupRow(activeGroups[i], state, isDark, l),
                      if (i < math.min(activeGroups.length - 1, 2))
                        Container(height: 1, color: TC.border(context), margin: const EdgeInsets.symmetric(horizontal: 12)),
                    ]
@@ -367,20 +312,20 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Quick actions
             Padding(
                padding: const EdgeInsets.symmetric(horizontal: 16),
-               child: Text('Quick actions', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context))),
+               child: Text(l.quickActions, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context))),
             ),
             const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                   Expanded(child: _buildQaItem('➕', 'Add expense', AppColors.greenDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionTypeScreen())))),
+                   Expanded(child: _buildQaItem('➕', l.addExpense, AppColors.greenDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionTypeScreen())))),
                    const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('👥', 'New group', AppColors.blueDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewGroupScreen())))),
+                   Expanded(child: _buildQaItem('👥', l.newGroupShort, AppColors.blueDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewGroupScreen())))),
                    const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('🎯', 'Budget', const Color(0xFFb388ff).withValues(alpha: 0.1), isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BudgetScreen())))),
+                   Expanded(child: _buildQaItem('🎯', l.budget, const Color(0xFFb388ff).withValues(alpha: 0.1), isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BudgetScreen())))),
                    const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('📤', 'Export', const Color(0xFFff9f43).withValues(alpha: 0.1), isDark, () {
+                   Expanded(child: _buildQaItem('📤', l.export_, const Color(0xFFff9f43).withValues(alpha: 0.1), isDark, () {
                       HapticFeedback.lightImpact();
                       ExportService.exportAndSharePdf(state, context);
                    })),
@@ -399,7 +344,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                    children: [
                      const Text('💡', style: TextStyle(fontSize: 18)),
                      const SizedBox(width: 10),
-                     Expanded(child: Text('Long press any item to edit or archive', style: TextStyle(fontSize: 12, color: TC.text2(context)))),
+                     Expanded(child: Text(l.longPressTip, style: TextStyle(fontSize: 12, color: TC.text2(context)))),
                      GestureDetector(
                        onTap: () => setState(() => _showTip = false),
                        child: Padding(padding: const EdgeInsets.all(4), child: Text('✕', style: TextStyle(fontSize: 16, color: TC.text3(context)))),
@@ -427,6 +372,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildWalletRow(String code, double bal, int groupCount, bool isDark) {
+    final l = AppLocalizations.of(context);
     final cData = AppState.currencies.firstWhere((c) => c.code == code, orElse: () => CurrencyData(code, '', '🌐', '\$'));
     final isPos = bal >= 0;
     return Padding(
@@ -453,7 +399,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
              crossAxisAlignment: CrossAxisAlignment.end,
              children: [
                 Text('${isPos ? '+' : '−'}${cData.sym}${AppCurrencyUtils.formatAmount(bal.abs())}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: isPos ? AppColors.green : AppColors.red)),
-                Text(isPos ? 'owed to you' : 'you owe', style: TextStyle(fontSize: 10, color: isPos ? AppColors.green : AppColors.red)),
+                Text(isPos ? l.owedToYou : l.youOweShort, style: TextStyle(fontSize: 10, color: isPos ? AppColors.green : AppColors.red)),
              ],
           ),
           const SizedBox(width: 4),
@@ -486,20 +432,24 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildSpendSection(AppState state, bool isDark) {
+    final l = AppLocalizations.of(context);
     // Only show group-related transactions on the home dashboard
     final curTxs = state.allTransactionsWithGroupShares
-        .where((t) => t.type.toLowerCase() == 'expense' && t.currency != null && t.isGroupShare == true)
+        .where((t) => t.type.toLowerCase() == 'expense' && t.isGroupShare == true)
         .toList();
         
     final _cursSet = <String>{};
     for (var g in state.activeGroups) _cursSet.add(g.currency);
-    for (var t in curTxs) _cursSet.add(t.currency!);
+    for (var t in curTxs) _cursSet.add(t.currency);
     _cursSet.addAll(state.groupWallets.keys);
     
     final spendCurs = _cursSet.toList();
-    if (spendCurs.isEmpty && _selectedCurrency == null) {
-      spendCurs.add('EUR');
+    if (spendCurs.isNotEmpty && _selectedCurrency == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedCurrency = spendCurs.first);
+      });
     }
+
     if (_selectedCurrency != null && !spendCurs.contains(_selectedCurrency)) {
       spendCurs.insert(0, _selectedCurrency!);
     }
@@ -530,10 +480,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final curSym = AppState.currencies.firstWhere((c) => c.code == _selectedCurrency, orElse: () => const CurrencyData('', '', '', '\$')).sym;
 
     String pText = '';
-    if (_spendPeriod == 'day') pText = 'Today\'s spending';
-    else if (_spendPeriod == 'week') pText = 'This week\'s spending';
-    else if (_spendPeriod == 'year') pText = 'This year\'s spending';
-    else pText = 'This month\'s spending';
+    if (_spendPeriod == 'day') pText = l.todaySpending;
+    else if (_spendPeriod == 'week') pText = l.weekSpending;
+    else if (_spendPeriod == 'year') pText = l.yearSpending;
+    else pText = l.monthSpending;
 
     return Container(
        margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -544,7 +494,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
          children: [
             Text(pText.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5, textBaseline: TextBaseline.alphabetic)),
             const SizedBox(height: 2),
-            Text('GROUP CURRENCIES — SELECT TO VIEW SPENDING', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5)),
+            Text(l.selectCurrency, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5)),
             const SizedBox(height: 12),
             // Chips
              SingleChildScrollView(
@@ -595,18 +545,18 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                          Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             Text('Spending in $_selectedCurrency', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
+                             Text('${l.spendingIn} $_selectedCurrency', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
                              const SizedBox(height: 3),
                              Row(
                                children: [
                                   Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: AppColors.blueDim, borderRadius: BorderRadius.circular(4)), child: Text('ℹ', style: TextStyle(fontSize: 10, color: AppColors.blue))),
                                   const SizedBox(width: 4),
-                                  Text('% breakdown in $_selectedCurrency only', style: TextStyle(fontSize: 11, color: TC.text2(context))),
+                                  Text('% breakdown in $_selectedCurrency', style: TextStyle(fontSize: 11, color: TC.text2(context))),
                                ],
                              ),
                            ],
                          ),
-                         Text('${AppDateUtils.monthLabel(now)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text2(context))),
+                         Text(AppDateUtils.monthLabel(now, AppLocalizations.of(context).locale.languageCode), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text2(context))),
                        ],
                     ),
                     const SizedBox(height: 12),
@@ -658,7 +608,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                                  children: [
                                     Text(curSym, style: TextStyle(fontSize: 12, color: TC.text2(context))),
                                     Text(AppCurrencyUtils.formatAmount(totalAmt, 0), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: TC.text(context), height: 1)),
-                                    Text('expenses', style: TextStyle(fontSize: 10, color: TC.text3(context))),
+                                    Text(l.expenses, style: TextStyle(fontSize: 10, color: TC.text3(context))),
                                  ],
                                ),
                             ],
@@ -667,7 +617,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                           Expanded(
                             child: Column(
                                crossAxisAlignment: CrossAxisAlignment.start,
-                               children: sortedCats.isEmpty ? [Text('No expenses in $_spendPeriod', style: TextStyle(fontSize: 12, color: TC.text2(context)))] : [
+                               children: sortedCats.isEmpty ? [Text(l.noExpensesIn, style: TextStyle(fontSize: 12, color: TC.text2(context)))] : [
                                  ...sortedCats.take(4).map((c) {
                                    double pct = totalAmt > 0 ? (c.value / totalAmt * 100) : 0;
                                    Color cc = _getCatColor(c.key);
@@ -737,24 +687,24 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                        children: [
                          Expanded(
                            child: GestureDetector(
-                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _selectedCurrency))),
+                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _selectedCurrency, isGroupFilter: true))),
                              child: Container(
                                padding: const EdgeInsets.all(10),
                                decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(10), border: Border.all(color: TC.border(context))),
                                alignment: Alignment.center,
-                               child: Text('📊 Charts', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
+                               child: Text('📊 ${l.charts}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
                              ),
                            ),
                          ),
                          const SizedBox(width: 8),
                          Expanded(
                            child: GestureDetector(
-                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: _selectedCurrency))),
+                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: _selectedCurrency, isGroupFilter: true))),
                              child: Container(
                                padding: const EdgeInsets.all(10),
                                decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(10), border: Border.all(color: TC.border(context))),
                                alignment: Alignment.center,
-                               child: Text('📋 All transactions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
+                               child: Text('📋 ${l.allTransactions}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
                              ),
                            ),
                          ),
@@ -768,7 +718,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildGroupRow(GroupData g, AppState state, bool isDark) {
+  Widget _buildGroupRow(GroupData g, AppState state, bool isDark, AppLocalizations l) {
      final bal = state.getMyBalance(g);
      final isPos = bal > 0;
      final isNeg = bal < 0;
@@ -798,7 +748,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
                      Text(g.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                     Text('${g.members.length} members · ${g.expenses.length} expenses', 
+                     Text('${g.members.length} ${l.members} · ${g.expenses.length} ${l.expenses}', 
                           maxLines: 1, 
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 11, color: TC.text2(context))),
@@ -840,6 +790,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   void _showAllCategoriesSheet(BuildContext context, List<MapEntry<String, double>> sortedCats, double totalAmt, String curSym, bool isDark) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: TC.card(context),
@@ -862,7 +813,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    Text('All Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
+                    Text(l.allCategories, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
                     const Spacer(),
                     Text('$curSym${AppCurrencyUtils.formatAmount(totalAmt, 0)} total', style: TextStyle(fontSize: 12, color: TC.text2(context))),
                   ],
@@ -941,6 +892,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   void _showAllWalletsSheet(BuildContext context, List<MapEntry<String, double>> entries, Map<String, int> groupCounts, bool isDark) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: TC.bg(context),
@@ -956,7 +908,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 20),
-            Text('YOUR NET BALANCE', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context))),
+            Text(l.yourNetBalance, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context))),
             const SizedBox(height: 16),
             Expanded(
               child: entries.isEmpty
@@ -975,6 +927,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   void _showAllOwesSheet(BuildContext context, List<_BalItem> owed, List<_BalItem> owe, bool isDark) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: TC.bg(context),
@@ -991,16 +944,16 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
-            Center(child: Text('Who owes you ❓', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context)))),
+            Center(child: Text('${l.whoOwesYou} ❓', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context)))),
             const SizedBox(height: 24),
-            Text('You are owed', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.green)),
+            Text(l.youAreOwed, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.green)),
             const SizedBox(height: 8),
-            if (owed.isEmpty) Text('Nothing owed', style: TextStyle(color: TC.text2(context))),
+            if (owed.isEmpty) Text(l.nothingOwed, style: TextStyle(color: TC.text2(context))),
             for (var item in owed) _buildOweRow(item, isDark, true),
             const SizedBox(height: 24),
-            Text('You owe', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.red)),
+            Text(l.youOwe, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.red)),
             const SizedBox(height: 8),
-            if (owe.isEmpty) Text('All settled', style: TextStyle(color: TC.text2(context))),
+            if (owe.isEmpty) Text(l.allSettled, style: TextStyle(color: TC.text2(context))),
             for (var item in owe) _buildOweRow(item, isDark, false),
             const SizedBox(height: 24),
           ],

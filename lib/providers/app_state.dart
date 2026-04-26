@@ -1,14 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
+import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_notification_service.dart';
+import '../services/storage_service.dart';
 
-/// Provider-based state. On first launch it seeds sample data; afterwards it
-/// loads everything from SQLite so data survives app restarts.
+/// Provider-based state. Routes data through Firestore when signed in,
+/// falls back to local SQLite otherwise. Subscriptions & reminders
+/// always use local SQLite.
 class AppState extends ChangeNotifier {
   // ─── Loading flag ────────────────────────────────────────────────────────
   bool isLoading = true;
+
+  /// True when user is signed in and data flows through Firestore.
+  bool get _useCloud => AuthService.instance.isSignedIn;
 
   // ─── Theme ───────────────────────────────────────────────────────────────
   late ThemeMode themeMode;
@@ -222,6 +232,11 @@ class AppState extends ChangeNotifier {
   List<SavingGoal> savingGoals = [];
   GroupData? currentGroup;
 
+  /// Real-time Firestore expense watchers keyed by group ID.
+  /// Active only when signed in; automatically updated when any group member
+  /// adds / edits / deletes an expense — so every user sees changes live.
+  final Map<int, StreamSubscription<List<ExpenseData>>> _expenseWatchers = {};
+
   /// Budget limits: category emoji → limit amount (per currency group)
   Map<String, double> budgetLimits = {};
 
@@ -241,22 +256,89 @@ class AppState extends ChangeNotifier {
 
   Future<void> _load() async {
     isLoading = true;
-    notifyListeners();
+    // Do NOT call notifyListeners() here — we're inside initState's
+    // postFrameCallback and the widget tree is still building.
+    // The first notify happens after data has been loaded below.
 
     final db = DatabaseService.instance;
 
-    groups = await db.loadGroups();
-    transactions = await db.loadTransactions();
-    wallets = await db.loadWallets();
-    groupWallets = await db.loadGroupWallets();
-    budgetLimits = await db.loadBudgetLimits();
-    subscriptions = await db.loadSubscriptions();
-    reminders = await db.loadReminders();
-    savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+    if (_useCloud) {
+      // ── Cloud path ──
+      // Show cached SQLite data instantly
+      final localGroups = await db.loadGroups();
+      groups = localGroups;
+      transactions = await db.loadTransactions();
+      wallets = await db.loadWallets();
+      groupWallets = await db.loadGroupWallets();
+      budgetLimits = await db.loadBudgetLimits();
+      savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+      subscriptions = await db.loadSubscriptions();
+      reminders = await db.loadReminders();
 
-    // Seed sample data only on very first launch (empty DB)
-    if (groups.isEmpty && transactions.isEmpty) {
-      await _seedSampleData(db);
+      // PERSISTENCE FIX: Rebuild the in-memory Firestore doc-ID cache from
+      // SQLite-stored firestoreId values. This ensures mutations (add expense,
+      // settle up, etc.) work immediately after a cold start — even before
+      // Firestore data has been fetched — without needing a network round-trip.
+      for (final g in localGroups) {
+        if (g.firestoreId != null) {
+          FirestoreService.instance.cacheDocId(g.id, g.firestoreId!);
+        }
+      }
+
+      // Show cached data immediately while Firestore loads.
+      // Defer the notify to avoid firing during the build phase
+      // (SQLite reads can return near-synchronously from cache).
+      isLoading = false;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
+
+      // 2. Migrate local-only groups to Firestore before fetching cloud data.
+      //    This prevents data loss when switching from local → cloud mode
+      //    (e.g. after reinstalling the app and signing back in).
+      final fs = FirestoreService.instance;
+      await _migrateLocalGroupsToCloud(fs, localGroups);
+      await _migrateLocalTransactionsToCloud(fs, transactions);
+      await _migrateLocalRemindersToCloud(fs, reminders);
+
+      // 3. Fetch fresh data from Firestore (now includes migrated data)
+      try {
+        final cloudGroups = await fs.loadGroups();
+        final cloudTxns = await fs.loadTransactions();
+        final cloudWallets = await fs.loadWallets();
+        final cloudGroupWallets = await fs.loadGroupWallets();
+        final cloudBudgets = await fs.loadBudgetLimits();
+        final cloudGoals = (await fs.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+        final cloudReminders = await fs.loadReminders();
+
+        groups = cloudGroups;
+        transactions = cloudTxns;
+        wallets = cloudWallets;
+        groupWallets = cloudGroupWallets;
+        budgetLimits = cloudBudgets;
+        savingGoals = cloudGoals;
+        reminders = cloudReminders..sort((a, b) => a.date.compareTo(b.date));
+
+        // 4. Cache cloud data to SQLite — AWAITED so the transaction commits
+        //    before the app can be backgrounded. Uses an atomic SQLite
+        //    transaction so an app kill mid-write rolls back instead of
+        //    leaving tables empty.
+        await _cacheToSQLite(db, cloudGroups, cloudTxns, cloudWallets, cloudGroupWallets, cloudBudgets, cloudReminders);
+      } catch (e) {
+        debugPrint('[AppState] Firestore load failed, using SQLite cache: $e');
+        // Already loaded from SQLite above, so data is still available
+      }
+
+      // Initialize push notifications
+      PushNotificationService.instance.init();
+
+      // ── Real-time expense watchers ────────────────────────────────────────
+      // Start a Firestore snapshot listener for each active group so that
+      // expenses added by OTHER group members appear immediately in the
+      // Activity screen without requiring an app restart.
+      _startExpenseWatchers();
+    } else {
+      // ── Local path: same as before ──
       groups = await db.loadGroups();
       transactions = await db.loadTransactions();
       wallets = await db.loadWallets();
@@ -265,145 +347,213 @@ class AppState extends ChangeNotifier {
       subscriptions = await db.loadSubscriptions();
       reminders = await db.loadReminders();
       savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+
+      // (Sample data seeding has been removed for production)
     }
 
     isLoading = false;
     notifyListeners();
+  }
+
+  // ─── Real-time group expense watchers ────────────────────────────────────
+
+  /// Start a Firestore snapshot listener for every active (non-archived) group.
+  /// When any group member adds / edits / deletes an expense, the listener
+  /// updates that group's expense list and notifies listeners so the UI
+  /// (Activity, Overview, GroupDetail) reflects the change immediately.
+  void _startExpenseWatchers() {
+    if (!_useCloud) return;
+    // Cancel old watchers before starting fresh (e.g. after reload).
+    _cancelExpenseWatchers();
+
+    for (final g in groups) {
+      _watchGroupExpenses(g);
+    }
+  }
+
+  void _watchGroupExpenses(GroupData g) {
+    if (!_useCloud) return;
+    final docId = g.firestoreId;
+    if (docId == null) return;
+
+    _expenseWatchers[g.id]?.cancel();
+    _expenseWatchers[g.id] = FirestoreService.instance
+        .watchGroupExpenses(docId)
+        .listen((updatedExpenses) {
+      final idx = groups.indexWhere((x) => x.id == g.id);
+      if (idx >= 0) {
+        groups[idx].expenses = updatedExpenses;
+        groups = List.of(groups); // new list reference → triggers rebuild
+        _cachedAllTxns = null;
+        notifyListeners();
+      }
+    }, onError: (e) {
+      debugPrint('[AppState] Expense watcher error for group ${g.name}: $e');
+    });
+  }
+
+  void _cancelExpenseWatchers() {
+    for (final sub in _expenseWatchers.values) {
+      sub.cancel();
+    }
+    _expenseWatchers.clear();
+  }
+
+  /// Migrate local SQLite groups to Firestore so they aren't lost when
+  /// switching from offline → cloud mode (e.g. reinstall + sign-in).
+  /// Only uploads groups that don't already exist in Firestore.
+  Future<void> _migrateLocalGroupsToCloud(
+    FirestoreService fs, List<GroupData> localGroups,
+  ) async {
+    if (localGroups.isEmpty) return;
+    try {
+      // Check which groups already exist in Firestore for this user
+      final cloudGroups = await fs.loadGroups();
+      final cloudNames = cloudGroups
+          .map((g) => '${g.name.toLowerCase()}|${g.currency}')
+          .toSet();
+
+      for (final localGroup in localGroups) {
+        final key = '${localGroup.name.toLowerCase()}|${localGroup.currency}';
+        // Skip sample/seed data groups and groups that already exist in cloud
+        if (cloudNames.contains(key)) continue;
+
+        // Upload group to Firestore
+        try {
+          final result = await fs.insertGroup(localGroup);
+          localGroup.inviteCode = result['inviteCode'];
+
+          // Upload expenses
+          for (final e in localGroup.expenses) {
+            await fs.insertExpense(localGroup.id, e);
+          }
+          // Upload settlements
+          for (final s in localGroup.settlements) {
+            await fs.insertSettlement(localGroup.id, s);
+          }
+          debugPrint('[AppState] Migrated local group to cloud: ${localGroup.name}');
+        } catch (e) {
+          debugPrint('[AppState] Failed to migrate group ${localGroup.name}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppState] Local→Cloud group migration failed (non-fatal): $e');
+    }
+  }
+
+  /// Migrate local SQLite personal transactions to Firestore.
+  /// Only uploads transactions that don't already exist in cloud.
+  Future<void> _migrateLocalTransactionsToCloud(
+    FirestoreService fs, List<TransactionData> localTxns,
+  ) async {
+    if (localTxns.isEmpty) return;
+    try {
+      final cloudTxns = await fs.loadTransactions();
+      // Build a set of "desc|amount|date" keys for dedup
+      final cloudKeys = cloudTxns
+          .map((t) => '${t.desc}|${t.amount}|${t.date}')
+          .toSet();
+
+      for (final t in localTxns) {
+        final key = '${t.desc}|${t.amount}|${t.date}';
+        if (cloudKeys.contains(key)) continue;
+        try {
+          await fs.insertTransaction(t);
+          debugPrint('[AppState] Migrated local txn to cloud: ${t.desc}');
+        } catch (e) {
+          debugPrint('[AppState] Failed to migrate txn ${t.desc}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppState] Local→Cloud txn migration failed (non-fatal): $e');
+    }
+  }
+
+  /// Migrate local SQLite reminders to Firestore.
+  Future<void> _migrateLocalRemindersToCloud(
+    FirestoreService fs, List<ReminderData> localReminders,
+  ) async {
+    if (localReminders.isEmpty) return;
+    try {
+      final cloudReminders = await fs.loadReminders();
+      final cloudKeys = cloudReminders
+          .map((r) => '${r.title}|${r.amountStr}|${r.date}')
+          .toSet();
+
+      for (final r in localReminders) {
+        final key = '${r.title}|${r.amountStr}|${r.date}';
+        if (cloudKeys.contains(key)) continue;
+        try {
+          await fs.insertReminder(r);
+          debugPrint('[AppState] Migrated local reminder to cloud: ${r.title}');
+        } catch (e) {
+          debugPrint('[AppState] Failed to migrate reminder ${r.title}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppState] Local→Cloud reminder migration failed (non-fatal): $e');
+    }
   }
 
   /// Public reload — called by BackupService after a restore so the UI
   /// reflects the newly imported data without restarting the app.
   Future<void> reloadFromDatabase() async {
-    isLoading = true;
-    notifyListeners();
-
-    final db = DatabaseService.instance;
-    groups = await db.loadGroups();
-    transactions = await db.loadTransactions();
-    wallets = await db.loadWallets();
-    groupWallets = await db.loadGroupWallets();
-    budgetLimits = await db.loadBudgetLimits();
-    subscriptions = await db.loadSubscriptions();
-    reminders = await db.loadReminders();
-    savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
-
-    isLoading = false;
-    _cachedAllTxns = null;
-    notifyListeners();
+    await _load();
   }
 
-  Future<void> _seedSampleData(DatabaseService db) async {
-    // Group 1
-    final g1 = GroupData(
-      id: 1,
-      name: 'Budapest Trip',
-      emoji: '🏰',
-      currency: 'EUR',
-      sym: '€',
-      members: ['You', 'Ali', 'Sara'],
-      expenses: [
-        ExpenseData(
-          id: 101,
-          desc: 'Dinner at Vaci St',
-          amount: 42,
-          cat: '🍽️',
-          paidBy: 'You',
-          date: '2h ago',
-        ),
-        ExpenseData(
-          id: 102,
-          desc: 'Thermal Bath',
-          amount: 36,
-          cat: '🎫',
-          paidBy: 'Ali',
-          date: 'Yesterday',
-        ),
-        ExpenseData(
-          id: 103,
-          desc: 'Uber to airport',
-          amount: 18,
-          cat: '🚗',
-          paidBy: 'Sara',
-          date: '2 days ago',
-        ),
-      ],
-    );
-    await db.insertGroup(g1);
-    for (final e in g1.expenses) {
-      await db.insertExpense(g1.id, e);
-    }
+  /// Cache cloud data to local SQLite for offline resilience.
+  ///
+  /// CRASH-SAFE: Groups are replaced inside a single SQLite transaction via
+  /// [DatabaseService.atomicReplaceGroups]. If the app is killed mid-write
+  /// the transaction rolls back, leaving the OLD cached data intact rather
+  /// than an empty table.
+  ///
+  /// SAFETY: If Firestore returned completely empty data (possibly due to a
+  /// failed query that silently returned []), we skip the write entirely to
+  /// avoid wiping valid cached data.
+  Future<void> _cacheToSQLite(
+    DatabaseService db,
+    List<GroupData> cloudGroups,
+    List<TransactionData> cloudTxns,
+    Map<String, double> cloudWallets,
+    Map<String, double> cloudGroupWallets,
+    Map<String, double> cloudBudgets,
+    List<ReminderData> cloudReminders,
+  ) async {
+    try {
+      // Safety net 1: if cloud returned nothing at all, don't wipe local cache.
+      if (cloudGroups.isEmpty && cloudTxns.isEmpty && cloudWallets.isEmpty && cloudReminders.isEmpty) {
+        debugPrint('[AppState] Cloud data entirely empty — skipping SQLite cache wipe');
+        return;
+      }
 
-    // Group 2
-    final g2 = GroupData(
-      id: 2,
-      name: 'Roommates',
-      emoji: '🏠',
-      currency: 'HUF',
-      sym: 'Ft',
-      members: ['You', 'Hamza', 'Petra'],
-      expenses: [
-        ExpenseData(
-          id: 201,
-          desc: 'Groceries',
-          amount: 8000,
-          cat: '🛒',
-          paidBy: 'Hamza',
-          date: '3 days ago',
-        ),
-        ExpenseData(
-          id: 202,
-          desc: 'Internet',
-          amount: 4500,
-          cat: '💡',
-          paidBy: 'You',
-          date: '1 week ago',
-        ),
-      ],
-    );
-    await db.insertGroup(g2);
-    for (final e in g2.expenses) {
-      await db.insertExpense(g2.id, e);
-    }
+      // CRASH-SAFE group replacement (atomic transaction — rollback on kill).
+      // This replaces the old clear+loop pattern that could leave SQLite empty.
+      await db.atomicReplaceGroups(cloudGroups);
+      await db.atomicReplaceReminders(cloudReminders);
 
-    // Transactions
-    final txns = [
-      TransactionData(
-        id: 1001,
-        type: 'expense',
-        desc: 'Coffee',
-        amount: 3.5,
-        cat: '☕',
-        currency: 'EUR',
-        sym: '€',
-        date: 'Today',
-      ),
-      TransactionData(
-        id: 1002,
-        type: 'income',
-        desc: 'Scholarship',
-        amount: 500,
-        cat: '📚',
-        currency: 'EUR',
-        sym: '€',
-        date: '1 Mar',
-      ),
-      TransactionData(
-        id: 1003,
-        type: 'expense',
-        desc: 'Bus pass',
-        amount: 9.5,
-        cat: '🚗',
-        currency: 'EUR',
-        sym: '€',
-        date: '28 Feb',
-      ),
-    ];
-    for (final t in txns) {
-      await db.insertTransactionRaw(t);
+      // Transactions: upsert each one (non-destructive, safe individually)
+      for (final t in cloudTxns) {
+        try { await db.insertTransactionRaw(t); } catch (_) {}
+      }
+      // Wallets
+      for (final entry in cloudWallets.entries) {
+        try { await db.upsertWallet(entry.key, entry.value); } catch (_) {}
+      }
+      for (final entry in cloudGroupWallets.entries) {
+        try { await db.upsertGroupWallet(entry.key, entry.value); } catch (_) {}
+      }
+      // Budget limits
+      for (final entry in cloudBudgets.entries) {
+        try { await db.upsertBudgetLimit(entry.key, entry.value); } catch (_) {}
+      }
+      debugPrint('[AppState] Cloud data cached to SQLite successfully (atomic group write)');
+    } catch (e) {
+      debugPrint('[AppState] SQLite cache write failed (non-fatal): $e');
     }
-
-    // No pre-seeded wallets — user creates them via the Currencies tab
   }
+
+
 
   // ─── Balance logic ───────────────────────────────────────────────────────
   Map<String, double> getAllBalances(GroupData g) {
@@ -428,6 +578,8 @@ class AppState extends ChangeNotifier {
           }
         }
       } else {
+        // UI-3 FIX: Guard against division by zero for empty groups
+        if (g.members.isEmpty) continue;
         final share = e.amount / g.members.length;
         for (final m in g.members) {
           if (e.paidBy == m) {
@@ -448,7 +600,16 @@ class AppState extends ChangeNotifier {
     return bal;
   }
 
-  double getMyBalance(GroupData g) => getAllBalances(g)['You'] ?? 0;
+  // ARCH-3 FIX: Check both 'You' and the user's actual Firebase display name
+  double getMyBalance(GroupData g) {
+    final balances = getAllBalances(g);
+    // Try 'You' first (local/offline groups always use 'You')
+    if (balances.containsKey('You')) return balances['You']!;
+    // For cloud groups, the member name may be the user's real name
+    final userName = AuthService.instance.currentUser?.displayName;
+    if (userName != null && balances.containsKey(userName)) return balances[userName]!;
+    return 0;
+  }
 
   double getGroupWalletBalance(String currency) {
     double total = 0.0;
@@ -498,9 +659,20 @@ class AppState extends ChangeNotifier {
   // ─── Mutations ───────────────────────────────────────────────────────────
 
   Future<void> addGroup(GroupData g) async {
-    await DatabaseService.instance.insertGroup(g);
+    if (_useCloud) {
+      final result = await FirestoreService.instance.insertGroup(g);
+      g.inviteCode = result['inviteCode'];
+      // Persist the Firestore doc ID so SQLite cache survives app kills.
+      g.firestoreId = result['docId'];
+      // Also cache to SQLite for offline resilience
+      await DatabaseService.instance.insertGroup(g);
+    } else {
+      await DatabaseService.instance.insertGroup(g);
+    }
     groups = [g, ...groups];
     _cachedAllTxns = null;
+    // Start real-time expense watcher for the new group (cloud only).
+    _watchGroupExpenses(g);
     notifyListeners();
   }
 
@@ -557,7 +729,19 @@ class AppState extends ChangeNotifier {
         settlements: [],
       );
 
-      await DatabaseService.instance.insertGroup(g);
+      if (_useCloud) {
+        final result = await FirestoreService.instance.insertGroup(g);
+        g.inviteCode = result['inviteCode'];
+        // Persist the Firestore doc ID so SQLite cache survives app kills.
+        g.firestoreId = result['docId'];
+        // BUG-5 fix: also cache to SQLite so the group survives offline
+        try {
+          await DatabaseService.instance.insertGroup(g);
+        } catch (_) {}
+      } else {
+        await DatabaseService.instance.insertGroup(g);
+      }
+      
       groups = [g, ...groups];
       _cachedAllTxns = null;
       notifyListeners();
@@ -568,8 +752,40 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addExpenseToGroup(GroupData g, ExpenseData e) async {
-    await DatabaseService.instance.insertExpense(g.id, e);
-    g.expenses = [e, ...g.expenses];
+    var expenseToSave = e;
+
+    // Upload receipt to Firebase Storage if in cloud mode
+    if (_useCloud && e.receipt && e.receiptPath != null) {
+      try {
+        final url = await StorageService.instance.uploadReceipt(
+          g.id, e.id, e.receiptPath!,
+        );
+        if (url != null) {
+          expenseToSave = ExpenseData(
+            id: e.id,
+            desc: e.desc,
+            amount: e.amount,
+            cat: e.cat,
+            paidBy: e.paidBy,
+            date: e.date,
+            receipt: true,
+            receiptPath: url, // Cloud URL instead of local path
+            splits: e.splits,
+          );
+        }
+      } catch (err) {
+        debugPrint('[AppState] Receipt upload failed, keeping local path: $err');
+      }
+    }
+
+    if (_useCloud) {
+      await FirestoreService.instance.insertExpense(g.id, expenseToSave);
+      // Also cache to SQLite for offline resilience
+      await DatabaseService.instance.insertExpense(g.id, expenseToSave);
+    } else {
+      await DatabaseService.instance.insertExpense(g.id, expenseToSave);
+    }
+    g.expenses = [expenseToSave, ...g.expenses];
     groups = List.of(groups);
     _cachedAllTxns = null;
     notifyListeners();
@@ -580,7 +796,11 @@ class AppState extends ChangeNotifier {
     ExpenseData oldExp,
     ExpenseData newExp,
   ) async {
-    await DatabaseService.instance.updateExpense(g.id, newExp);
+    if (_useCloud) {
+      await FirestoreService.instance.updateExpense(g.id, newExp);
+    } else {
+      await DatabaseService.instance.updateExpense(g.id, newExp);
+    }
     final idx = g.expenses.indexOf(oldExp);
     if (idx >= 0) {
       g.expenses = [
@@ -595,7 +815,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteExpense(GroupData g, ExpenseData e) async {
-    await DatabaseService.instance.deleteExpense(e.id);
+    if (_useCloud) {
+      await FirestoreService.instance.deleteExpense(g.id, e.id);
+    } else {
+      await DatabaseService.instance.deleteExpense(e.id);
+    }
     g.expenses = g.expenses.where((x) => x.id != e.id).toList();
     groups = List.of(groups);
     _cachedAllTxns = null;
@@ -603,28 +827,59 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> recordSettlement(GroupData g, SettlementData s) async {
-    await DatabaseService.instance.insertSettlement(g.id, s);
+    if (_useCloud) {
+      await FirestoreService.instance.insertSettlement(g.id, s);
+    } else {
+      await DatabaseService.instance.insertSettlement(g.id, s);
+    }
     g.settlements = [...g.settlements, s];
     groups = List.of(groups);
+    _cachedAllTxns = null; // BUG-11 fix: invalidate cache after settlement
+    notifyListeners();
+  }
+
+  Future<void> editGroup(GroupData g, {String? name, String? emoji, List<String>? members}) async {
+    if (name != null) g.name = name;
+    if (emoji != null) g.emoji = emoji;
+    if (members != null) g.members = members;
+    if (_useCloud) {
+      await FirestoreService.instance.updateGroup(g);
+    } else {
+      await DatabaseService.instance.updateGroup(g);
+    }
+    groups = List.of(groups);
+    _cachedAllTxns = null;
     notifyListeners();
   }
 
   Future<void> archiveGroup(GroupData g) async {
-    await DatabaseService.instance.setGroupArchived(g.id, true);
+    if (_useCloud) {
+      await FirestoreService.instance.setGroupArchived(g.id, true);
+    } else {
+      await DatabaseService.instance.setGroupArchived(g.id, true);
+    }
     g.isArchived = true;
     groups = List.of(groups);
     notifyListeners();
   }
 
   Future<void> unarchiveGroup(GroupData g) async {
-    await DatabaseService.instance.setGroupArchived(g.id, false);
+    if (_useCloud) {
+      await FirestoreService.instance.setGroupArchived(g.id, false);
+    } else {
+      await DatabaseService.instance.setGroupArchived(g.id, false);
+    }
     g.isArchived = false;
     groups = List.of(groups);
     notifyListeners();
   }
 
   Future<void> deleteGroup(GroupData g) async {
-    await DatabaseService.instance.deleteGroup(g.id);
+    if (_useCloud) {
+      await FirestoreService.instance.deleteGroup(g.id);
+    } else {
+      await DatabaseService.instance.deleteGroup(g.id);
+    }
     groups = groups.where((x) => x.id != g.id).toList();
     if (currentGroup?.id == g.id) currentGroup = null;
     _cachedAllTxns = null;
@@ -638,10 +893,11 @@ class AppState extends ChangeNotifier {
           .toStringAsFixed(2),
     );
 
-    try {
+    if (_useCloud) {
+      await FirestoreService.instance.insertTransaction(t);
+      await FirestoreService.instance.upsertWallet(t.currency, newBal);
+    } else {
       await DatabaseService.instance.insertTransactionAtomic(t, newBal);
-    } catch (_) {
-      rethrow;
     }
 
     transactions = [t, ...transactions];
@@ -669,10 +925,12 @@ class AppState extends ChangeNotifier {
           .toStringAsFixed(2),
     );
 
-    try {
+    if (_useCloud) {
+      await FirestoreService.instance.updateTransaction(updated);
+      await FirestoreService.instance.upsertWallet(old.currency, reversedOld);
+      await FirestoreService.instance.upsertWallet(updated.currency, newBal);
+    } else {
       await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
-    } catch (_) {
-      rethrow;
     }
 
     if (idx >= 0) {
@@ -696,10 +954,11 @@ class AppState extends ChangeNotifier {
           .toStringAsFixed(2),
     );
 
-    try {
+    if (_useCloud) {
+      await FirestoreService.instance.deleteTransaction(t.id);
+      await FirestoreService.instance.upsertWallet(t.currency, newBal);
+    } else {
       await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
-    } catch (_) {
-      rethrow;
     }
 
     transactions = transactions.where((x) => x.id != t.id).toList();
@@ -709,6 +968,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> resetAllData() async {
+    // Cancel real-time watchers BEFORE wiping cloud data.
+    _cancelExpenseWatchers();
+
+    if (_useCloud) {
+      await FirestoreService.instance.clearAll();
+    }
     await DatabaseService.instance.clearAll();
     groups = [];
     transactions = [];
@@ -717,32 +982,50 @@ class AppState extends ChangeNotifier {
     budgetLimits = {};
     subscriptions = [];
     reminders = [];
+    savingGoals = [];      // FIX: was missing — savingGoals persisted after reset
     currentGroup = null;
+    _cachedAllTxns = null; // FIX: was missing — stale cache survived reset
     notifyListeners();
   }
 
   // ─── Wallet management ───────────────────────────────────────────────────
 
   Future<void> createWallet(String currency, double initialBalance) async {
-    await DatabaseService.instance.upsertWallet(currency, initialBalance);
+    if (_useCloud) {
+      await FirestoreService.instance.upsertWallet(currency, initialBalance);
+    } else {
+      await DatabaseService.instance.upsertWallet(currency, initialBalance);
+    }
     wallets = Map.of(wallets)..[currency] = initialBalance;
     notifyListeners();
   }
 
   Future<void> deleteWallet(String currency) async {
-    await DatabaseService.instance.deleteWallet(currency);
+    if (_useCloud) {
+      await FirestoreService.instance.deleteWallet(currency);
+    } else {
+      await DatabaseService.instance.deleteWallet(currency);
+    }
     wallets = Map.of(wallets)..remove(currency);
     notifyListeners();
   }
 
   Future<void> createGroupWallet(String currency, double initialBalance) async {
-    await DatabaseService.instance.upsertGroupWallet(currency, initialBalance);
+    if (_useCloud) {
+      await FirestoreService.instance.upsertGroupWallet(currency, initialBalance);
+    } else {
+      await DatabaseService.instance.upsertGroupWallet(currency, initialBalance);
+    }
     groupWallets = Map.of(groupWallets)..[currency] = initialBalance;
     notifyListeners();
   }
 
   Future<void> deleteGroupWallet(String currency) async {
-    await DatabaseService.instance.deleteGroupWallet(currency);
+    if (_useCloud) {
+      await FirestoreService.instance.deleteGroupWallet(currency);
+    } else {
+      await DatabaseService.instance.deleteGroupWallet(currency);
+    }
     groupWallets = Map.of(groupWallets)..remove(currency);
     notifyListeners();
   }
@@ -751,7 +1034,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> setBudgetLimit(String catIcon, String currency, double limit) async {
     final key = '${catIcon}_$currency';
-    await DatabaseService.instance.upsertBudgetLimit(key, limit);
+    if (_useCloud) {
+      await FirestoreService.instance.upsertBudgetLimit(key, limit);
+    } else {
+      await DatabaseService.instance.upsertBudgetLimit(key, limit);
+    }
     budgetLimits = Map.of(budgetLimits)..[key] = limit;
     notifyListeners();
   }
@@ -869,7 +1156,13 @@ class AppState extends ChangeNotifier {
   // ─── Reminder management ─────────────────────────────────────────────────
 
   Future<void> addReminder(ReminderData r) async {
-    final newId = await DatabaseService.instance.insertReminder(r);
+    int newId;
+    if (_useCloud) {
+      newId = await FirestoreService.instance.insertReminder(r);
+      await DatabaseService.instance.insertReminder(r.copyWith(id: newId));
+    } else {
+      newId = await DatabaseService.instance.insertReminder(r);
+    }
     final saved = r.copyWith(id: newId);
     reminders = ([saved, ...reminders]..sort((a, b) => a.date.compareTo(b.date)));
     await NotificationService.scheduleReminder(saved);
@@ -877,6 +1170,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateReminder(ReminderData r) async {
+    if (_useCloud) {
+      await FirestoreService.instance.updateReminder(r);
+    }
     await DatabaseService.instance.updateReminder(r);
     final idx = reminders.indexWhere((x) => x.id == r.id);
     if (idx >= 0) {
@@ -891,6 +1187,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteReminder(ReminderData r) async {
+    if (_useCloud) {
+      await FirestoreService.instance.deleteReminder(r.id);
+    }
     await DatabaseService.instance.deleteReminder(r.id);
     reminders = reminders.where((x) => x.id != r.id).toList();
     await NotificationService.cancelReminder(r.id);
@@ -912,7 +1211,12 @@ class AppState extends ChangeNotifier {
       'saved_amount': 0.0,
       'target_date': targetDate?.toIso8601String(),
     };
-    final id = await DatabaseService.instance.insertSavingGoal(data);
+    int id;
+    if (_useCloud) {
+      id = await FirestoreService.instance.insertSavingGoal(data);
+    } else {
+      id = await DatabaseService.instance.insertSavingGoal(data);
+    }
     savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, targetDate: targetDate));
     notifyListeners();
   }
@@ -926,7 +1230,11 @@ class AppState extends ChangeNotifier {
       savedAmount: savedAmount ?? g.savedAmount,
       targetDate: targetDate ?? g.targetDate,
     );
-    await DatabaseService.instance.updateSavingGoal(g.id, updated.toMap());
+    if (_useCloud) {
+      await FirestoreService.instance.updateSavingGoal(g.id, updated.toMap());
+    } else {
+      await DatabaseService.instance.updateSavingGoal(g.id, updated.toMap());
+    }
     final idx = savingGoals.indexWhere((x) => x.id == g.id);
     if (idx >= 0) {
       savingGoals[idx] = updated;
@@ -935,7 +1243,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteSavingGoal(int id) async {
-    await DatabaseService.instance.deleteSavingGoal(id);
+    if (_useCloud) {
+      await FirestoreService.instance.deleteSavingGoal(id);
+    } else {
+      await DatabaseService.instance.deleteSavingGoal(id);
+    }
     savingGoals.removeWhere((g) => g.id == id);
     notifyListeners();
   }
@@ -1011,6 +1323,10 @@ class GroupData {
   final int id;
   String name, emoji, currency, sym;
   bool isArchived;
+  String? inviteCode;
+  /// Raw Firestore document ID (e.g. "abc123xyz"). Stored in SQLite so that
+  /// FirestoreService._docIdCache can be rebuilt after an app kill/restart.
+  String? firestoreId;
   List<String> members;
   List<ExpenseData> expenses;
   List<SettlementData> settlements;
@@ -1025,6 +1341,8 @@ class GroupData {
     List<ExpenseData>? expenses,
     List<SettlementData>? settlements,
     this.isArchived = false,
+    this.inviteCode,
+    this.firestoreId,
   })  : expenses = expenses ?? [],
         settlements = settlements ?? [];
 }
@@ -1035,6 +1353,9 @@ class ExpenseData {
   final double amount;
   final bool receipt;
   final String? receiptPath;
+
+  final String? createdBy;
+  final String? updatedBy;
 
   /// Custom per-member split amounts. null = equal split.
   /// Key = member name, value = amount that member owes.
@@ -1056,6 +1377,8 @@ class ExpenseData {
     this.receipt = false,
     this.receiptPath,
     this.splits,
+    this.createdBy,
+    this.updatedBy,
   });
 }
 
@@ -1128,6 +1451,18 @@ class TransactionData {
     }
 
     return null;
+  }
+
+  static String formatDate(String d) {
+    final dt = parseDate(d);
+    if (dt == null) return d;
+    return '${dt.day} ${_monthName(dt.month)} ${dt.year}';
+  }
+
+  static String _monthName(int m) {
+    const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (m < 1 || m > 12) return '';
+    return names[m - 1];
   }
 
   const TransactionData({

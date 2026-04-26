@@ -43,11 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final l = AppLocalizations.of(context);
 
     final navItems = [
-      _NavItem('💰', l.money),
-      _NavItem('📊', 'Overview'),
+      const _NavItem('🏠', 'Home'),
+      const _NavItem('📊', 'Analytics'),
       _NavItem('👥', l.groups),
       _NavItem('📋', l.activity),
-      _NavItem('🌍', l.currencies),
+      const _NavItem('💳', 'Wallets'),
     ];
 
     return Scaffold(
@@ -69,8 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: SafeArea(
         child: Container(
-          height: 72,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: TC.card(context).withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(24),
@@ -98,36 +97,39 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() => _index = i);
                   },
                   behavior: HitTestBehavior.opaque,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutBack,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: active ? AppColors.green.withValues(alpha: 0.1) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          item.icon,
-                          style: TextStyle(
-                            fontSize: active ? 24 : 20,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutBack,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: active ? AppColors.green.withValues(alpha: 0.1) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            item.icon,
+                            style: TextStyle(
+                              fontSize: active ? 22 : 18,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1,
-                          color: active ? AppColors.green : TC.text3(context),
+                        const SizedBox(height: 2),
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                            color: active ? AppColors.green : TC.text3(context),
+                          ),
+                          child: Text(item.label.toUpperCase()),
                         ),
-                        child: Text(item.label.toUpperCase()),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );

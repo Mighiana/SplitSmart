@@ -8,6 +8,8 @@ import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
 import 'group_detail_screen.dart';
+import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
 
 class QRScanScreen extends StatefulWidget {
   const QRScanScreen({super.key});
@@ -83,7 +85,22 @@ class _QRScanScreenState extends State<QRScanScreen> {
       return;
     }
 
-    final group = await state.importGroupFromQR(json);
+    GroupData? group;
+    final inviteCode = json['inviteCode'] as String?;
+    
+    if (inviteCode != null && AuthService.instance.isSignedIn) {
+       // Automatic cloud join if invite code is present
+       group = await FirestoreService.instance.joinGroupByInviteCode(inviteCode, 'You');
+       if (group != null) {
+         await state.loadInitialData();
+       } else {
+         // Fallback if cloud join fails
+         group = await state.importGroupFromQR(json);
+       }
+    } else {
+       group = await state.importGroupFromQR(json);
+    }
+    
     if (!mounted) return;
 
     if (group == null) {
