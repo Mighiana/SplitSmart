@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../providers/app_state.dart';
 import 'auth_service.dart';
@@ -438,40 +439,24 @@ class FirestoreService {
   /// SEC-H4: Maximum group members allowed.
   static const int _maxGroupMembers = 50;
 
-  /// Join a group via invite code.
+  /// Join a group via invite code using secure Cloud Function.
   Future<GroupData?> joinGroupByInviteCode(String code, String memberName) async {
     try {
-      final snap = await _groupsCol
-          .where('inviteCode', isEqualTo: code.toUpperCase().trim())
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return null;
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('joinGroup');
+      final result = await callable.call(<String, dynamic>{
+        'inviteCode': code,
+        'memberName': memberName,
+      });
 
-      final doc = snap.docs.first;
-      final data = doc.data() as Map<String, dynamic>;
-      final memberUids = List<String>.from(data['memberUids'] ?? []);
-      final members = List<String>.from(data['members'] ?? []);
-
-      // SEC-H4: Enforce member cap
-      if (memberUids.length >= _maxGroupMembers) {
-        debugPrint('[Firestore] Group full: ${memberUids.length} >= $_maxGroupMembers');
-        return null;
-      }
-
-      if (!memberUids.contains(_uid)) {
-        memberUids.add(_uid);
-        // Sanitize member name length
-        final safeName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
-        members.add(safeName);
-        await doc.reference.update({
-          'memberUids': memberUids,
-          'members': members,
-        });
-      }
-
+      final String groupId = result.data['groupId'] as String;
+      
+      // Load the joined group directly by ID
+      final doc = await _groupsCol.doc(groupId).get();
+      if (!doc.exists) return null;
+      
       return await _groupFromDocFull(doc);
     } catch (e) {
-      debugPrint('[Firestore] joinGroupByInviteCode error: $e');
+      debugPrint('[Firestore] joinGroupByInviteCode Cloud Function error: $e');
       return null;
     }
   }

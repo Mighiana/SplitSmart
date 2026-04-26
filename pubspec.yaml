@@ -72,6 +72,7 @@ dependencies:
   # Smart expense entry — zero cost, all offline
   speech_to_text: ^7.0.0                  # Voice input — free, device engine
   url_launcher: ^6.3.2
+  cloud_functions: ^5.6.2
 
 dev_dependencies:
   flutter_test:
