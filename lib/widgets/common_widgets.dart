@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../main.dart';
 import '../utils/app_utils.dart';
-
+import '../utils/theme_utils.dart';
 
 // ─── Pill Badge ──────────────────────────────────────────────────────────────
 class PillBadge extends StatelessWidget {
@@ -20,7 +20,8 @@ class PillBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(text,
-          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -32,15 +33,24 @@ class AvatarCircle extends StatelessWidget {
   final Color? bg;
   final Color? fg;
   const AvatarCircle({
-    super.key, required this.label, this.size = 40, this.bg, this.fg,
+    super.key,
+    required this.label,
+    this.size = 40,
+    this.bg,
+    this.fg,
   });
 
   @override
   Widget build(BuildContext context) {
-    final initials = label.trim().split(RegExp(r'\s+')).take(2)
-        .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
+    final initials = label
+        .trim()
+        .split(RegExp(r'\s+'))
+        .take(2)
+        .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '')
+        .join();
     return Container(
-      width: size, height: size,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: bg ?? AppColors.greenDim,
         shape: BoxShape.circle,
@@ -62,19 +72,33 @@ class EmojiBox extends StatelessWidget {
   final double size;
   final double borderRadius;
   const EmojiBox({
-    super.key, required this.emoji, this.size = 48, this.borderRadius = 14,
+    super.key,
+    required this.emoji,
+    this.size = 48,
+    this.borderRadius = 14,
   });
 
   @override
   Widget build(BuildContext context) {
+    final codeUnit = emoji.isNotEmpty ? emoji.codeUnitAt(0) : 0;
+    final isLegacyMaterialIcon =
+        emoji.length == 1 && codeUnit >= 0xE000 && codeUnit <= 0xF8FF;
+
     return Container(
-      width: size, height: size,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: TC.card2(context),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       alignment: Alignment.center,
-      child: Text(emoji, style: TextStyle(fontSize: size * 0.45)),
+      child: isLegacyMaterialIcon
+          ? Icon(
+              IconData(codeUnit, fontFamily: 'MaterialIcons'),
+              size: size * 0.52,
+              color: AppColors.green,
+            )
+          : Text(emoji, style: TextStyle(fontSize: size * 0.45)),
     );
   }
 }
@@ -85,7 +109,8 @@ class SSCard extends StatelessWidget {
   final EdgeInsets? padding;
   final Color? color;
   final VoidCallback? onTap;
-  const SSCard({super.key, required this.child, this.padding, this.color, this.onTap});
+  const SSCard(
+      {super.key, required this.child, this.padding, this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +135,8 @@ class SectionHeader extends StatelessWidget {
   final String title;
   final String? actionLabel;
   final VoidCallback? onAction;
-  const SectionHeader({super.key, required this.title, this.actionLabel, this.onAction});
+  const SectionHeader(
+      {super.key, required this.title, this.actionLabel, this.onAction});
 
   @override
   Widget build(BuildContext context) {
@@ -118,8 +144,10 @@ class SectionHeader extends StatelessWidget {
       children: [
         Text(title.toUpperCase(),
             style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700,
-              color: TC.text3(context), letterSpacing: 2,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: TC.text3(context),
+              letterSpacing: 2,
             )),
         const Spacer(),
         if (actionLabel != null)
@@ -127,7 +155,9 @@ class SectionHeader extends StatelessWidget {
             onTap: onAction,
             child: Text(actionLabel!,
                 style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.green,
                 )),
           ),
       ],
@@ -140,7 +170,11 @@ class SSChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const SSChip({super.key, required this.label, required this.active, required this.onTap});
+  const SSChip(
+      {super.key,
+      required this.label,
+      required this.active,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +209,7 @@ class SSNumpad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keys = ['1','2','3','4','5','6','7','8','9','.','0','⌫'];
+    final keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -200,10 +234,10 @@ class SSNumpad extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(k,
-                style: TextStyle(
+                style: TC.geist(context,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: isDel ? AppColors.red : TC.text(context),
+                  color: isDel ? TC.er(context) : TC.text(context),
                 )),
           ),
         );
@@ -216,13 +250,13 @@ class SSNumpad extends StatelessWidget {
 class AmountDisplay extends StatefulWidget {
   final String amount;
   final String symbol;
-  final Color color;
+  final Color? color;
   final String label;
   const AmountDisplay({
     super.key,
     required this.amount,
     required this.symbol,
-    this.color = AppColors.green,
+    this.color,
     this.label = 'Total Amount',
   });
 
@@ -237,14 +271,14 @@ class AmountDisplay extends StatefulWidget {
 class AmountDisplayState extends State<AmountDisplay>
     with SingleTickerProviderStateMixin {
   late AnimationController _shakeCtrl;
-  late Animation<double>   _shakeAnim;
+  late Animation<double> _shakeAnim;
   bool _redBorder = false;
 
   @override
   void initState() {
     super.initState();
     _shakeCtrl = AnimationController(
-      vsync:    this,
+      vsync: this,
       duration: const Duration(milliseconds: 420),
     );
     _shakeAnim = TweenSequence([
@@ -257,7 +291,10 @@ class AmountDisplayState extends State<AmountDisplay>
   }
 
   @override
-  void dispose() { _shakeCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _shakeCtrl.dispose();
+    super.dispose();
+  }
 
   void shake() {
     HapticFeedback.mediumImpact();
@@ -269,12 +306,12 @@ class AmountDisplayState extends State<AmountDisplay>
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _redBorder
-        ? AppColors.red
-        : widget.color.withValues(alpha: 0.12);
+    final activeColor = widget.color ?? TC.primary(context);
+    final borderColor =
+        _redBorder ? TC.er(context) : activeColor.withValues(alpha: 0.12);
     final bgColor = _redBorder
-        ? AppColors.red.withValues(alpha: 0.06)
-        : widget.color.withValues(alpha: 0.05);
+        ? TC.er(context).withValues(alpha: 0.06)
+        : activeColor.withValues(alpha: 0.05);
 
     return AnimatedBuilder(
       animation: _shakeCtrl,
@@ -285,7 +322,7 @@ class AmountDisplayState extends State<AmountDisplay>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(18),
@@ -294,9 +331,11 @@ class AmountDisplayState extends State<AmountDisplay>
         child: Column(
           children: [
             Text(widget.label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: TC.text3(context), letterSpacing: 2,
+                style: TC.geist(context,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: TC.text3(context),
+                  letterSpacing: 2,
                 )),
             const SizedBox(height: 8),
             RichText(
@@ -304,16 +343,18 @@ class AmountDisplayState extends State<AmountDisplay>
                 children: [
                   TextSpan(
                     text: widget.symbol,
-                    style: TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w800,
-                      color: widget.color.withValues(alpha: 0.6),
+                    style: TC.gloock(context,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: activeColor.withValues(alpha: 0.6),
                     ),
                   ),
                   TextSpan(
                     text: widget.amount,
-                    style: TextStyle(
-                        fontSize: 44, fontWeight: FontWeight.w800,
-                        color: widget.color),
+                    style: TC.gloock(context,
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: activeColor),
                   ),
                 ],
               ),
@@ -325,12 +366,14 @@ class AmountDisplayState extends State<AmountDisplay>
   }
 }
 
-
 // ─── Empty State ──────────────────────────────────────────────────────────────
 class EmptyState extends StatefulWidget {
   final String icon, title, subtitle;
   const EmptyState({
-    super.key, required this.icon, required this.title, required this.subtitle,
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
   });
   @override
   State<EmptyState> createState() => _EmptyStateState();
@@ -339,14 +382,14 @@ class EmptyState extends StatefulWidget {
 class _EmptyStateState extends State<EmptyState>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double>   _float;
-  late Animation<double>   _pulse;
+  late Animation<double> _float;
+  late Animation<double> _pulse;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-      vsync:    this,
+      vsync: this,
       duration: const Duration(milliseconds: 2400),
     )..repeat(reverse: true);
     _float = Tween<double>(begin: -6, end: 6).animate(
@@ -358,7 +401,10 @@ class _EmptyStateState extends State<EmptyState>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +424,8 @@ class _EmptyStateState extends State<EmptyState>
             const SizedBox(height: 16),
             Text(widget.title,
                 style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
                   color: TC.text(context),
                 )),
             const SizedBox(height: 6),
@@ -396,7 +443,8 @@ class _EmptyStateState extends State<EmptyState>
 class ProgressBar extends StatefulWidget {
   final double value; // 0.0 to 1.0
   final Color color;
-  const ProgressBar({super.key, required this.value, this.color = AppColors.blue});
+  const ProgressBar(
+      {super.key, required this.value, this.color = AppColors.blue});
 
   @override
   State<ProgressBar> createState() => _ProgressBarState();
@@ -447,7 +495,8 @@ class _ProgressBarState extends State<ProgressBar> {
 class ReceiptViewer extends StatelessWidget {
   final String imagePath;
   final String title;
-  const ReceiptViewer({super.key, required this.imagePath, this.title = 'Receipt'});
+  const ReceiptViewer(
+      {super.key, required this.imagePath, this.title = 'Receipt'});
 
   @override
   Widget build(BuildContext context) {
@@ -456,7 +505,8 @@ class ReceiptViewer extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 15)),
+        title: Text(title,
+            style: const TextStyle(color: Colors.white, fontSize: 15)),
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -479,7 +529,8 @@ class ReceiptViewer extends StatelessWidget {
                       Icon(Icons.broken_image, color: Colors.white54, size: 60),
                       SizedBox(height: 12),
                       Text('Image not available',
-                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 14)),
                     ],
                   ),
                 )
@@ -492,7 +543,8 @@ class ReceiptViewer extends StatelessWidget {
                       Icon(Icons.broken_image, color: Colors.white54, size: 60),
                       SizedBox(height: 12),
                       Text('Image not available',
-                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 14)),
                     ],
                   ),
                 ),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../widgets/common_widgets.dart';
@@ -13,15 +12,18 @@ enum _Kind { personal, groupExpense, settlement }
 
 class _Item {
   final _Kind kind;
-  final String emoji, title, subtitle, sym;
+  final String emoji, title, subtitle, sub2, sym;
   final double amount;
   final bool isPositive;
   final String? receiptPath;
   final DateTime? date;
   final GroupData? group;
-  const _Item({required this.kind, required this.emoji, required this.title,
-    required this.subtitle, required this.amount, required this.isPositive,
-    required this.sym, this.receiptPath, this.date, this.group});
+  const _Item({
+    required this.kind, required this.emoji, required this.title,
+    required this.subtitle, required this.sub2, required this.amount, 
+    required this.isPositive, required this.sym, 
+    this.receiptPath, this.date, this.group,
+  });
 }
 
 enum _Filter { all, personal, groups, settlements }
@@ -34,31 +36,76 @@ class ActivityScreen extends StatefulWidget {
 
 class _ActivityScreenState extends State<ActivityScreen> {
   _Filter _filter = _Filter.all;
+  final Map<String, bool> _expandedGroups = {};
+  String _searchQuery = '';
+  String _selectedCategory = 'All';
+  List<String> _availableCategories = const ['All'];
+  final TextEditingController _searchCtrl = TextEditingController();
 
-  List<_Item> _buildItems(AppState state) {
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<_Item> _buildItems(AppState state, AppLocalizations l) {
     final items = <_Item>[];
     for (final t in state.transactions) {
       final isInc = t.type == 'income';
-      items.add(_Item(kind: _Kind.personal, emoji: t.cat, title: t.desc,
-        subtitle: '${isInc ? 'Income' : 'Expense'} · ${t.currency}',
-        amount: t.amount, isPositive: isInc, sym: t.sym,
-        receiptPath: t.receiptPath, date: t.rawDate));
+      items.add(_Item(
+        kind: _Kind.personal, 
+        emoji: t.cat, 
+        title: t.desc,
+        subtitle: isInc ? l.income : l.expenses,
+        sub2: t.currency,
+        amount: t.amount, 
+        isPositive: isInc, 
+        sym: t.sym,
+        receiptPath: t.receiptPath, 
+        date: t.rawDate,
+      ));
     }
     for (final g in state.groups) {
       for (final e in g.expenses) {
         final isYou = e.paidBy == 'You';
-        final share = e.amount / g.members.length;
+        double share;
+        if (e.splits != null && e.splits!.isNotEmpty) {
+          final rawTotal = e.splits!.values.fold(0.0, (s, v) => s + v);
+          final scale = (rawTotal > 0 && (rawTotal - e.amount).abs() > 0.01)
+              ? e.amount / rawTotal
+              : 1.0;
+          share = (e.splits!['You'] ?? (e.amount / g.members.length)) * scale;
+        } else {
+          share = g.members.isEmpty ? 0 : e.amount / g.members.length;
+        }
         final net = isYou ? (e.amount - share) : -share;
-        items.add(_Item(kind: _Kind.groupExpense, emoji: e.cat, title: e.desc,
-          subtitle: '${g.emoji} ${g.name} · ${e.paidBy}',
-          amount: net.abs(), isPositive: net >= 0, sym: g.sym,
-          receiptPath: e.receiptPath, date: TransactionData.parseDate(e.date), group: g));
+        items.add(_Item(
+          kind: _Kind.groupExpense, 
+          emoji: e.cat, 
+          title: e.desc,
+          subtitle: '${g.emoji} ${g.name}', 
+          sub2: e.paidBy,
+          amount: net.abs(), 
+          isPositive: net >= 0, 
+          sym: g.sym,
+          receiptPath: e.receiptPath, 
+          date: TransactionData.parseDate(e.date), 
+          group: g,
+        ));
       }
       for (final s in g.settlements) {
-        items.add(_Item(kind: _Kind.settlement, emoji: 'check', // Icon handled in tile
-          title: '${s.from} → ${s.to}', subtitle: '${g.emoji} ${g.name} · ${s.method}',
-          amount: s.amount, isPositive: true, sym: g.sym,
-          date: TransactionData.parseDate(s.date), group: g));
+        items.add(_Item(
+          kind: _Kind.settlement, 
+          emoji: '🤝', 
+          title: '${s.from} → ${s.to}', 
+          subtitle: l.settled,
+          sub2: s.method,
+          amount: s.amount, 
+          isPositive: true, 
+          sym: g.sym,
+          date: TransactionData.parseDate(s.date), 
+          group: g,
+        ));
       }
     }
     items.sort((a, b) {
@@ -71,12 +118,21 @@ class _ActivityScreenState extends State<ActivityScreen> {
   }
 
   List<_Item> _applyFilter(List<_Item> all) {
+    List<_Item> res = all;
     switch (_filter) {
-      case _Filter.personal:    return all.where((i) => i.kind == _Kind.personal).toList();
-      case _Filter.groups:      return all.where((i) => i.kind == _Kind.groupExpense).toList();
-      case _Filter.settlements: return all.where((i) => i.kind == _Kind.settlement).toList();
-      case _Filter.all:         return all;
+      case _Filter.personal:    res = all.where((i) => i.kind == _Kind.personal).toList(); break;
+      case _Filter.groups:      res = all.where((i) => i.kind == _Kind.groupExpense).toList(); break;
+      case _Filter.settlements: res = all.where((i) => i.kind == _Kind.settlement).toList(); break;
+      case _Filter.all:         break;
     }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      res = res.where((i) => i.title.toLowerCase().contains(q) || i.subtitle.toLowerCase().contains(q) || i.sub2.toLowerCase().contains(q)).toList();
+    }
+    if (_selectedCategory != 'All') {
+      res = res.where((i) => i.emoji == _selectedCategory).toList();
+    }
+    return res;
   }
 
   String _dateLabel(DateTime? d) {
@@ -87,30 +143,42 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final diff = today.difference(day).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
-    if (diff <= 7) return 'This Week';
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${months[d.month - 1]} ${d.year}';
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
-
-  Color _kindColor(_Kind kind) {
-    switch (kind) {
-      case _Kind.personal:     return AppColors.blue;
-      case _Kind.groupExpense: return AppColors.green;
-      case _Kind.settlement:   return AppColors.purple;
+  String _categoryLabel(String emoji) {
+    if (emoji == 'All') return 'All';
+    switch (emoji) {
+      case '🍽️': return '🍽️ Food';
+      case '🚕': return '🚕 Travel';
+      case '💰': return '💰 Income';
+      case '🏠': return '🏠 Housing';
+      case '🎡': return '🎡 Fun';
+      case '🛍️': return '🛍️ Shopping';
+      case '🏥': return '🏥 Health';
+      case '📚': return '📚 Education';
+      default: return '$emoji Item';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Use watch so the screen rebuilds whenever transactions, groups, or
-    // group expenses change — including immediately after sign-in and when
-    // other group members add expenses.
     final state = context.watch<AppState>();
     final isDark = state.isDark;
     final l = AppLocalizations.of(context);
-    final allItems = _buildItems(state);
+    final allItems = _buildItems(state, l);
     final filtered = _applyFilter(allItems);
+
+    // Dynamic categories extracted from all items
+    final categoriesSet = <String>{'All'};
+    for (final item in allItems) {
+      if (item.emoji.isNotEmpty && item.emoji != '🤝') {
+        categoriesSet.add(item.emoji);
+      }
+    }
+    final categories = categoriesSet.toList();
+    _availableCategories = categories;
 
     // Group by date
     final Map<String, List<_Item>> grouped = {};
@@ -119,456 +187,596 @@ class _ActivityScreenState extends State<ActivityScreen> {
       final label = _dateLabel(item.date);
       grouped.putIfAbsent(label, () { labelOrder.add(label); return []; });
       grouped[label]!.add(item);
-    }
-
-    // Stats
-    final now = DateTime.now();
-    int personalCount = 0, groupCount = 0, settlementCount = 0;
-    for (final item in allItems) {
-      if (item.date != null && item.date!.month == now.month && item.date!.year == now.year) {
-        if (item.kind == _Kind.personal) personalCount++;
-        else if (item.kind == _Kind.groupExpense) groupCount++;
-        else settlementCount++;
-      }
-    }
-
-    // Build flat list of widgets for sliver
-    final sliverChildren = <Widget>[];
-    for (int g = 0; g < labelOrder.length; g++) {
-      final label = labelOrder[g];
-      final section = grouped[label]!;
-      sliverChildren.add(_SectionHeader(label: label, count: section.length));
-      for (int i = 0; i < section.length; i++) {
-        sliverChildren.add(_TransactionTile(
-          item: section[i], isDark: isDark,
-          kindColor: _kindColor(section[i].kind),
-          onTap: () => _onTap(context, state, section[i]),
-          delay: (g * 80 + i * 40),
-        ));
-      }
+      _expandedGroups.putIfAbsent(label, () => true);
     }
 
     return Scaffold(
       backgroundColor: TC.bg(context),
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             // ── Header ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(l.activity,
-                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900,
-                                  color: TC.text(context), letterSpacing: -0.5, height: 1.1)),
-                              const SizedBox(height: 2),
-                              Text(l.financialTimeline,
-                                style: TextStyle(fontSize: 13, color: TC.text3(context), fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                        ),
-                        // Animated pulse dot
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.greenDim,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(width: 6, height: 6,
-                                decoration: BoxDecoration(color: AppColors.green, shape: BoxShape.circle,
-                                  boxShadow: [BoxShadow(color: AppColors.green.withValues(alpha: 0.6), blurRadius: 8)])),
-                              const SizedBox(width: 6),
-                              Text('${allItems.length}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
-                            ],
-                          ),
-                        ).animate(onPlay: (c) => c.repeat(reverse: true))
-                         .shimmer(duration: 2000.ms, color: AppColors.green.withValues(alpha: 0.15)),
-                      ],
-                    ).animate().fade(duration: 300.ms),
+            _buildHeader(allItems.length, l).animate().fade(duration: 300.ms).slideY(begin: 0.1),
 
-                    const SizedBox(height: 20),
-
-                    // ── Glassmorphic stat row ──
-                    Row(
-                      children: [
-                        _GlassStat(icon: Icons.receipt_long_rounded, label: l.personal,
-                          value: '$personalCount', color: AppColors.blue, isDark: isDark),
-                        const SizedBox(width: 10),
-                        _GlassStat(icon: Icons.group_rounded, label: l.group,
-                          value: '$groupCount', color: AppColors.green, isDark: isDark),
-                        const SizedBox(width: 10),
-                        _GlassStat(icon: Icons.handshake_rounded, label: l.settled,
-                          value: '$settlementCount', color: AppColors.purple, isDark: isDark),
-                      ],
-                    ).animate().fade().slideY(begin: 0.08, end: 0, duration: 400.ms, delay: 100.ms),
-
-                    const SizedBox(height: 18),
-
-                    // ── Filter pills ──
-                    SizedBox(
-                      height: 40,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
+            // ── Search bar + filter button (Revolut-style) ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: TC.card(context),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: TC.border(context)),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Row(
                         children: [
-                          _Pill(label: l.all, active: _filter == _Filter.all,
-                            onTap: () => setState(() => _filter = _Filter.all)),
-                          _Pill(label: l.personal, icon: Icons.receipt_long_rounded, color: AppColors.blue, active: _filter == _Filter.personal,
-                            onTap: () => setState(() => _filter = _Filter.personal)),
-                          _Pill(label: l.groups, icon: Icons.group_rounded, color: AppColors.green, active: _filter == _Filter.groups,
-                            onTap: () => setState(() => _filter = _Filter.groups)),
-                          _Pill(label: l.settled, icon: Icons.handshake_rounded, color: AppColors.purple, active: _filter == _Filter.settlements,
-                            onTap: () => setState(() => _filter = _Filter.settlements)),
+                          Icon(Icons.search_rounded, size: 18, color: TC.text3(context)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchCtrl,
+                              style: TC.geist(context, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Search',
+                                hintStyle: TC.geist(context, fontSize: 14, color: TC.text3(context)),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              onChanged: (val) => setState(() => _searchQuery = val),
+                            ),
+                          ),
+                          if (_searchQuery.isNotEmpty)
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _searchCtrl.clear();
+                                _searchQuery = '';
+                              }),
+                              child: Icon(Icons.close, size: 16, color: TC.text3(context)),
+                            ),
                         ],
                       ),
-                    ).animate().fade().slideY(begin: 0.08, end: 0, duration: 400.ms, delay: 200.ms),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _showFilterSheet,
+                    child: Container(
+                      width: 48, height: 48,
+                      decoration: BoxDecoration(
+                        color: _hasActiveFilter ? TC.primary(context) : TC.card(context),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: _hasActiveFilter ? TC.primary(context) : TC.border(context)),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(Icons.tune_rounded,
+                          size: 20,
+                          color: _hasActiveFilter ? Colors.white : TC.text(context)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-                    const SizedBox(height: 6),
-                  ],
-                ),
+            // ── Results count ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              child: Text(
+                '${filtered.length} results',
+                style: TC.geist(context, fontSize: 11, fontWeight: FontWeight.w500, color: TC.text3(context)),
               ),
             ),
 
             // ── Content ──
-            if (filtered.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: EmptyState(
-                    icon: '📭', title: l.noActivityYet,
-                    subtitle: _filter == _Filter.all
-                      ? l.addActivityHint
-                      : 'No ${_filter.name} activity found',
-                  ).animate().fade().scale(duration: 400.ms, delay: 300.ms),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (_, i) => sliverChildren[i],
-                    childCount: sliverChildren.length,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: EmptyState(
+                        icon: '📭', title: l.noActivityYet,
+                        subtitle: _filter == _Filter.all
+                            ? l.addActivityHint
+                            : 'No matching activity found',
+                      ).animate().fade(duration: 400.ms),
+                    )
+                  : ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 100),
+                      itemCount: labelOrder.length,
+                      itemBuilder: (context, i) {
+                        final label = labelOrder[i];
+                        final section = grouped[label]!;
+                        final isExpanded = _expandedGroups[label] ?? true;
 
-  void _onTap(BuildContext ctx, AppState state, _Item item) {
-    HapticFeedback.mediumImpact();
-    if (item.receiptPath != null) {
-      Navigator.push(ctx, MaterialPageRoute(
-        builder: (_) => ReceiptViewer(imagePath: item.receiptPath!, title: item.title)));
-      return;
-    }
-    if (item.kind == _Kind.groupExpense && item.group != null) {
-      state.currentGroup = item.group;
-      Navigator.push(ctx, MaterialPageRoute(builder: (_) => const GroupDetailScreen()));
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// GLASSMORPHIC STAT CARD
-// ═══════════════════════════════════════════════════════════════════════════════
-class _GlassStat extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  final bool isDark;
-  const _GlassStat({required this.icon, required this.label,
-    required this.value, required this.color, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [
-              color.withValues(alpha: isDark ? 0.12 : 0.08),
-              color.withValues(alpha: isDark ? 0.04 : 0.02),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withValues(alpha: isDark ? 0.2 : 0.15)),
-          boxShadow: [
-            BoxShadow(color: color.withValues(alpha: isDark ? 0.08 : 0.05),
-              blurRadius: 16, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 14, color: color),
+                        return _buildDateGroup(label, section, isExpanded, l, isDark, i)
+                            .animate(delay: Duration(milliseconds: 50 + (i * 30)))
+                            .fade(duration: 300.ms)
+                            .slideY(begin: 0.05);
+                      },
+                    ),
             ),
-            const SizedBox(height: 10),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color, height: 1)),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
           ],
         ),
       ),
     );
   }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FILTER PILL
-// ═══════════════════════════════════════════════════════════════════════════════
-class _Pill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final IconData? icon;
-  final Color? color;
-  const _Pill({required this.label, required this.active, required this.onTap, this.icon, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () { HapticFeedback.selectionClick(); onTap(); },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: active ? (color ?? AppColors.green) : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: active ? (color ?? AppColors.green) : TC.border(context),
-            width: active ? 1.5 : 1,
-          ),
-          boxShadow: active ? [
-            BoxShadow(color: (color ?? AppColors.green).withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
-          ] : [],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 14, color: active ? Colors.black : (color ?? TC.text2(context))),
-              const SizedBox(width: 6),
-            ],
-            Text(label, style: TextStyle(
-              fontSize: 13,
-              fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-              color: active ? Colors.black : TC.text2(context),
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION HEADER (date divider)
-// ═══════════════════════════════════════════════════════════════════════════════
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final int count;
-  const _SectionHeader({required this.label, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHeader(int totalCount, AppLocalizations l) {
+    final canPop = Navigator.of(context).canPop();
     return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 10),
-      child: Row(
+      padding: EdgeInsets.fromLTRB(18, canPop ? 12 : 24, 18, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w800,
-            color: TC.text3(context), letterSpacing: 1.8)),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: TC.card2(context),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text('$count', style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Container(height: 0.5, color: TC.border(context))),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRANSACTION TILE — clean, Revolut-style row
-// ═══════════════════════════════════════════════════════════════════════════════
-class _TransactionTile extends StatefulWidget {
-  final _Item item;
-  final bool isDark;
-  final Color kindColor;
-  final VoidCallback onTap;
-  final int delay;
-  const _TransactionTile({required this.item, required this.isDark,
-    required this.kindColor, required this.onTap, required this.delay});
-
-  @override
-  State<_TransactionTile> createState() => _TransactionTileState();
-}
-
-class _TransactionTileState extends State<_TransactionTile> {
-  double _scale = 1.0;
-
-  String _kindTag(_Kind k) {
-    final l = AppLocalizations.of(context);
-    switch (k) {
-      case _Kind.personal:     return l.personal;
-      case _Kind.groupExpense: return l.group;
-      case _Kind.settlement:   return l.settlement;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
-    final amtColor = item.kind == _Kind.settlement
-        ? AppColors.purple
-        : item.isPositive ? AppColors.green : AppColors.red;
-
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.97),
-      onTapUp: (_) { setState(() => _scale = 1.0); widget.onTap(); },
-      onTapCancel: () => setState(() => _scale = 1.0),
-      child: AnimatedScale(
-        scale: _scale, duration: const Duration(milliseconds: 120),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(
-              color: TC.border(context).withValues(alpha: 0.4), width: 0.5)),
-          ),
-          child: Row(
-            children: [
-              // ── Icon circle with gradient ring ──
-              Container(
-                width: 48, height: 48,
+          if (canPop) ...[
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.pop(context);
+              },
+              child: Container(
+                width: 34,
+                height: 34,
+                margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [
-                      widget.kindColor.withValues(alpha: widget.isDark ? 0.18 : 0.12),
-                      widget.kindColor.withValues(alpha: widget.isDark ? 0.06 : 0.04),
-                    ],
-                  ),
-                  border: Border.all(color: widget.kindColor.withValues(alpha: 0.25), width: 1.5),
+                  color: TC.card(context),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: TC.border(context)),
                 ),
                 alignment: Alignment.center,
-                child: item.kind == _Kind.settlement
-                    ? Icon(Icons.check_circle_rounded, color: widget.kindColor, size: 24)
-                    : Text(item.emoji, style: const TextStyle(fontSize: 22)),
+                child: Icon(Icons.arrow_back_ios_new_rounded, color: TC.text(context), size: 14),
               ),
-              const SizedBox(width: 14),
-
-              // ── Title + subtitle + tag ──
+            ),
+          ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.title,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                        color: TC.text(context), height: 1.2),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        // Kind dot
-                        Container(width: 5, height: 5,
-                          decoration: BoxDecoration(color: widget.kindColor, shape: BoxShape.circle)),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(item.subtitle,
-                            style: TextStyle(fontSize: 12, color: TC.text3(context), fontWeight: FontWeight.w500),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
+                    Text(
+                      l.activity,
+                      style: TC.gloock(context, fontSize: 28, color: TC.text(context), letterSpacing: -0.8),
                     ),
-                    if (item.receiptPath != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.blueDim,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.attach_file_rounded, size: 10, color: AppColors.blue),
-                                const SizedBox(width: 2),
-                                Text(AppLocalizations.of(context).receipt, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.blue)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    const SizedBox(height: 2),
+                    Text(
+                      l.financialTimeline,
+                      style: TC.geist(context, fontSize: 11, color: TC.text3(context), fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: TC.primaryPale(context),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: TC.primary(context).withValues(alpha: 0.25), width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(color: TC.primary(context), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$totalCount',
+                      style: TC.gloock(context, fontSize: 13, color: TC.primary(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-              // ── Amount + arrow ──
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
+  bool get _hasActiveFilter => _filter != _Filter.all || _selectedCategory != 'All';
+
+  String _scopeLabel(_Filter f, AppLocalizations l) {
+    switch (f) {
+      case _Filter.all: return l.all;
+      case _Filter.personal: return l.personal;
+      case _Filter.groups: return l.groups;
+      case _Filter.settlements: return l.settled;
+    }
+  }
+
+  String _scopeIcon(_Filter f) {
+    switch (f) {
+      case _Filter.all: return '\u{1F5C2}\u{FE0F}';
+      case _Filter.personal: return '\u{1F5D2}\u{FE0F}';
+      case _Filter.groups: return '\u{1F465}';
+      case _Filter.settlements: return '\u{1F91D}';
+    }
+  }
+
+  void _showFilterSheet() {
+    HapticFeedback.lightImpact();
+    final l = AppLocalizations.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.card(context),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) {
+            void choose(VoidCallback fn) {
+              HapticFeedback.selectionClick();
+              setState(fn);
+              setSheet(() {});
+            }
+            Widget chip(String label, bool selected, VoidCallback onTap) {
+              return GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: selected ? TC.primary(context) : TC.card2(context),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: selected ? TC.primary(context) : TC.border(context)),
+                  ),
+                  child: Text(
+                    label,
+                    style: TC.geist(context,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : TC.text2(context)),
+                  ),
+                ),
+              );
+            }
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(
+                            color: TC.border(context),
+                            borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text('Filters',
+                            style: TC.gloock(context, fontSize: 20, color: TC.text(context))),
+                        const Spacer(),
+                        if (_hasActiveFilter)
+                          GestureDetector(
+                            onTap: () => choose(() {
+                              _filter = _Filter.all;
+                              _selectedCategory = 'All';
+                            }),
+                            child: Text('Clear all',
+                                style: TC.geist(context,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: TC.primary(context))),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text('TYPE',
+                        style: TC.geist(context,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: TC.text3(context),
+                            letterSpacing: 1.2)),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _Filter.values.map((f) {
+                        return chip('${_scopeIcon(f)}  ${_scopeLabel(f, l)}', _filter == f,
+                            () => choose(() => _filter = f));
+                      }).toList(),
+                    ),
+                    if (_availableCategories.length > 1) ...[
+                      const SizedBox(height: 20),
+                      Text('CATEGORY',
+                          style: TC.geist(context,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: TC.text3(context),
+                              letterSpacing: 1.2)),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableCategories.map((cat) {
+                          return chip(_categoryLabel(cat), _selectedCategory == cat,
+                              () => choose(() => _selectedCategory = cat));
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(sheetCtx),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: TC.primary(context),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text('Done',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  double _calculateDailyTotal(List<_Item> items) {
+    double total = 0;
+    for (final item in items) {
+      if (item.kind == _Kind.settlement) continue;
+      if (item.isPositive) {
+        total += item.amount;
+      } else {
+        total -= item.amount;
+      }
+    }
+    return total;
+  }
+
+  Widget _buildDateGroup(String label, List<_Item> items, bool isExpanded, AppLocalizations l, bool isDark, int index) {
+    final dailyNet = _calculateDailyTotal(items);
+    
+    // Find daily symbol
+    String dailySym = '€';
+    if (items.isNotEmpty) {
+      final firstSym = items.first.sym;
+      if (items.every((item) => item.sym == firstSym)) {
+        dailySym = firstSym;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() => _expandedGroups[label] = !isExpanded);
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+              child: Row(
                 children: [
                   Text(
-                    '${item.isPositive ? '+' : '−'}${item.sym}${AppCurrencyUtils.formatAmount(item.amount)}',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: amtColor, height: 1.2),
+                    label.toUpperCase(),
+                    style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w800, color: TC.text3(context), letterSpacing: 1.5),
                   ),
-                  const SizedBox(height: 2),
-                  Text(_kindTag(item.kind),
-                    style: TextStyle(fontSize: 10, color: widget.kindColor, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      '${items.length}',
+                      style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w800, color: TC.text2(context)),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (dailyNet != 0) ...[
+                    Text(
+                      '${dailyNet >= 0 ? '+' : '-'}$dailySym${AppCurrencyUtils.formatAmount(dailyNet.abs(), 0)}',
+                      style: TC.gloock(
+                        context,
+                        fontSize: 12,
+                        color: dailyNet >= 0 ? TC.ok(context) : TC.er(context),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: Text('⌄', style: TextStyle(fontSize: 12, color: TC.text3(context))),
+                  ),
                 ],
               ),
-              if (item.kind == _Kind.groupExpense && item.group != null) ...[
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded, size: 18, color: TC.text3(context)),
-              ],
+            ),
+          ),
+          // Body
+          AnimatedCrossFade(
+            firstChild: Container(
+              decoration: BoxDecoration(
+                color: TC.card(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: TC.border(context)),
+                boxShadow: [
+                  BoxShadow(color: TC.shadow(context), blurRadius: 10, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  children: List.generate(items.length, (i) => _buildTransactionRow(items[i], i == items.length - 1, l)),
+                ),
+              ),
+            ),
+            secondChild: const SizedBox(width: double.infinity, height: 0),
+            crossFadeState: isExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            duration: const Duration(milliseconds: 250),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionRow(_Item item, bool isLast, AppLocalizations l) {
+    Color dotColor, tagBg, tagText;
+    Color iconBg = TC.bg(context);
+    String tagLabel;
+
+    if (item.kind == _Kind.personal) {
+      dotColor = TC.blue(context);
+      tagText = TC.blue(context);
+      tagBg = TC.bluePale(context);
+      tagLabel = l.personal;
+      iconBg = TC.bluePale(context);
+    } else if (item.kind == _Kind.groupExpense) {
+      dotColor = TC.primary(context);
+      tagText = TC.primary(context);
+      tagBg = TC.primaryPale(context);
+      tagLabel = l.group;
+      iconBg = TC.primaryPale(context);
+    } else {
+      dotColor = TC.purple(context);
+      tagText = TC.purple(context);
+      tagBg = TC.purplePale(context);
+      tagLabel = l.settled;
+      iconBg = TC.purplePale(context);
+    }
+
+    final amtColor = item.isPositive ? TC.ok(context) : TC.er(context);
+    final prefix = item.isPositive ? '+' : '-';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          if (item.receiptPath != null) {
+            Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ReceiptViewer(imagePath: item.receiptPath!, title: item.title)));
+            return;
+          }
+          if (item.kind == _Kind.groupExpense && item.group != null) {
+            final state = context.read<AppState>();
+            state.currentGroup = item.group;
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupDetailScreen()));
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            border: isLast ? null : Border(bottom: BorderSide(color: TC.border(context))),
+          ),
+          child: Row(
+            children: [
+              // Vertical tx-dot
+              Container(
+                width: 3,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Icon Bubble
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text(item.emoji, style: const TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(width: 12),
+              // Body
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: TC.geist(context, fontSize: 13, fontWeight: FontWeight.w600, color: TC.text(context), height: 1.2),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Text(
+                          item.subtitle,
+                          style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w500, color: TC.text3(context)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text('·', style: TextStyle(fontSize: 10, color: TC.text3(context))),
+                        ),
+                        Expanded(
+                          child: Text(
+                            item.sub2,
+                            style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w500, color: TC.text3(context)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Right side
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$prefix${item.sym}${AppCurrencyUtils.formatAmount(item.amount)}',
+                    style: TC.gloock(context, fontSize: 14, color: amtColor, letterSpacing: -0.3),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: tagBg, borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                      tagLabel,
+                      style: TC.geist(context, fontSize: 9, fontWeight: FontWeight.w700, color: tagText),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 14, color: TC.text3(context)),
             ],
           ),
         ),
-      ).animate().fade(duration: 300.ms, delay: Duration(milliseconds: widget.delay))
-       .slideX(begin: 0.02, end: 0, duration: 300.ms),
+      ),
     );
   }
+}
+
+class SliverToBoxAdapterDummy extends StatelessWidget {
+  final Widget child;
+  const SliverToBoxAdapterDummy({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => child;
 }

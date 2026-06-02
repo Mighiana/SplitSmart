@@ -7,10 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
+import '../utils/theme_utils.dart';
 import '../services/analytics_service.dart';
+import '../services/firestore_service.dart';
+import 'paywall_screen.dart';
 
 class QRShareScreen extends StatefulWidget {
   final GroupData group;
@@ -20,12 +24,67 @@ class QRShareScreen extends StatefulWidget {
   State<QRShareScreen> createState() => _QRShareScreenState();
 }
 
-class _QRShareScreenState extends State<QRShareScreen> {
+class _QRShareScreenState extends State<QRShareScreen>
+    with TickerProviderStateMixin {
   final GlobalKey _qrKey = GlobalKey();
+  String? _inviteCode;
+  bool _isLoadingCode = true;
+  bool _sharing = false;
+  bool _copied = false;
+  bool _guestBusy = false;
 
-  /// Payload encoded into the QR
-  /// SEC-M1: When an inviteCode is present (cloud mode), omit member names
-  /// to prevent privacy leakage if the QR image is intercepted.
+  late AnimationController _glowCtrl;
+  late AnimationController _entryCtrl;
+  late Animation<double> _glowAnim;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _glowCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2000))
+      ..repeat(reverse: true);
+    _glowAnim = Tween(begin: 0.6, end: 1.0)
+        .animate(CurvedAnimation(parent: _glowCtrl, curve: Curves.easeInOut));
+
+    _entryCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 700));
+    _fadeAnim = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
+
+    _fetchInviteCode();
+  }
+
+  @override
+  void dispose() {
+    _glowCtrl.dispose();
+    _entryCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchInviteCode() async {
+    _inviteCode = widget.group.inviteCode;
+    if (_inviteCode == null || _inviteCode!.isEmpty) {
+      final fetched =
+          await FirestoreService.instance.getGroupInviteCode(widget.group.id);
+      if (fetched != null) {
+        _inviteCode = fetched;
+        widget.group.inviteCode = fetched;
+      }
+    }
+    if (_inviteCode != null && _inviteCode!.isNotEmpty) {
+      await FirestoreService.instance
+          .ensureInviteCodeMapping(widget.group.id, _inviteCode!);
+    }
+    if (mounted) {
+      setState(() => _isLoadingCode = false);
+      _entryCtrl.forward();
+    }
+  }
+
   String get _payload {
     final data = {
       'v': 1,
@@ -33,41 +92,35 @@ class _QRShareScreenState extends State<QRShareScreen> {
       'emoji': widget.group.emoji,
       'currency': widget.group.currency,
       'sym': widget.group.sym,
-      if (widget.group.inviteCode != null) 'inviteCode': widget.group.inviteCode,
-      // Always include members so offline scans don't result in 0 members
+      if (_inviteCode != null && _inviteCode!.isNotEmpty)
+        'inviteCode': _inviteCode,
       'members': widget.group.members,
     };
     return jsonEncode(data);
   }
 
   Future<void> _shareQRImage() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
     try {
       HapticFeedback.mediumImpact();
       final boundary =
           _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
-
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
-
       final bytes = byteData.buffer.asUint8List();
       final dir = await getTemporaryDirectory();
       final file = File(
-        '${dir.path}/splitsmart_qr_${widget.group.name.replaceAll(' ', '_')}.png',
-      );
+          '${dir.path}/splitsmart_qr_${widget.group.name.replaceAll(' ', '_')}.png');
       await file.writeAsBytes(bytes);
-
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path, mimeType: 'image/png')],
-          subject: 'Join ${widget.group.name} on SplitSmart',
-          text:
-              'Scan this QR code to join the "${widget.group.name}" group on SplitSmart!',
-        ),
-      );
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'image/png')],
+        subject: 'Join ${widget.group.name} on SplitSmart',
+        text: 'Scan this QR code to join "${widget.group.name}" on SplitSmart!',
+      ));
       AnalyticsService.logGroupQRShared();
-      // SEC-M5: Clean up temp QR image after sharing
       try { await file.delete(); } catch (_) {}
     } catch (e) {
       if (mounted) {
@@ -75,304 +128,277 @@ class _QRShareScreenState extends State<QRShareScreen> {
           SnackBar(content: Text('Could not share QR: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
     }
+  }
+
+  Future<void> _copyCode() async {
+    if (_copied) return;
+    HapticFeedback.mediumImpact();
+    await Clipboard.setData(ClipboardData(text: _inviteCode ?? _payload));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            Navigator.pop(context);
-          },
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: TC.card(context),
-              shape: BoxShape.circle,
-              border: Border.all(color: TC.border(context)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '←',
-              style: TextStyle(fontSize: 16, color: TC.text(context)),
-            ),
-          ),
-        ),
-        title: Text(
-          'Share via QR',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: TC.text(context),
-          ),
-        ),
-        actions: [
-          GestureDetector(
-            onTap: _shareQRImage,
-            child: Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.greenDim,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.green.withValues(alpha: 0.4)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('📤', style: TextStyle(fontSize: 13)),
-                  SizedBox(width: 4),
-                  Text(
-                    'Share QR',
-                    style: TextStyle(
-                      color: AppColors.green,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+      backgroundColor: TC.bg(context),
+      body: _isLoadingCode
+          ? _buildLoader()
+          : Stack(
+              children: [
+                // ── Ambient glow background ─────────────────────────────
+                Positioned(
+                  top: -80,
+                  left: size.width * 0.1,
+                  child: AnimatedBuilder(
+                    animation: _glowAnim,
+                    builder: (_, __) => Opacity(
+                      opacity: _glowAnim.value * 0.18,
+                      child: Container(
+                        width: size.width * 0.8,
+                        height: size.width * 0.8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(colors: [
+                            Color(0xFF14A085),
+                            Colors.transparent,
+                          ]),
+                        ),
+                      ),
                     ),
                   ),
-                ],
+                ),
+
+                // ── Main content ────────────────────────────────────────
+                FadeTransition(
+                  opacity: _fadeAnim,
+                  child: SlideTransition(
+                    position: _slideAnim,
+                    child: SafeArea(
+                      child: Column(
+                        children: [
+                          _buildHeader(context),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 16),
+                                  RepaintBoundary(
+                                    key: _qrKey,
+                                    child: _buildQRPanel(context, isDark),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildActionButtons(context),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  // ── Loading state ───────────────────────────────────────────────────────────
+  Widget _buildLoader() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(color: AppColors.green, strokeWidth: 2.5),
+          SizedBox(height: 16),
+          Text('Generating invite code…',
+              style: TextStyle(color: AppColors.green, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.pop(context);
+            },
+            child: Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: TC.card(context),
+                shape: BoxShape.circle,
+                border: Border.all(color: TC.border(context)),
               ),
+              child: Icon(Icons.arrow_back_ios_new_rounded,
+                  size: 15, color: TC.text(context)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('INVITE',
+                    style: TC.geist(
+                      context,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: TC.primaryMd(context),
+                      letterSpacing: 1.5,
+                    )),
+                const SizedBox(height: 1),
+                Text('Invite via QR',
+                    style: TC.gloock(
+                      context,
+                      fontSize: 22,
+                      letterSpacing: -0.5,
+                      color: TC.text(context),
+                    )),
+              ],
             ),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+    );
+  }
+
+  // ── QR Panel ────────────────────────────────────────────────────────────────
+  Widget _buildQRPanel(BuildContext context, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: TC.primary(context).withValues(alpha: 0.10),
+            blurRadius: 30,
+            spreadRadius: 0,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const SizedBox(height: 8),
-
-            // ── Instruction banner ─────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.greenDim,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Text('📲', style: TextStyle(fontSize: 20)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Show this QR code to a friend. They open SplitSmart, tap Scan QR, and the group imports instantly.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: TC.text(context),
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-
-            // ── QR card ────────────────────────────────────────────────────
-            RepaintBoundary(
-              key: _qrKey,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
+            // QR code with animated glow ring
+            AnimatedBuilder(
+              animation: _glowAnim,
+              builder: (_, child) => Container(
                 decoration: BoxDecoration(
-                  color: TC.card(context),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: TC.border(context), width: 1.5),
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.green.withValues(alpha: 0.08),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
+                      color: AppColors.green.withValues(alpha: _glowAnim.value * 0.22),
+                      blurRadius: 28,
+                      spreadRadius: 4,
                     ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    // Group emoji + name
-                    Text(widget.group.emoji, style: const TextStyle(fontSize: 48)),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.group.name,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: TC.text(context),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${widget.group.currency} · ${widget.group.members.length} members',
-                      style: TextStyle(fontSize: 13, color: TC.text2(context)),
-                    ),
-
-                    // Members row
-                    if (widget.group.members.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        alignment: WrapAlignment.center,
-                        children: widget.group.members
-                            .map(
-                              (m) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.06)
-                                      : Colors.black.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  m,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: TC.text2(context),
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-
-                    // QR code
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: QrImageView(
-                        data: _payload,
-                        version: QrVersions.auto,
-                        size: 220,
-                        gapless: false,
-                        errorCorrectionLevel: QrErrorCorrectLevel.M,
-                        eyeStyle: const QrEyeStyle(
-                          eyeShape: QrEyeShape.square,
-                          color: Color(0xFF0A0A0A),
-                        ),
-                        dataModuleStyle: const QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.square,
-                          color: Color(0xFF0A0A0A),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Scan label
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.greenDim,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            '✓ SplitSmart QR',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.green,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: child,
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // ── Share QR image button ──────────────────────────────────────
-            GestureDetector(
-              onTap: _shareQRImage,
               child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.green,
-                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                alignment: Alignment.center,
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('📤', style: TextStyle(fontSize: 16)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Share QR Image',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
+                child: QrImageView(
+                  data: _payload,
+                  version: QrVersions.auto,
+                  size: 190,
+                  gapless: true,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Color(0xFF0A0A0A),
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Color(0xFF111111),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 18),
 
-            // ── Copy payload button ────────────────────────────────────────
-            _CopyButton(payload: _payload),
-            const SizedBox(height: 12),
+            // Divider
+            Container(height: 1, color: TC.border(context)),
+            const SizedBox(height: 16),
 
-            // ── Members list ───────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: TC.card(context),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: TC.border(context)),
+            // Invite code — tap to copy
+            Text(
+              'INVITE CODE',
+              style: TC.geist(
+                context,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: TC.text3(context),
+                letterSpacing: 1.8,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _copyCode,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'WHAT\'S INCLUDED',
+                    _inviteCode != null && _inviteCode!.isNotEmpty
+                        ? _inviteCode!
+                        : 'No code',
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: TC.text3(context),
-                      letterSpacing: 1.5,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: TC.text(context),
+                      letterSpacing: 4,
+                      fontFamily: 'monospace',
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _InfoRow(label: 'Group name', value: widget.group.name),
-                  _InfoRow(label: 'Emoji', value: widget.group.emoji),
-                  _InfoRow(
-                    label: 'Currency',
-                    value: '${widget.group.currency} (${widget.group.sym})',
+                  const SizedBox(width: 10),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: Icon(
+                      _copied ? Icons.check_circle_rounded : Icons.copy_rounded,
+                      key: ValueKey(_copied),
+                      size: 18,
+                      color: _copied ? TC.primary(context) : TC.text3(context),
+                    ),
                   ),
-                  _InfoRow(
-                    label: 'Members',
-                    value: widget.group.members.join(', '),
-                  ),
-                  _InfoRow(label: 'Expenses', value: 'Not included (fresh start)'),
                 ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _copied ? 'Copied to clipboard' : 'Tap the code to copy',
+              style: TC.geist(
+                context,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: _copied ? TC.primary(context) : TC.text3(context),
               ),
             ),
           ],
@@ -380,93 +406,216 @@ class _QRShareScreenState extends State<QRShareScreen> {
       ),
     );
   }
-}
 
-class _InfoRow extends StatelessWidget {
-  final String label, value;
-  const _InfoRow({required this.label, required this.value});
+  // ── Guest access (premium, owner-controlled) ────────────────────────────────
+  Future<void> _toggleGuestAccess(bool enable) async {
+    final state = context.read<AppState>();
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    // Enabling requires Premium → send non-subscribers to the paywall.
+    if (enable && !state.hasPremium) {
+      final purchased = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const PaywallScreen()),
+      );
+      if (purchased != true || !mounted) return;
+    }
+
+    setState(() => _guestBusy = true);
+    final ok = await state.setGroupGuestAccess(widget.group, enable);
+    if (!mounted) return;
+    setState(() {
+      _guestBusy = false;
+      if (ok) widget.group.isPremiumGroup = enable;
+    });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update guest access. Try again.'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildGuestAccessCard(BuildContext context) {
+    final enabled = widget.group.isPremiumGroup;
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: enabled ? AppColors.green : TC.border(context),
+        ),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: TC.text2(context),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
+          const Text('🔗', style: TextStyle(fontSize: 22)),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: TC.text(context),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Allow guests to join',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: TC.text(context))),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.greenDim,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text('PREMIUM',
+                          style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              color: AppColors.green)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text('People can join without an account.',
+                    style:
+                        TextStyle(fontSize: 12, color: TC.text2(context))),
+              ],
             ),
           ),
+          _guestBusy
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child:
+                      CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              : Switch.adaptive(
+                  value: enabled,
+                  activeThumbColor: AppColors.green,
+                  onChanged: (v) => _toggleGuestAccess(v),
+                ),
         ],
       ),
     );
   }
-}
 
-class _CopyButton extends StatefulWidget {
-  final String payload;
-  const _CopyButton({required this.payload});
-
-  @override
-  State<_CopyButton> createState() => _CopyButtonState();
-}
-
-class _CopyButtonState extends State<_CopyButton> {
-  bool _copied = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        HapticFeedback.mediumImpact();
-        await Clipboard.setData(ClipboardData(text: widget.payload));
-        setState(() => _copied = true);
-        // SEC-9: Auto-clear clipboard after 30 seconds to prevent leaks
-        Future.delayed(const Duration(seconds: 30), () {
-          Clipboard.setData(const ClipboardData(text: ''));
-        });
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _copied = false);
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: _copied ? AppColors.greenDim : TC.card(context),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _copied ? AppColors.green : TC.border(context),
+  // ── Action buttons ──────────────────────────────────────────────────────────
+  Widget _buildActionButtons(BuildContext context) {
+    return Column(
+      children: [
+        _buildGuestAccessCard(context),
+        // Primary: Share QR
+        GestureDetector(
+          onTap: _sharing ? null : _shareQRImage,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            decoration: BoxDecoration(
+              gradient: _sharing
+                  ? null
+                  : const LinearGradient(
+                      colors: [Color(0xFF14A085), Color(0xFF0D7377)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              color: _sharing ? TC.card(context) : null,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: _sharing
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: AppColors.green.withValues(alpha: 0.32),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+              border: _sharing
+                  ? Border.all(color: TC.border(context))
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_sharing)
+                  const SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.green),
+                  )
+                else
+                  const Icon(Icons.ios_share_rounded,
+                      size: 18, color: Colors.white),
+                const SizedBox(width: 9),
+                Text(
+                  _sharing ? 'Preparing image…' : 'Share QR Image',
+                  style: TextStyle(
+                    color: _sharing ? TC.text2(context) : Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          _copied ? '✓ Copied to clipboard!' : '📋 Copy QR data',
-          style: TextStyle(
-            color: _copied ? AppColors.green : TC.text(context),
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
+        const SizedBox(height: 10),
+
+        // Secondary: Copy invite code
+        GestureDetector(
+          onTap: _copyCode,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            decoration: BoxDecoration(
+              color: _copied
+                  ? AppColors.green.withValues(alpha: 0.08)
+                  : TC.card(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _copied
+                    ? AppColors.green.withValues(alpha: 0.5)
+                    : TC.border(context),
+                width: _copied ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: Icon(
+                    _copied
+                        ? Icons.check_circle_rounded
+                        : Icons.copy_rounded,
+                    key: ValueKey(_copied),
+                    size: 18,
+                    color: _copied ? AppColors.green : TC.text2(context),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: Text(
+                    _copied ? 'Code Copied!' : 'Copy Invite Code',
+                    key: ValueKey(_copied),
+                    style: TextStyle(
+                      color: _copied ? AppColors.green : TC.text(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

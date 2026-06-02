@@ -1,129 +1,117 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../main.dart';
 import '../utils/app_utils.dart';
 import '../l10n/app_localizations.dart';
-import '../services/export_service.dart';
-import '../utils/date_utils.dart';
-import 'group_detail_screen.dart';
-import 'new_group_screen.dart';
 import 'transaction_type_screen.dart';
 import 'personal_charts_screen.dart';
-import 'personal_transactions_screen.dart';
-import 'budget_screen.dart';
-import 'currencies_tab.dart';
-import 'groups_screen.dart';
+
+// ─── Filter enum ────────────────────────────────────────────────────────────
+enum _OvTab { all, personal, groups }
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
-
   @override
   State<HomeTab> createState() => _HomeTabState();
 }
 
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
-  String? _selectedCurrency;
-  String _spendPeriod = 'month'; // 'day', 'week', 'month', 'year'
-
-  bool _showTip = true;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
+  _OvTab _ovTab = _OvTab.all;
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final isDark = state.isDark;
-    final activeGroups = state.activeGroups;
+    final now = DateTime.now();
     final l = AppLocalizations.of(context);
 
-    // 1. Wallets logic
-    final netBalanceByCur = <String, double>{};
-    final groupCountByCur = <String, int>{};
-    for (final g in activeGroups) {
-      final bal = state.getMyBalance(g);
-      netBalanceByCur[g.currency] = (netBalanceByCur[g.currency] ?? 0) + bal;
-      groupCountByCur[g.currency] = (groupCountByCur[g.currency] ?? 0) + 1;
-    }
-    final List<MapEntry<String, double>> walletEntries = netBalanceByCur.entries.toList()
-      ..sort((a,b) => b.value.abs().compareTo(a.value.abs()));
-
-    // 2. Who owes you logic
-    final Map<String, _BalItem> owedMap = {};
-    final Map<String, _BalItem> oweMap = {};
-    for (final g in activeGroups) {
-      final plan = state.buildSettlePlan(g);
-      for (final p in plan) {
-        if (p.to == 'You') {
-          final key = '${p.from}_${g.currency}';
-          if (owedMap.containsKey(key)) {
-            owedMap[key] = _BalItem('', '', p.from, owedMap[key]!.amount + p.amount, g.sym, g.currency);
-          } else {
-            owedMap[key] = _BalItem('', '', p.from, p.amount, g.sym, g.currency);
-          }
-        } else if (p.from == 'You') {
-          final key = '${p.to}_${g.currency}';
-          if (oweMap.containsKey(key)) {
-            oweMap[key] = _BalItem('', '', p.to, oweMap[key]!.amount + p.amount, g.sym, g.currency);
-          } else {
-            oweMap[key] = _BalItem('', '', p.to, p.amount, g.sym, g.currency);
-          }
-        }
-      }
-    }
-    final List<_BalItem> owedItems = owedMap.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
-    final List<_BalItem> oweItems = oweMap.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
-
-    // Group totals by currency to avoid mixing different currencies
-    String _buildCurrencyTotal(List<_BalItem> items) {
-      final byCur = <String, double>{};
-      for (final i in items) {
-        byCur[i.currency] = (byCur[i.currency] ?? 0) + i.amount;
-      }
-      if (byCur.isEmpty) return '';
-      if (byCur.length == 1) {
-        final e = byCur.entries.first;
-        final sym = items.firstWhere((i) => i.currency == e.key).sym;
-        return '$sym${AppCurrencyUtils.formatAmount(e.value, 0)} total';
-      }
-      // Multiple currencies — show each
-      return byCur.entries.map((e) {
-        final sym = items.firstWhere((i) => i.currency == e.key).sym;
-        return '$sym${AppCurrencyUtils.formatAmount(e.value, 0)}';
-      }).join(' + ');
-    }
-    final owedTotal = _buildCurrencyTotal(owedItems);
-    final oweTotal = _buildCurrencyTotal(oweItems);
-
-    // Initial Currency selection - Prioritize group-related currencies
-    if (_selectedCurrency == null) {
-      if (activeGroups.isNotEmpty) {
-        _selectedCurrency = activeGroups.first.currency;
-      } else if (state.groupWallets.isNotEmpty) {
-        _selectedCurrency = state.groupWallets.keys.first;
-      } else if (state.transactions.isNotEmpty) {
-        // Only pick from transactions if it's a group share
-        final groupTx = state.transactions.where((t) => t.isGroupShare).toList();
-        if (groupTx.isNotEmpty) {
-          _selectedCurrency = groupTx.first.currency;
-        } else {
-          _selectedCurrency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD';
-        }
+    // Currency
+    String? selectedCur = state.dashboardCurrency;
+    if (selectedCur == null) {
+      if (state.activeCurrencies.isNotEmpty) {
+        selectedCur = state.activeCurrencies.first;
       } else {
-        _selectedCurrency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD';
+        selectedCur = 'USD';
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && state.dashboardCurrency == null) {
+          state.setDashboardCurrency(selectedCur!);
+        }
+      });
+    }
+
+    final curSym = AppState.currencies.firstWhere(
+      (c) => c.code == selectedCur,
+      orElse: () => const CurrencyData('', '', '', r'$'),
+    ).sym;
+    final curFlag = AppState.currencies.firstWhere(
+      (c) => c.code == selectedCur,
+      orElse: () => const CurrencyData('USD', 'US Dollar', '🇺🇸', r'$'),
+    ).flag;
+
+    // Date Range
+    final DateTime startDate = state.overviewStartDate ?? DateTime(now.year, now.month, 1);
+    final DateTime endDate = state.overviewEndDate ?? DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+    // Transactions for selected range
+    final allTxs = state.allTransactionsWithGroupShares;
+    final monthTxs = allTxs.where((t) {
+      if (t.currency != selectedCur) return false;
+      final d = t.rawDate;
+      if (d == null) return false;
+      if (_ovTab == _OvTab.personal && t.isGroupShare) return false;
+      if (_ovTab == _OvTab.groups && !t.isGroupShare) return false;
+      return d.isAfter(startDate.subtract(const Duration(seconds: 1))) && 
+             d.isBefore(endDate.add(const Duration(days: 1)));
+    }).toList();
+
+    final expenses = monthTxs.where((t) => t.type.toLowerCase() == 'expense').toList();
+    final incomes  = monthTxs.where((t) => t.type.toLowerCase() == 'income').toList();
+    final totalExpense = expenses.fold(0.0, (s, t) => s + t.amount);
+    final totalIncome  = incomes.fold(0.0,  (s, t) => s + t.amount);
+    final saved = totalIncome - totalExpense;
+
+    // Category breakdown
+    final Map<String, double> catSpent = {};
+    for (final t in expenses) {
+      catSpent[t.cat] = (catSpent[t.cat] ?? 0) + t.amount;
+    }
+    final sortedCats = catSpent.entries.toList()..sort((a,b) => b.value.compareTo(a.value));
+
+    // 4-segment trend data for the selected period
+    final List<double> incomeData = [];
+    final List<double> expenseData = [];
+    final List<String> monthLabels = [];
+    final int totalDays = endDate.difference(startDate).inDays + 1;
+    final int segmentDays = (totalDays / 4).ceil();
+    for (int i = 0; i < 4; i++) {
+      final sDate = startDate.add(Duration(days: i * segmentDays));
+      final eDate = (i == 3) ? endDate : sDate.add(Duration(days: segmentDays - 1));
+      monthLabels.add('W');
+      final segTxs = allTxs.where((t) {
+        final d = t.rawDate;
+        return d != null && d.compareTo(sDate) >= 0 && d.compareTo(eDate.add(const Duration(days: 1))) < 0 && t.currency == selectedCur;
+      });
+      incomeData.add(segTxs.where((t) => t.type.toLowerCase() == 'income').fold(0.0, (s,t) => s+t.amount));
+      expenseData.add(segTxs.where((t) => t.type.toLowerCase() == 'expense').fold(0.0, (s,t) => s+t.amount));
+    }
+
+
+    String dateLabel = '';
+    if (state.overviewStartDate != null && state.overviewEndDate != null) {
+      if (state.overviewStartDate!.month == state.overviewEndDate!.month && 
+          state.overviewStartDate!.year == state.overviewEndDate!.year &&
+          state.overviewEndDate!.day >= 28) {
+        dateLabel = _monthYear(state.overviewStartDate!);
+      } else {
+        dateLabel = '${_shortMonth(state.overviewStartDate!.month).toUpperCase()} ${state.overviewStartDate!.day} - ${_shortMonth(state.overviewEndDate!.month).toUpperCase()} ${state.overviewEndDate!.day}';
+      }
+    } else {
+      dateLabel = _monthYear(startDate);
     }
 
     return Scaffold(
@@ -133,846 +121,952 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 100),
           children: [
-            const SizedBox(height: 8),
-            
-            // Your balances
-            _buildSectionHeader(l.globalBalances, l.viewAll, () => _showAllWalletsSheet(context, walletEntries, groupCountByCur, isDark), isDark),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: LinearGradient(
-                   colors: [AppColors.green.withValues(alpha: 0.15), Colors.transparent],
-                   begin: Alignment.topLeft,
-                   end: Alignment.bottomRight,
-                ),
-                border: Border.all(color: AppColors.green.withValues(alpha: 0.2), width: 1.5),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -20, top: -20,
-                    child: Container(
-                       width: 120, height: 120,
-                       decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                             colors: [AppColors.green.withValues(alpha: 0.08), Colors.transparent],
-                          ),
-                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                             Text(l.availableCapital, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: TC.text3(context), letterSpacing: 1.2)),
-                             Icon(Icons.account_balance_wallet_rounded, color: AppColors.green, size: 16),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        if (walletEntries.isEmpty) 
-                           Text(l.noBalances, style: TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w600, color: TC.text2(context)))
-                        else ...[
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: walletEntries.length > 2 ? 2 : walletEntries.length,
-                            itemBuilder: (ctx, i) => _buildWalletRow(walletEntries[i].key, walletEntries[i].value, groupCountByCur[walletEntries[i].key]!, isDark),
-                          ),
-                          if (walletEntries.length > 2)
-                             Padding(
-                               padding: const EdgeInsets.only(top: 12),
-                               child: Text('+ ${walletEntries.length - 2} ${l.otherCurrencies}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.green)),
-                             ),
-                        ],
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: () {
-                             HapticFeedback.lightImpact();
-                             Navigator.push(context, MaterialPageRoute(builder: (_) => const Scaffold(body: CurrenciesTab())));
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            decoration: BoxDecoration(
-                               color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                               borderRadius: BorderRadius.circular(16),
-                               border: Border.all(color: TC.border(context).withValues(alpha: 0.5)),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(l.manageWallets, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fade(duration: 600.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
-
-            const SizedBox(height: 24),
-
-            // Who owes you
-            _buildSectionHeader(l.debtMonitor, l.analytics, () => _showAllOwesSheet(context, owedItems, oweItems, isDark), isDark),
-            Row(
-              children: [
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.greenDim.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.green.withValues(alpha: 0.15)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l.collectable, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.green, letterSpacing: 1)),
-                        const SizedBox(height: 8),
-                        if (owedItems.isEmpty)
-                          Text(l.cleanSlate, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
-                        else ...[
-                          Text(owedTotal, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: TC.text(context))),
-                          const SizedBox(height: 12),
-                          for (int i=0; i < (owedItems.length > 2 ? 2 : owedItems.length); i++)
-                            _buildOweRow(owedItems[i], isDark, true),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.redDim.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.red.withValues(alpha: 0.15)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l.payable, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.red, letterSpacing: 1)),
-                        const SizedBox(height: 8),
-                        if (oweItems.isEmpty)
-                          Text(l.allSettled, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TC.text3(context)))
-                        else ...[
-                          Text(oweTotal, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: TC.text(context))),
-                          const SizedBox(height: 12),
-                          for (int i=0; i < (oweItems.length > 2 ? 2 : oweItems.length); i++)
-                            _buildOweRow(oweItems[i], isDark, false),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-              ],
-            ).animate().fade(delay: 200.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutBack),
-
-            const SizedBox(height: 24),
-
-            // This month's spending
-            _buildSpendSection(state, isDark).animate().fade().slideY(begin: 0.1, end: 0, delay: 300.ms, duration: 400.ms),
-
-            const SizedBox(height: 24),
-
-            // Your groups
-            _buildSectionHeader(l.groups.toUpperCase(), l.seeAll, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupsTab())), isDark),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: TC.card(context), border: Border.all(color: TC.border(context)),
-                borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: TC.shadow(context), blurRadius: 12, offset: const Offset(0,2))],
-              ),
-              child: Column(
-                children: [
-                   if (activeGroups.isEmpty)
-                     const Padding(padding: EdgeInsets.all(20), child: Text('No groups yet.')),
-                   for (int i=0; i < (activeGroups.length > 3 ? 3 : activeGroups.length); i++) ...[
-                     _buildGroupRow(activeGroups[i], state, isDark, l),
-                     if (i < math.min(activeGroups.length - 1, 2))
-                       Container(height: 1, color: TC.border(context), margin: const EdgeInsets.symmetric(horizontal: 12)),
-                   ]
-                ],
-              ),
-            ).animate().fade().slideY(begin: 0.1, end: 0, delay: 400.ms, duration: 400.ms),
-
-            const SizedBox(height: 24),
-
-            // Quick actions
-            Padding(
-               padding: const EdgeInsets.symmetric(horizontal: 16),
-               child: Text(l.quickActions, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context))),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                   Expanded(child: _buildQaItem('➕', l.addExpense, AppColors.greenDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionTypeScreen())))),
-                   const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('👥', l.newGroupShort, AppColors.blueDim, isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewGroupScreen())))),
-                   const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('🎯', l.budget, const Color(0xFFb388ff).withValues(alpha: 0.1), isDark, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BudgetScreen())))),
-                   const SizedBox(width: 8),
-                   Expanded(child: _buildQaItem('📤', l.export_, const Color(0xFFff9f43).withValues(alpha: 0.1), isDark, () {
-                      HapticFeedback.lightImpact();
-                      ExportService.exportAndSharePdf(state, context);
-                   })),
-                ],
-              ),
-            ).animate().fade().slideY(begin: 0.1, end: 0, delay: 500.ms, duration: 400.ms),
-
-            const SizedBox(height: 24),
-
-            if (_showTip)
-              Container(
-                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                 decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(14), border: Border.all(color: TC.border(context)), boxShadow: [BoxShadow(color: TC.shadow(context), blurRadius: 12, offset: const Offset(0,2))]),
-                 child: Row(
-                   children: [
-                     const Text('💡', style: TextStyle(fontSize: 18)),
-                     const SizedBox(width: 10),
-                     Expanded(child: Text(l.longPressTip, style: TextStyle(fontSize: 12, color: TC.text2(context)))),
-                     GestureDetector(
-                       onTap: () => setState(() => _showTip = false),
-                       child: Padding(padding: const EdgeInsets.all(4), child: Text('✕', style: TextStyle(fontSize: 16, color: TC.text3(context)))),
-                     ),
-                   ],
-                 ),
-              ).animate().fade().slideY(begin: 0.1, end: 0, delay: 600.ms, duration: 400.ms),
+            _buildHeader(context, isDark, curFlag, selectedCur, dateLabel)
+                .animate()
+                .fadeIn(duration: 280.ms)
+                .slideY(begin: -0.08, end: 0, curve: Curves.easeOutCubic),
+            _buildSpendingStory(context, isDark, totalExpense, curSym, dateLabel, state, selectedCur, startDate, endDate, sortedCats)
+                .animate(delay: 150.ms)
+                .fadeIn(duration: 340.ms)
+                .slideY(begin: 0.12, end: 0, curve: Curves.easeOutBack),
+            _buildTabs(context, isDark)
+                .animate(delay: 220.ms)
+                .fadeIn(duration: 280.ms)
+                .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic),
+            const SizedBox(height: 14),
+            _buildSpendingSummary(context, isDark, sortedCats, totalExpense, curSym, l, state, selectedCur, startDate, endDate)
+                .animate(delay: 300.ms)
+                .fadeIn(duration: 360.ms)
+                .slideY(begin: 0.10, end: 0, curve: Curves.easeOutBack),
+            const SizedBox(height: 2),
+            _buildTwoCol(context, isDark, totalIncome, totalExpense, saved, curSym, incomeData, expenseData, monthLabels)
+                .animate(delay: 380.ms)
+                .fadeIn(duration: 360.ms)
+                .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
+            _buildCategoryBreakdown(context, isDark, sortedCats, totalExpense, curSym)
+                .animate(delay: 460.ms)
+                .fadeIn(duration: 360.ms)
+                .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
+            if (totalExpense <= 0 && totalIncome <= 0) _buildGetStarted(context, isDark),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, String action, VoidCallback onTap, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context))),
-          GestureDetector(onTap: onTap, child: Text(action, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.green))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWalletRow(String code, double bal, int groupCount, bool isDark) {
-    final l = AppLocalizations.of(context);
-    final cData = AppState.currencies.firstWhere((c) => c.code == code, orElse: () => CurrencyData(code, '', '🌐', '\$'));
-    final isPos = bal >= 0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 28, height: 28,
-            decoration: const BoxDecoration(shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: Text(cData.flag, style: const TextStyle(fontSize: 18)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-               crossAxisAlignment: CrossAxisAlignment.start,
-               children: [
-                 Text(code, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                 Text('$groupCount group${groupCount > 1 ? 's' : ''}', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-               ],
-            ),
-          ),
-          Column(
-             crossAxisAlignment: CrossAxisAlignment.end,
-             children: [
-                Text('${isPos ? '+' : '−'}${cData.sym}${AppCurrencyUtils.formatAmount(bal.abs())}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: isPos ? AppColors.green : AppColors.red)),
-                Text(isPos ? l.owedToYou : l.youOweShort, style: TextStyle(fontSize: 10, color: isPos ? AppColors.green : AppColors.red)),
-             ],
-          ),
-          const SizedBox(width: 4),
-          Text('›', style: TextStyle(fontSize: 14, color: TC.text3(context))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOweRow(_BalItem item, bool isDark, bool isPos) {
-    final name = item.person;
-    final ini = name.substring(0, math.min(2, name.length)).toUpperCase();
-    final cColor = isPos ? AppColors.green : AppColors.red;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 28, height: 28, decoration: BoxDecoration(color: isPos ? AppColors.greenDim : AppColors.redDim, shape: BoxShape.circle),
-            alignment: Alignment.center, child: Text(ini, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: cColor)),
-          ),
-          const SizedBox(width: 6),
-          Expanded(child: Text(name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text(context)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          Text('${isPos ? '+' : '−'}${item.sym}${AppCurrencyUtils.formatAmount(item.amount, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: cColor)),
-          const SizedBox(width: 4),
-          Text('›', style: TextStyle(fontSize: 11, color: TC.text3(context))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpendSection(AppState state, bool isDark) {
-    final l = AppLocalizations.of(context);
-    // Only show group-related transactions on the home dashboard
-    final curTxs = state.allTransactionsWithGroupShares
-        .where((t) => t.type.toLowerCase() == 'expense' && t.isGroupShare == true)
-        .toList();
-        
-    final _cursSet = <String>{};
-    for (var g in state.activeGroups) _cursSet.add(g.currency);
-    for (var t in curTxs) _cursSet.add(t.currency);
-    _cursSet.addAll(state.groupWallets.keys);
-    
-    final spendCurs = _cursSet.toList();
-    if (spendCurs.isNotEmpty && _selectedCurrency == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _selectedCurrency = spendCurs.first);
-      });
-    }
-
-    if (_selectedCurrency != null && !spendCurs.contains(_selectedCurrency)) {
-      spendCurs.insert(0, _selectedCurrency!);
-    }
-
-    final now = DateTime.now();
-    DateTime start;
-    if (_spendPeriod == 'day') start = DateTime(now.year, now.month, now.day);
-    else if (_spendPeriod == 'week') {
-      final monday = now.subtract(Duration(days: now.weekday - 1));
-      start = DateTime(monday.year, monday.month, monday.day);
-    }
-    else if (_spendPeriod == 'year') start = DateTime(now.year, 1, 1);
-    else start = DateTime(now.year, now.month, 1); // month
-
-    final txs = curTxs.where((t) {
-      if (t.currency != _selectedCurrency) return false;
-      if (t.rawDate == null || t.rawDate!.isBefore(start)) return false;
-      return true;
-    }).toList();
-
-    double totalAmt = 0;
-    final Map<String, double> catSpent = {};
-    for (final t in txs) {
-      totalAmt += t.amount;
-      catSpent[t.cat] = (catSpent[t.cat] ?? 0) + t.amount;
-    }
-    final sortedCats = catSpent.entries.toList()..sort((a,b) => b.value.compareTo(a.value));
-    final curSym = AppState.currencies.firstWhere((c) => c.code == _selectedCurrency, orElse: () => const CurrencyData('', '', '', '\$')).sym;
-
-    String pText = '';
-    if (_spendPeriod == 'day') pText = l.todaySpending;
-    else if (_spendPeriod == 'week') pText = l.weekSpending;
-    else if (_spendPeriod == 'year') pText = l.yearSpending;
-    else pText = l.monthSpending;
+  Widget _buildSpendingStory(
+    BuildContext context,
+    bool isDark,
+    double totalExpense,
+    String sym,
+    String dateLabel,
+    AppState state,
+    String? selectedCur,
+    DateTime start,
+    DateTime end,
+    List<MapEntry<String, double>> sortedCats,
+  ) {
+    final prev = _prevPeriodExpense(state, start, end, selectedCur);
+    final diffPct = prev > 0 ? ((totalExpense - prev) / prev * 100) : null;
+    final top = sortedCats.isNotEmpty ? sortedCats.first : null;
+    final topCat = top == null
+        ? null
+        : AppState.expenseCategories.firstWhere(
+            (c) => c.icon == top.key,
+            orElse: () => const CategoryItem('', 'Other', ''),
+          );
+    final story = totalExpense <= 0
+        ? 'No spending recorded for this range yet.'
+        : top == null
+            ? 'Your spending is ready for review.'
+            : '${topCat?.label ?? 'Other'} is your top category at ${totalExpense > 0 ? (top.value / totalExpense * 100).round() : 0}% of spending.';
 
     return Container(
-       margin: const EdgeInsets.symmetric(horizontal: 16),
-       padding: const EdgeInsets.all(16),
-       decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(18), border: Border.all(color: TC.border(context)), boxShadow: [BoxShadow(color: TC.shadow(context), blurRadius: 12, offset: const Offset(0,2))]),
-       child: Column(
-         crossAxisAlignment: CrossAxisAlignment.start,
-         children: [
-            Text(pText.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5, textBaseline: TextBaseline.alphabetic)),
-            const SizedBox(height: 2),
-            Text(l.selectCurrency, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5)),
-            const SizedBox(height: 12),
-            // Chips
-             SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              child: Row(
-                children: spendCurs.map((c) {
-                   final isActive = c == _selectedCurrency;
-                   final cData = AppState.currencies.firstWhere((x) => x.code == c, orElse: () => CurrencyData(c, '', '🌐', '\$'));
-                   return GestureDetector(
-                     onTap: () {
-                       HapticFeedback.selectionClick();
-                       setState(() => _selectedCurrency = c);
-                     },
-                     child: AnimatedContainer(
-                       duration: const Duration(milliseconds: 300),
-                       margin: const EdgeInsets.only(right: 12, bottom: 4),
-                       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                       decoration: BoxDecoration(
-                         color: isActive ? AppColors.green : TC.card2(context),
-                         borderRadius: BorderRadius.circular(16),
-                         boxShadow: isActive ? [BoxShadow(color: AppColors.green.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))] : [],
-                       ),
-                       child: Row(
-                         children: [
-                           Text(cData.flag, style: const TextStyle(fontSize: 18)),
-                           const SizedBox(width: 8),
-                           Text(c, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isActive ? Colors.black : TC.text(context))),
-                         ],
-                       ),
-                     ),
-                   );
-                }).toList(),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$dateLabel · Total spent',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: TC.text3(context),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  '$sym${AppCurrencyUtils.formatAmount(totalExpense, 0)}',
+                  style: TC.gloock(context, fontSize: 40, letterSpacing: -1.4),
+                ),
               ),
+              if (diffPct != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: diffPct >= 0 ? AppColors.red.withValues(alpha: 0.10) : AppColors.greenDim,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: diffPct >= 0 ? AppColors.red : AppColors.green,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: totalExpense > 0 ? AppColors.greenDim : TC.card2(context),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 4),
-            // Detail Card
-            Container(
-               padding: const EdgeInsets.all(16),
-               decoration: BoxDecoration(color: TC.card2(context), borderRadius: BorderRadius.circular(14), border: Border.all(color: TC.border(context))),
-               child: Column(
-                 crossAxisAlignment: CrossAxisAlignment.start,
-                 children: [
-                    Row(
-                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                             Text('${l.spendingIn} $_selectedCurrency', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
-                             const SizedBox(height: 3),
-                             Row(
-                               children: [
-                                  Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: AppColors.blueDim, borderRadius: BorderRadius.circular(4)), child: Text('ℹ', style: TextStyle(fontSize: 10, color: AppColors.blue))),
-                                  const SizedBox(width: 4),
-                                  Text('% breakdown in $_selectedCurrency', style: TextStyle(fontSize: 11, color: TC.text2(context))),
-                               ],
-                             ),
-                           ],
-                         ),
-                         Text(AppDateUtils.monthLabel(now, AppLocalizations.of(context).locale.languageCode), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text2(context))),
-                       ],
+            child: Row(
+              children: [
+                Icon(
+                  totalExpense > 0 ? Icons.lightbulb_rounded : Icons.info_outline_rounded,
+                  color: AppColors.green,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    story,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: TC.text2(context),
+                      height: 1.35,
                     ),
-                    const SizedBox(height: 12),
-                    // Tabs
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(20), border: Border.all(color: TC.border(context))),
-                      child: Row(
-                        children: ['day', 'week', 'month', 'year'].map((p) {
-                           final isActive = p == _spendPeriod;
-                           final label = p[0].toUpperCase() + p.substring(1);
-                           return Expanded(
-                             child: GestureDetector(
-                               onTap: () => setState(() => _spendPeriod = p),
-                               child: Container(
-                                 padding: const EdgeInsets.symmetric(vertical: 8),
-                                 decoration: BoxDecoration(
-                                    color: isActive ? (isDark ? TC.card2(context) : TC.card(context)) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(18),
-                                    boxShadow: isActive && !isDark ? [const BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0,1))] : null,
-                                 ),
-                                 alignment: Alignment.center,
-                                 child: Text(label, style: TextStyle(fontSize: 12, fontWeight: isActive ? FontWeight.w800 : FontWeight.w700, color: isActive ? AppColors.green : TC.text2(context))),
-                               ),
-                             ),
-                           );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Donut + Cats
-                    Row(
-                       children: [
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                               SizedBox(
-                                  width: 130, height: 130,
-                                  child: CustomPaint(
-                                     painter: _DonutPainter(
-                                        slices: sortedCats.isEmpty ? [] : sortedCats.map((e) => _DonutSlice(value: totalAmt > 0 ? e.value / totalAmt : 0, color: _getCatColor(e.key))).toList(),
-                                        ringColor: TC.card(context),
-                                        bgColor: TC.card2(context),
-                                     ),
-                                  ),
-                               ),
-                               Column(
-                                 mainAxisSize: MainAxisSize.min,
-                                 children: [
-                                    Text(curSym, style: TextStyle(fontSize: 12, color: TC.text2(context))),
-                                    Text(AppCurrencyUtils.formatAmount(totalAmt, 0), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: TC.text(context), height: 1)),
-                                    Text(l.expenses, style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                                 ],
-                               ),
-                            ],
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                               crossAxisAlignment: CrossAxisAlignment.start,
-                               children: sortedCats.isEmpty ? [Text(l.noExpensesIn, style: TextStyle(fontSize: 12, color: TC.text2(context)))] : [
-                                 ...sortedCats.take(4).map((c) {
-                                   double pct = totalAmt > 0 ? (c.value / totalAmt * 100) : 0;
-                                   Color cc = _getCatColor(c.key);
-                                   String catName = AppState.expenseCategories.firstWhere((x) => x.icon == c.key, orElse: () => const CategoryItem('', 'Other', '')).label;
-                                   return Padding(
-                                     padding: const EdgeInsets.only(bottom: 10),
-                                     child: Column(
-                                       children: [
-                                         Row(
-                                           children: [
-                                             Container(width: 24, height: 24, decoration: BoxDecoration(color: cc.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)), alignment: Alignment.center, child: Text(c.key, style: const TextStyle(fontSize: 12))),
-                                             const SizedBox(width: 6),
-                                             Expanded(child: Text(catName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text(context)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                             Column(
-                                               crossAxisAlignment: CrossAxisAlignment.end,
-                                               children: [
-                                                  Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, color: TC.text2(context))),
-                                                  Text('$curSym${AppCurrencyUtils.formatAmount(c.value, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TC.text(context))),
-                                               ],
-                                             ),
-                                           ],
-                                         ),
-                                         const SizedBox(height: 4),
-                                         Padding(
-                                            padding: const EdgeInsets.only(left: 30),
-                                            child: Container(
-                                               height: 3, width: double.infinity,
-                                               decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(2)),
-                                               alignment: Alignment.centerLeft,
-                                               child: LayoutBuilder(builder: (ctx, constraints) {
-                                                  double w = (pct / 100) * constraints.maxWidth;
-                                                  return Container(height: 3, width: w, decoration: BoxDecoration(color: cc, borderRadius: BorderRadius.circular(2)));
-                                               }),
-                                            ),
-                                         ),
-                                       ],
-                                     ),
-                                   );
-                                 }),
-                                 if (sortedCats.length > 4)
-                                   GestureDetector(
-                                     onTap: () => _showAllCategoriesSheet(context, sortedCats, totalAmt, curSym, isDark),
-                                     child: Container(
-                                       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                       decoration: BoxDecoration(
-                                         color: AppColors.greenDim,
-                                         borderRadius: BorderRadius.circular(10),
-                                         border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
-                                       ),
-                                       child: Row(
-                                         mainAxisSize: MainAxisSize.min,
-                                         children: [
-                                           Text('+${sortedCats.length - 4} more', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
-                                           const SizedBox(width: 4),
-                                           Icon(Icons.expand_more, size: 14, color: TC.greenDark(context)),
-                                         ],
-                                       ),
-                                     ),
-                                   ),
-                               ],
-                            ),
-                          ),
-                       ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                       children: [
-                         Expanded(
-                           child: GestureDetector(
-                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyChartsScreen(initialCurrency: _selectedCurrency, isGroupFilter: true))),
-                             child: Container(
-                               padding: const EdgeInsets.all(10),
-                               decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(10), border: Border.all(color: TC.border(context))),
-                               alignment: Alignment.center,
-                               child: Text('📊 ${l.charts}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
-                             ),
-                           ),
-                         ),
-                         const SizedBox(width: 8),
-                         Expanded(
-                           child: GestureDetector(
-                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MoneyTransactionsScreen(filterCurrency: _selectedCurrency, isGroupFilter: true))),
-                             child: Container(
-                               padding: const EdgeInsets.all(10),
-                               decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(10), border: Border.all(color: TC.border(context))),
-                               alignment: Alignment.center,
-                               child: Text('📋 ${l.allTransactions}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.greenDark(context))),
-                             ),
-                           ),
-                         ),
-                       ],
-                    ),
-                 ],
-               ),
+                  ),
+                ),
+              ],
             ),
-         ],
-       ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _storyMeta(context, 'Previous', '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
+              const SizedBox(width: 18),
+              _storyMeta(context, 'Top Category', topCat == null ? 'None' : '${topCat.icon} ${topCat.label}'),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildGroupRow(GroupData g, AppState state, bool isDark, AppLocalizations l) {
-     final bal = state.getMyBalance(g);
-     final isPos = bal > 0;
-     final isNeg = bal < 0;
-     final cColor = bal == 0 ? TC.text3(context) : (isPos ? TC.greenDark(context) : AppColors.red);
-     final bgCol = bal == 0 ? TC.card2(context) : (isPos ? AppColors.greenDim : AppColors.redDim);
-     
-     return GestureDetector(
-        onTap: () {
-            HapticFeedback.lightImpact();
-            state.currentGroup = g;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => GroupDetailScreen(heroTag: 'hg_${g.id}')));
-        },
-        child: Container(
-           padding: const EdgeInsets.all(12),
-           color: Colors.transparent,
-           child: Row(
-             children: [
-               Container(
-                 width: 44, height: 44,
-                 decoration: BoxDecoration(color: TC.card2(context), borderRadius: BorderRadius.circular(12)),
-                 alignment: Alignment.center,
-                 child: Text(g.emoji, style: const TextStyle(fontSize: 22)),
-               ),
-               const SizedBox(width: 12),
-               Expanded(
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     Text(g.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                     Text('${g.members.length} ${l.members} · ${g.expenses.length} ${l.expenses}', 
-                          maxLines: 1, 
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11, color: TC.text2(context))),
-                   ],
-                 ),
-               ),
-               Container(
-                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                 decoration: BoxDecoration(color: bgCol, borderRadius: BorderRadius.circular(20)),
-                 child: Text('${isPos ? '+' : ''}${isNeg ? '−' : ''}${g.sym}${AppCurrencyUtils.formatAmount(bal.abs(),0)}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cColor)),
-               ),
-               const SizedBox(width: 4),
-               Text('›', style: TextStyle(fontSize: 14, color: TC.text3(context))),
-             ],
-           ),
-        ),
-     );
+  Widget _storyMeta(BuildContext context, String label, String value) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: TC.text(context), fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
   }
 
-  Widget _buildQaItem(String emoji, String lbl, Color bg, bool isDark, VoidCallback onTap) {
-      return GestureDetector(
-        onTap: () { HapticFeedback.lightImpact(); onTap(); },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-          decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(14), border: Border.all(color: TC.border(context)), boxShadow: [BoxShadow(color: TC.shadow(context), blurRadius: 12, offset: const Offset(0,2))]),
-          child: Column(
-             children: [
-               Container(width: 40, height: 40, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text(emoji, style: const TextStyle(fontSize: 20))),
-               const SizedBox(height: 6),
-               Text(lbl, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text2(context)), textAlign: TextAlign.center),
-             ],
+  Widget _buildHeader(BuildContext context, bool isDark, String flag, String? selectedCur, String dateLabel) {
+    return Container(
+      color: TC.card(context),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('SPENDING ANALYSIS',
+              style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w700, color: TC.primaryMd(context), letterSpacing: 1.5)),
+          const SizedBox(height: 4),
+          Text('Overview', style: TC.gloock(context, fontSize: 32, letterSpacing: -0.8, height: 1.1)),
+          const SizedBox(height: 3),
+          Text('How you are spending your money', style: TextStyle(fontSize: 13, color: TC.text3(context), fontWeight: FontWeight.w500)),
+          const SizedBox(height: 14),
+          Row(children: [
+            GestureDetector(
+              onTap: _pickCurrency,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.green, width: 1.5),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(flag, style: const TextStyle(fontSize: 18)),
+                  const SizedBox(width: 6),
+                  Text(selectedCur ?? 'USD', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context))),
+                  const SizedBox(width: 4),
+                  Icon(Icons.expand_more_rounded, size: 16, color: TC.text(context)),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: GestureDetector(
+                onTap: () => _pickMonth(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: TC.border(context), width: 1.5),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.calendar_today_outlined, size: 13, color: TC.text(context)),
+                    const SizedBox(width: 5),
+                    Flexible(child: Text(dateLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context)), overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 3),
+                    Icon(Icons.expand_more_rounded, size: 16, color: TC.text(context)),
+                  ]),
+                ),
+              ),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => _pickCustomRange(context),
+              child: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  border: Border.all(color: TC.border(context), width: 1.5),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.tune_rounded, size: 16, color: TC.text(context)),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // ── Tabs ────────────────────────────────────────────────────────────────
+  Widget _buildTabs(BuildContext context, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFEEF0F3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: _OvTab.values.map((tab) {
+        final active = tab == _ovTab;
+        final label = tab == _OvTab.all ? 'All' : tab == _OvTab.personal ? 'Personal' : 'Groups';
+        return Expanded(child: GestureDetector(
+          onTap: () { HapticFeedback.selectionClick(); setState(() => _ovTab = tab); },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? AppColors.green : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: active ? [BoxShadow(color: AppColors.green.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0,2))] : null,
+            ),
+            alignment: Alignment.center,
+            child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: active ? Colors.white : TC.text3(context))),
           ),
+        ));
+      }).toList()),
+    );
+  }
+
+  // ── Spending Summary ────────────────────────────────────────────────────
+  Widget _buildSpendingSummary(BuildContext context, bool isDark, List<MapEntry<String,double>> cats, double total, String sym, AppLocalizations l, AppState state, String? selectedCur, DateTime start, DateTime end) {
+    // Merge unrecognised category keys into "Other" so the donut covers 100%
+    final knownIcons = AppState.expenseCategories.map((c) => c.icon).toSet();
+    final List<MapEntry<String, double>> knownCats = [];
+    double unknownTotal = 0.0;
+    for (final e in cats) {
+      if (knownIcons.contains(e.key) || e.key == 'Other') {
+        knownCats.add(e);
+      } else {
+        unknownTotal += e.value;
+      }
+    }
+    if (unknownTotal > 0) {
+      final idx = knownCats.indexWhere((e) => e.key == 'Other');
+      if (idx >= 0) {
+        final old = knownCats[idx];
+        knownCats[idx] = MapEntry('Other', old.value + unknownTotal);
+      } else {
+        knownCats.add(MapEntry('Other', unknownTotal));
+      }
+    }
+    knownCats.sort((a, b) => b.value.compareTo(a.value));
+
+    final bool hasMore = knownCats.length > 4;
+    List<MapEntry<String, double>> displayCats;
+    if (!hasMore) {
+      displayCats = knownCats;
+    } else {
+      displayCats = knownCats.take(3).toList();
+      final otherVal = knownCats.skip(3).fold(0.0, (s, e) => s + e.value);
+      displayCats.add(MapEntry('Other', otherVal));
+    }
+
+    // Normalise slices so they ALWAYS sum to 1.0 — eliminates any white gap
+    final sliceTotal = displayCats.fold(0.0, (s, e) => s + e.value);
+    final donutSlices = sliceTotal > 0
+        ? displayCats.where((e) => e.value > 0)
+            .map((e) => _DonutSlice(value: e.value / sliceTotal, color: _getCatColor(e.key)))
+            .toList()
+        : <_DonutSlice>[];
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Spending Summary', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: TC.text(context))),
+            const SizedBox(height: 2),
+            Text('Where your money went', style: TextStyle(fontSize: 12, color: TC.text3(context), fontWeight: FontWeight.w500)),
+          ])),
+          Row(children: [
+            Icon(Icons.info_outline_rounded, size: 14, color: TC.text3(context)),
+            const SizedBox(width: 4),
+            Text('Selected currency only', style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
+          ]),
+        ]),
+        const SizedBox(height: 16),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          // Donut
+          SizedBox(width: 130, height: 130, child: Stack(alignment: Alignment.center, children: [
+            CustomPaint(size: const Size(130,130), painter: _DonutPainter(
+              slices: donutSlices,
+              ringColor: isDark ? const Color(0xFF2E2E2E) : const Color(0xFFD1D5DB),
+              bgColor: TC.card(context),
+            )),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('$sym${AppCurrencyUtils.formatAmount(total, 0)}', style: TC.gloock(context, fontSize: 18, letterSpacing: -0.3)),
+              Text('Total Spent', style: TextStyle(fontSize: 11, color: TC.text3(context), fontWeight: FontWeight.w600)),
+            ]),
+          ])),
+          const SizedBox(width: 16),
+          // Legend / Empty state
+          Expanded(child: cats.isEmpty
+            ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                _WalletIllustration(),
+                const SizedBox(height: 10),
+                Text('No expenses yet', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
+                const SizedBox(height: 4),
+                Text('Add your first transaction\nto unlock insights', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: TC.text3(context), height: 1.5)),
+              ])
+            : Column(children: displayCats.map((e) {
+                final pct = total > 0 ? (e.value/total*100) : 0.0;
+                final catName = e.key == 'Other' ? 'Other' : AppState.expenseCategories.firstWhere((x) => x.icon == e.key, orElse: () => const CategoryItem('','Other','')).label;
+                final cc = _getCatColor(e.key);
+                final iconWidget = e.key == 'Other' 
+                  ? Icon(Icons.more_horiz, size: 14, color: cc) 
+                  : Text(e.key, style: const TextStyle(fontSize: 14));
+                return Padding(padding: const EdgeInsets.only(bottom: 10), child: Row(children: [
+                  Container(width: 28, height: 28, decoration: BoxDecoration(color: cc.withValues(alpha:0.15), borderRadius: BorderRadius.circular(8)), alignment: Alignment.center,
+                    child: iconWidget),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(catName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text(context)), maxLines:1, overflow: TextOverflow.ellipsis)),
+                  const SizedBox(width: 4),
+                  SizedBox(width: 30, child: Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: TC.text3(context)), textAlign: TextAlign.right)),
+                  const SizedBox(width: 4),
+                  SizedBox(width: 56, child: Text('$sym${AppCurrencyUtils.formatAmount(e.value, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text(context)), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ]));
+              }).toList()),
+          ),
+        ]),
+        // See All button – visible only when user has > 4 categories
+        if (hasMore) ...[  
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MoneyChartsScreen())),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.green.withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(12),
+                color: AppColors.greenDim,
+              ),
+              alignment: Alignment.center,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.bar_chart_rounded, color: AppColors.green, size: 15),
+                const SizedBox(width: 6),
+                Text('See all ${knownCats.length} categories',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.green)),
+              ]),
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(color: AppColors.greenDim, borderRadius: BorderRadius.circular(10)),
+          child: Row(children: [
+            Icon(total <= 0 ? Icons.trending_flat_rounded : (total <= _prevPeriodExpense(state, start, end, selectedCur) ? Icons.trending_down_rounded : Icons.trending_up_rounded), color: AppColors.green, size: 16),
+            const SizedBox(width: 7),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(total <= 0 ? 'No spending recorded for this period' : _spendComparisonText(state, start, end, total, selectedCur), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.green)),
+              if (total <= 0) Text('Start by adding an expense or income', style: TextStyle(fontSize: 11, color: TC.text3(context))),
+            ])),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.green, size: 14),
+          ]),
         ),
-      );
+      ]),
+    );
   }
 
-  Color _getCatColor(String cat) {
-    return AppState.getCategoryColor(cat);
+  // ── Two column: Income vs Expense + Monthly Trend ───────────────────────
+  Widget _buildTwoCol(BuildContext context, bool isDark, double income, double expense, double saved, String sym,
+      List<double> incData, List<double> expData, List<String> labels) {
+    final maxVal = [...incData, ...expData].fold(0.0, (m,v) => v > m ? v : m);
+    final incRatio = (income + expense) > 0 ? (income / (income + expense)) : 0.0;
+    final expRatio = (income + expense) > 0 ? (expense / (income + expense)) : 0.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // Income vs Expense
+        Expanded(child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))]),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Income vs Expense', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
+              const SizedBox(height: 12),
+              Row(children: [
+                Container(width: 9, height: 9, decoration: const BoxDecoration(color: AppColors.green, shape: BoxShape.circle)),
+                const SizedBox(width: 7),
+                Expanded(child: Text('Income', style: TextStyle(fontSize: 12, color: TC.text(context)))),
+                Text('$sym${AppCurrencyUtils.formatAmount(income, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TC.text(context))),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(
+                value: incRatio.clamp(0.0,1.0), minHeight: 7,
+                backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB),
+                valueColor: const AlwaysStoppedAnimation(AppColors.green),
+              )),
+              const SizedBox(height: 8),
+              Row(children: [
+                Container(width: 9, height: 9, decoration: const BoxDecoration(color: AppColors.red, shape: BoxShape.circle)),
+                const SizedBox(width: 7),
+                Expanded(child: Text('Expense', style: TextStyle(fontSize: 12, color: TC.text(context)))),
+                Text('$sym${AppCurrencyUtils.formatAmount(expense, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TC.text(context))),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(
+                value: expRatio.clamp(0.0,1.0), minHeight: 7,
+                backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB),
+                valueColor: const AlwaysStoppedAnimation(AppColors.red),
+              )),
+            ]),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: (income <= 0 && expense <= 0)
+                ? const Row(children: [
+                    Icon(Icons.insights_rounded, color: AppColors.green, size: 14),
+                    SizedBox(width: 5),
+                    Expanded(child: Text('Nothing to compare yet', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.green))),
+                  ])
+                : Row(children: [
+                    const Icon(Icons.trending_up_rounded, color: AppColors.green, size: 13),
+                    const SizedBox(width: 5),
+                    Expanded(child: Text(
+                      saved >= 0 ? 'Saved $sym${AppCurrencyUtils.formatAmount(saved.abs(), 0)}' : 'Over by $sym${AppCurrencyUtils.formatAmount(saved.abs(), 0)}',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: saved >= 0 ? AppColors.green : AppColors.red),
+                    )),
+                  ]),
+            ),
+          ]),
+        )),
+        const SizedBox(width: 12),
+        // Monthly Trend
+        Expanded(child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))]),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Monthly Trend', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
+              Text('Selected Period', style: TextStyle(fontSize: 11, color: TC.text3(context), fontWeight: FontWeight.w500)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Container(width: 14, height: 2, decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(1))),
+                const SizedBox(width: 4),
+                Text('In', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context))),
+                const SizedBox(width: 8),
+                Container(width: 14, height: 2, decoration: BoxDecoration(color: AppColors.red, borderRadius: BorderRadius.circular(1))),
+                const SizedBox(width: 4),
+                Text('Out', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TC.text3(context))),
+              ]),
+              const SizedBox(height: 8),
+              SizedBox(height: 110, child: CustomPaint(
+                painter: _TrendPainter(income: incData, expense: expData, labels: labels, maxVal: maxVal, isDark: isDark),
+                size: const Size(double.infinity, 110),
+              )),
+            ]),
+            if (maxVal <= 0)
+              Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [
+                Icon(Icons.bar_chart_rounded, color: TC.text3(context), size: 14),
+                const SizedBox(width: 5),
+                Expanded(child: Text('No trend data yet', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: TC.text3(context)))),
+              ]))
+            else
+              const SizedBox.shrink(),
+          ]),
+        )),
+      ])),
+    );
   }
 
-  void _showAllCategoriesSheet(BuildContext context, List<MapEntry<String, double>> sortedCats, double totalAmt, String curSym, bool isDark) {
-    final l = AppLocalizations.of(context);
+  // ── Category Breakdown ──────────────────────────────────────────────────
+  Widget _buildCategoryBreakdown(BuildContext context, bool isDark, List<MapEntry<String,double>> cats, double total, String sym) {
+    if (cats.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Category Breakdown', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: TC.text(context))),
+        const SizedBox(height: 2),
+        Text('Detailed breakdown of your spending', style: TextStyle(fontSize: 12, color: TC.text3(context), fontWeight: FontWeight.w500)),
+        const SizedBox(height: 14),
+        ...cats.take(4).map((e) {
+          final pct = total > 0 ? (e.value / total) : 0.0;
+          final cc = _getCatColor(e.key);
+          final catName = AppState.expenseCategories.firstWhere((x) => x.icon == e.key, orElse: () => const CategoryItem('','Other','')).label;
+          return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [cc.withValues(alpha: 0.28), cc.withValues(alpha: 0.10)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cc.withValues(alpha: 0.40), width: 1.5),
+                boxShadow: [BoxShadow(color: cc.withValues(alpha: 0.18), blurRadius: 6, offset: const Offset(0, 2))],
+              ),
+              alignment: Alignment.center,
+              child: e.key == 'Other'
+                  ? Icon(Icons.more_horiz_rounded, size: 18, color: cc)
+                  : Text(e.key, style: const TextStyle(fontSize: 18)),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              flex: 2,
+              child: Text(catName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text(context)), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 3,
+              child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(
+                value: pct.clamp(0.0,1.0), minHeight: 7,
+                backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB),
+                valueColor: AlwaysStoppedAnimation(cc),
+              )),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(width: 54, child: Text('$sym${AppCurrencyUtils.formatAmount(e.value, 0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TC.text(context)), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 4),
+            SizedBox(width: 30, child: Text('${(pct * 100).toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: TC.text3(context)), textAlign: TextAlign.right)),
+          ]));
+        }),
+        if (cats.length > 4)
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MoneyChartsScreen())),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.green.withValues(alpha: 0.12), AppColors.green.withValues(alpha: 0.04)],
+                  begin: Alignment.centerLeft, end: Alignment.centerRight,
+                ),
+                border: Border.all(color: AppColors.green.withValues(alpha: 0.45)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              alignment: Alignment.center,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.bar_chart_rounded, color: AppColors.green, size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  'See all ${cats.length} categories',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.green),
+                ),
+              ]),
+            ),
+          )
+      ]),
+    );
+  }
+
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  void _pickCurrency() {
+    final state = context.read<AppState>();
+    final curs = state.activeCurrencies.toList();
+    if (curs.isEmpty) return;
     showModalBottomSheet(
       context: context,
-      backgroundColor: TC.card(context),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) {
-        return SafeArea(
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const SizedBox(height: 12),
+              Container(width: 36, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Text('Select Currency', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
+              const SizedBox(height: 12),
+              ...state.activeCurrencies.map((c) {
+                final cd = AppState.currencies.firstWhere((cur) => cur.code == c, orElse: () => const CurrencyData('', '', '', r'$'));
+                return ListTile(
+                  leading: Text(cd.flag, style: const TextStyle(fontSize: 22)),
+                  title: Text(c, style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(context))),
+                  trailing: state.dashboardCurrency == c ? const Icon(Icons.check_circle_rounded, color: AppColors.green) : null,
+                  onTap: () { state.setDashboardCurrency(c); Navigator.pop(context); },
+                );
+              }),
               const SizedBox(height: 8),
-              Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2)),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text(l.allCategories, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
-                    const Spacer(),
-                    Text('$curSym${AppCurrencyUtils.formatAmount(totalAmt, 0)} total', style: TextStyle(fontSize: 12, color: TC.text2(context))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: sortedCats.length,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemBuilder: (_, i) {
-                    final c = sortedCats[i];
-                    final pct = totalAmt > 0 ? (c.value / totalAmt * 100) : 0.0;
-                    final cc = _getCatColor(c.key);
-                    final catName = AppState.expenseCategories.firstWhere(
-                      (x) => x.icon == c.key,
-                      orElse: () => const CategoryItem('', 'Other', ''),
-                    ).label;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  void _pickMonth(BuildContext context) {
+    int selectedYear = DateTime.now().year;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
                       decoration: BoxDecoration(
-                        color: TC.card2(context),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: TC.border(context)),
+                        color: TC.border(context),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      child: Row(
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // Title + year selector row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Select Month',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: TC.text(context),
+                        ),
+                      ),
+                      // Year prev / label / next
+                      Row(
                         children: [
-                          Container(
-                            width: 36, height: 36,
-                            decoration: BoxDecoration(color: cc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                            alignment: Alignment.center,
-                            child: Text(c.key, style: const TextStyle(fontSize: 18)),
+                          GestureDetector(
+                            onTap: () => setSheetState(() => selectedYear--),
+                            child: Icon(Icons.chevron_left_rounded, color: TC.text2(context)),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(catName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                                const SizedBox(height: 4),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(3),
-                                  child: LinearProgressIndicator(
-                                    value: (pct / 100).clamp(0.0, 1.0),
-                                    backgroundColor: TC.card(context),
-                                    valueColor: AlwaysStoppedAnimation(cc),
-                                    minHeight: 4,
-                                  ),
-                                ),
-                              ],
+                          const SizedBox(width: 4),
+                          Text(
+                            selectedYear.toString(),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.green,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: cc)),
-                              Text('$curSym${AppCurrencyUtils.formatAmount(c.value, 0)}', style: TextStyle(fontSize: 12, color: TC.text2(context))),
-                            ],
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () {
+                              if (selectedYear < DateTime.now().year) {
+                                setSheetState(() => selectedYear++);
+                              }
+                            },
+                            child: Icon(
+                              Icons.chevron_right_rounded,
+                              color: selectedYear >= DateTime.now().year
+                                  ? TC.border(context)
+                                  : TC.text2(context),
+                            ),
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // Month grid
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 2.2,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                    ),
+                    itemCount: 12,
+                    itemBuilder: (_, index) {
+                      final month = index + 1;
+                      final isSelected = DateTime.now().month == month &&
+                          DateTime.now().year == selectedYear;
+                      return GestureDetector(
+                        onTap: () {
+                          final start = DateTime(selectedYear, month, 1);
+                          final end = DateTime(selectedYear, month + 1, 0);
+                          context.read<AppState>().setOverviewDateRange(start, end);
+                          Navigator.pop(ctx);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.green : TC.card(context),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? AppColors.green : TC.border(context),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Text(
+                            _shortMonth(month),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                              color: isSelected ? Colors.white : TC.text(context),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _pickCustomRange(BuildContext context) async {
+    final state = context.read<AppState>();
+    final initialRange = DateTimeRange(
+      start: state.overviewStartDate ?? DateTime(DateTime.now().year, DateTime.now().month, 1),
+      end: state.overviewEndDate ?? DateTime(DateTime.now().year, DateTime.now().month + 1, 0),
+    );
+
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDateRange: initialRange,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: AppColors.green,
+            ),
           ),
+          child: child!,
         );
       },
     );
+
+    if (picked != null) {
+      state.setOverviewDateRange(picked.start, picked.end);
+    }
   }
 
-  void _showAllWalletsSheet(BuildContext context, List<MapEntry<String, double>> entries, Map<String, int> groupCounts, bool isDark) {
-    final l = AppLocalizations.of(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: TC.bg(context),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) => Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 20),
-            Text(l.yourNetBalance, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context))),
-            const SizedBox(height: 16),
-            Expanded(
-              child: entries.isEmpty
-                ? Center(child: Text('No balances', style: TextStyle(color: TC.text2(context))))
-                : ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: entries.length,
-                    itemBuilder: (context, i) => _buildWalletRow(entries[i].key, entries[i].value, groupCounts[entries[i].key] ?? 0, isDark),
-                  ),
-            ),
-          ],
-        ),
-      ),
+  Color _getCatColor(String cat) {
+    if (cat == 'Other') return const Color(0xFF9CA3AF);
+    return AppState.getCategoryColor(cat);
+  }
+
+  String _shortMonth(int m) {
+    const ms = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return ms[(m-1).clamp(0,11)];
+  }
+
+  String _monthYear(DateTime d) {
+    const ms = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return ms[(d.month-1).clamp(0,11)].toUpperCase();
+  }
+
+  double _prevPeriodExpense(AppState state, DateTime start, DateTime end, String? cur) {
+    final duration = end.difference(start);
+    final prevStart = start.subtract(duration).subtract(const Duration(days: 1));
+    final prevEnd = start.subtract(const Duration(days: 1));
+    
+    return state.allTransactionsWithGroupShares.where((t) {
+      if (t.currency != cur || t.type.toLowerCase() != 'expense') return false;
+      final d = t.rawDate;
+      return d != null && 
+             d.isAfter(prevStart.subtract(const Duration(seconds: 1))) && 
+             d.isBefore(prevEnd.add(const Duration(days: 1)));
+    }).fold(0.0, (s, t) => s + t.amount);
+  }
+
+  String _spendComparisonText(AppState state, DateTime start, DateTime end, double currentExpense, String? cur) {
+    final prevExp = _prevPeriodExpense(state, start, end, cur);
+    if (prevExp <= 0) return 'No data for previous period';
+    final diff = ((currentExpense - prevExp) / prevExp * 100).abs();
+    if (currentExpense <= prevExp) {
+      return 'You spent ${diff.toStringAsFixed(0)}% less compared to previous period';
+    } else {
+      return 'You spent ${diff.toStringAsFixed(0)}% more compared to previous period';
+    }
+  }
+}
+
+// ─── Get Started Section ────────────────────────────────────────────────────
+extension on _HomeTabState {
+  Widget _buildGetStarted(BuildContext context, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Get Started', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: TC.text(context))),
+        const SizedBox(height: 3),
+        Text('Take control of your finances in a few steps', style: TextStyle(fontSize: 13, color: TC.text3(context))),
+        const SizedBox(height: 14),
+        Row(children: [
+          _gsBtn(context, isDark, Icons.receipt_long_rounded, 'Add Expense', () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionTypeScreen()));
+          }),
+          const SizedBox(width: 10),
+          _gsBtn(context, isDark, Icons.savings_rounded, 'Add Income', () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionTypeScreen()));
+          }),
+        ]),
+      ]),
     );
   }
 
-  void _showAllOwesSheet(BuildContext context, List<_BalItem> owed, List<_BalItem> owe, bool isDark) {
-    final l = AppLocalizations.of(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: TC.bg(context),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) => ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 20),
-            Center(child: Text('${l.whoOwesYou} ❓', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: TC.text(context)))),
-            const SizedBox(height: 24),
-            Text(l.youAreOwed, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.green)),
-            const SizedBox(height: 8),
-            if (owed.isEmpty) Text(l.nothingOwed, style: TextStyle(color: TC.text2(context))),
-            for (var item in owed) _buildOweRow(item, isDark, true),
-            const SizedBox(height: 24),
-            Text(l.youOwe, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.red)),
-            const SizedBox(height: 8),
-            if (owe.isEmpty) Text(l.allSettled, style: TextStyle(color: TC.text2(context))),
-            for (var item in owe) _buildOweRow(item, isDark, false),
-            const SizedBox(height: 24),
-          ],
+  Widget _gsBtn(BuildContext context, bool isDark, IconData icon, String label, VoidCallback onTap) {
+    return Expanded(child: GestureDetector(
+      onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+        decoration: BoxDecoration(
+          color: TC.card(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: TC.border(context), width: 1.5),
         ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: AppColors.greenDim, borderRadius: BorderRadius.circular(10)),
+            alignment: Alignment.center,
+            child: Icon(icon, color: AppColors.green, size: 22),
+          ),
+          const SizedBox(height: 10),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text(context)), textAlign: TextAlign.center),
+        ]),
       ),
+    ));
+  }
+}
+
+// ─── Wallet Illustration (empty state) ──────────────────────────────────────
+class _WalletIllustration extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 90, height: 80,
+      child: Stack(children: [
+        // Wallet body
+        Positioned(left: 8, top: 20, child: Container(
+          width: 62, height: 48, decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFD4D4D4), width: 1.5),
+          ),
+        )),
+        // Wallet flap
+        Positioned(left: 25, top: 10, child: Container(
+          width: 28, height: 22, decoration: BoxDecoration(
+            color: Colors.white, shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFD4D4D4), width: 1.5),
+          ),
+        )),
+        // Toggle pill
+        Positioned(left: 20, top: 38, child: Container(
+          width: 28, height: 14, decoration: BoxDecoration(
+            color: AppColors.green, borderRadius: BorderRadius.circular(7),
+          ),
+          alignment: Alignment.centerRight,
+          child: Container(
+            width: 11, height: 11, margin: const EdgeInsets.only(right: 1.5),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          ),
+        )),
+        // Plus badge
+        Positioned(right: 6, bottom: 2, child: Container(
+          width: 22, height: 22, decoration: const BoxDecoration(
+            color: AppColors.green, shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.add, color: Colors.white, size: 14),
+        )),
+        // Sparkle
+        Positioned(right: 14, top: 2, child: Text('✦', style: TextStyle(
+          fontSize: 12, color: AppColors.green.withValues(alpha: 0.7),
+        ))),
+        // Mini pie
+        Positioned(left: 0, top: 0, child: Container(
+          width: 18, height: 18, decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFDDDDDD), width: 2.5),
+          ),
+        )),
+      ]),
     );
   }
 }
 
-class _BalItem {
-  final String group;
-  final String emoji;
-  final String person;
-  final double amount;
-  final String sym;
-  final String currency;
-  _BalItem(this.group, this.emoji, this.person, this.amount, this.sym, this.currency);
-}
-
+// ─── Donut Painter ──────────────────────────────────────────────────────────
 class _DonutSlice {
   final double value;
   final Color color;
@@ -987,25 +1081,93 @@ class _DonutPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 14..strokeCap = StrokeCap.round;
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 18..strokeCap = StrokeCap.butt;
+    final rect = Rect.fromLTWH(9, 9, size.width-18, size.height-18);
 
-    if (slices.isEmpty) {
-      paint.color = ringColor;
-      canvas.drawArc(rect, 0, 2 * 3.14159, false, paint);
-      return;
-    }
+    // Always draw the full grey background ring first
+    paint.color = ringColor;
+    canvas.drawArc(rect, 0, 2 * math.pi, false, paint);
 
-    double start = -3.14159 / 2;
-    for (final s in slices) {
-      if (s.value <= 0) continue;
-      final sweep = s.value * 2 * 3.14159;
+    if (slices.isEmpty) return;
+
+    // Count active slices for gap logic
+    final activeSlices = slices.where((s) => s.value > 0).toList();
+    if (activeSlices.isEmpty) return;
+
+    // Total gap in radians (2 degrees per slice gap)
+    const gapAngle = 0.035;
+    final totalGap = activeSlices.length > 1 ? gapAngle * activeSlices.length : 0.0;
+    final totalSweep = 2 * math.pi - totalGap;
+
+    double start = -math.pi / 2;
+    for (int i = 0; i < activeSlices.length; i++) {
+      final s = activeSlices[i];
+      final sweep = s.value * totalSweep;
       paint.color = s.color;
       canvas.drawArc(rect, start, sweep, false, paint);
-      start += sweep;
+      start += sweep + (activeSlices.length > 1 ? gapAngle : 0.0);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant CustomPainter old) => true;
 }
+
+// ─── Trend Painter ──────────────────────────────────────────────────────────
+class _TrendPainter extends CustomPainter {
+  final List<double> income;
+  final List<double> expense;
+  final List<String> labels;
+  final double maxVal;
+  final bool isDark;
+
+  _TrendPainter({required this.income, required this.expense, required this.labels, required this.maxVal, required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const pad = EdgeInsets.fromLTRB(20, 8, 4, 20);
+    final W = size.width - pad.left - pad.right;
+    final H = size.height - pad.top - pad.bottom;
+    final n = labels.length;
+    final mv = maxVal <= 0 ? 1.0 : maxVal;
+
+    double toX(int i) => pad.left + (n <= 1 ? W/2 : i * W / (n-1));
+    double toY(double v) => pad.top + H - (v/mv)*H;
+
+    // Grid
+    final gridPaint = Paint()..color = (isDark ? Colors.white : Colors.black).withValues(alpha:0.06)..strokeWidth = 1;
+    for (int i = 1; i <= 3; i++) {
+      final y = pad.top + H - (i/3)*H;
+      canvas.drawLine(Offset(pad.left, y), Offset(pad.left+W, y), gridPaint);
+    }
+
+    // Labels
+    final tp = TextPainter(textDirection: TextDirection.ltr);
+    for (int i = 0; i < n; i++) {
+      tp.text = TextSpan(text: labels[i], style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38));
+      tp.layout();
+      tp.paint(canvas, Offset(toX(i) - tp.width/2, size.height - 14));
+    }
+
+    void drawLine(List<double> data, Color color) {
+      if (data.isEmpty) return;
+      final path = Path()..moveTo(toX(0), toY(data[0]));
+      for (int i = 1; i < data.length; i++) {
+        path.lineTo(toX(i), toY(data[i]));
+      }
+      canvas.drawPath(path, Paint()..color=color..strokeWidth=2..style=PaintingStyle.stroke..strokeJoin=StrokeJoin.round);
+      for (int i = 0; i < data.length; i++) {
+        canvas.drawCircle(Offset(toX(i), toY(data[i])), 3, Paint()..color=Colors.white..style=PaintingStyle.fill);
+        canvas.drawCircle(Offset(toX(i), toY(data[i])), 3, Paint()..color=color..strokeWidth=1.5..style=PaintingStyle.stroke);
+      }
+    }
+
+    drawLine(income, AppColors.green);
+    drawLine(expense, AppColors.red);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => true;
+}
+
+

@@ -6,6 +6,17 @@
 build/
 *.iml
 
+# Build/JVM crash logs & temp working files
+hs_err_pid*.log
+android/hs_err_pid*.log
+*.hprof
+analyze_output.txt
+fix_dropdowns.py
+fix_pft.py
+
+# Claude Code agent worktrees / local sessions
+.claude/
+
 # Android
 android/.gradle/
 android/local.properties

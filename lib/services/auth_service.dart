@@ -30,6 +30,9 @@ class AuthService {
   /// True when a user is signed in.
   bool get isSignedIn => _auth.currentUser != null;
 
+  /// True when the current session is an anonymous (guest) account.
+  bool get isGuest => _auth.currentUser?.isAnonymous ?? false;
+
   /// Stream of auth state changes — fires on sign-in / sign-out.
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -79,6 +82,109 @@ class AuthService {
     } catch (e) {
       debugPrint('[Auth] Google sign-in error: $e');
       rethrow;
+    }
+  }
+
+  // ─── Anonymous (Guest) ──────────────────────────────────────────────────
+
+  /// Sign in anonymously so an accountless user can join & participate in a
+  /// group. Produces a real `request.auth.uid` (with sign_in_provider
+  /// "anonymous"), which existing Firestore rules and `memberUids` queries
+  /// understand. The uid is device-bound until upgraded via a `link*` call.
+  Future<UserCredential> signInAnonymously() async {
+    try {
+      final cred = await _auth.signInAnonymously();
+      debugPrint('[Auth] Anonymous sign-in: ${cred.user?.uid}');
+      return cred;
+    } catch (e) {
+      debugPrint('[Auth] Anonymous sign-in error: $e');
+      rethrow;
+    }
+  }
+
+  /// Upgrade the current anonymous guest into a permanent Google account,
+  /// PRESERVING the same uid (and therefore all group memberships & balances).
+  Future<UserCredential> linkAnonymousToGoogle() async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw Exception('No anonymous session to upgrade.');
+    }
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) throw Exception('Google sign-in was cancelled');
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    final cred = await user.linkWithCredential(credential);
+    final name = cred.user?.displayName;
+    if (name != null && name.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_first_name', name);
+    }
+    debugPrint('[Auth] Linked anonymous → Google: ${cred.user?.uid}');
+    return cred;
+  }
+
+  /// Upgrade the current anonymous guest into a permanent email/password
+  /// account, preserving the same uid.
+  Future<UserCredential> linkAnonymousToEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw Exception('No anonymous session to upgrade.');
+    }
+    final credential =
+        EmailAuthProvider.credential(email: email, password: password);
+    final cred = await user.linkWithCredential(credential);
+    await cred.user?.updateDisplayName(displayName);
+    await cred.user?.reload();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_first_name', displayName);
+    debugPrint('[Auth] Linked anonymous → email: ${cred.user?.uid}');
+    return cred;
+  }
+
+  /// Delete the current session if (and only if) it is anonymous. Used to roll
+  /// back a just-created guest session when a join is rejected, so we never
+  /// leave orphan anonymous accounts behind.
+  Future<void> deleteAnonymousUser() async {
+    final u = _auth.currentUser;
+    if (u == null || !u.isAnonymous) return;
+    try {
+      await u.delete();
+      debugPrint('[Auth] Deleted orphan anonymous user');
+    } catch (e) {
+      debugPrint('[Auth] deleteAnonymousUser failed, signing out: $e');
+      try {
+        await _auth.signOut();
+      } catch (_) {}
+    }
+  }
+
+  /// Force-refresh the ID token so newly-set custom claims (e.g. `premium`)
+  /// become visible to Firestore security rules without waiting for the
+  /// natural ~1h refresh. Call this right after a successful purchase.
+  Future<void> refreshIdToken() async {
+    try {
+      await _auth.currentUser?.getIdToken(true);
+    } catch (e) {
+      debugPrint('[Auth] Token refresh failed: $e');
+    }
+  }
+
+  /// Whether the current user has the server-set `premium` custom claim.
+  /// This is the authoritative, tamper-resistant signal (rules read the same).
+  Future<bool> hasPremiumClaim() async {
+    try {
+      final res = await _auth.currentUser?.getIdTokenResult();
+      return res?.claims?['premium'] == true;
+    } catch (e) {
+      debugPrint('[Auth] Could not read premium claim: $e');
+      return false;
     }
   }
 

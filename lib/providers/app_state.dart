@@ -6,9 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/entitlement.dart';
 import '../services/notification_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/storage_service.dart';
+
+export '../services/entitlement.dart' show AccountTier, Entitlement;
 
 /// Provider-based state. Routes data through Firestore when signed in,
 /// falls back to local SQLite otherwise. Subscriptions & reminders
@@ -17,8 +20,30 @@ class AppState extends ChangeNotifier {
   // ─── Loading flag ────────────────────────────────────────────────────────
   bool isLoading = true;
 
-  /// True when user is signed in and data flows through Firestore.
-  bool get _useCloud => AuthService.instance.isSignedIn;
+  /// Current participation tier. Derived from the Firebase session — the
+  /// single source of truth that replaces the old `_useCloud == isSignedIn`
+  /// shortcut (which would have migrated a guest's local data to a throwaway
+  /// anonymous uid).
+  AccountTier get tier => accountTierFrom(
+        signedIn: AuthService.instance.isSignedIn,
+        isAnonymous: AuthService.instance.isGuest,
+      );
+
+  /// True when data flows through Firestore (guest OR full account).
+  bool get _useCloud => useCloudForTier(tier);
+  bool get useCloud => _useCloud;
+
+  /// True when the session is an accountless guest.
+  bool get isGuest => tier == AccountTier.guest;
+
+  // ─── Premium entitlement (owner-paid; gates guest-join only) ─────────────
+  Entitlement _entitlement = Entitlement.none;
+  Entitlement get entitlement => _entitlement;
+  bool get hasPremium => _entitlement.isActive;
+  StreamSubscription<Map<String, dynamic>?>? _entitlementSub;
+
+  /// Cache key for offline entitlement mirror.
+  static const _kEntitlementPrefsKey = 'entitlement_cache';
 
   // ─── Theme ───────────────────────────────────────────────────────────────
   late ThemeMode themeMode;
@@ -31,6 +56,7 @@ class AppState extends ChangeNotifier {
   }
 
   bool get isDark => themeMode == ThemeMode.dark;
+  String get userName => AuthService.instance.currentUser?.displayName ?? 'You';
 
   // ─── Language / Locale ───────────────────────────────────────────────────
   late Locale locale;
@@ -189,28 +215,28 @@ class AppState extends ChangeNotifier {
   ];
 
   static const List<CategoryItem> expenseCategories = [
-    CategoryItem('🍽️', 'Food', '#FF5252'), // Vibrant Red
-    CategoryItem('🚗', 'Transport', '#448AFF'), // Vibrant Blue
-    CategoryItem('🛒', 'Shopping', '#FFC107'), // Amber
-    CategoryItem('🎫', 'Activity', '#E040FB'), // Purple
-    CategoryItem('💡', 'Bills', '#00E676'), // Spring Green
-    CategoryItem('🏠', 'Rent', '#FF9100'), // Deep Orange
-    CategoryItem('🎉', 'Fun', '#FF4081'), // Pink
-    CategoryItem('💊', 'Health', '#1DE9B6'), // Teal
-    CategoryItem('📚', 'Education', '#546E7A'), // Blue Grey
-    CategoryItem('✈️', 'Travel', '#00B0FF'), // Light Blue
-    CategoryItem('💰', 'Other', '#9E9E9E'), // Grey
+    CategoryItem('🍽️', 'Food',       '#FF9800', Icons.restaurant_rounded),
+    CategoryItem('🚗', 'Transport',   '#448AFF', Icons.directions_car_rounded),
+    CategoryItem('🛒', 'Shopping',    '#FFC107', Icons.shopping_bag_rounded),
+    CategoryItem('🎫', 'Activity',    '#E040FB', Icons.local_activity_rounded),
+    CategoryItem('💡', 'Bills',       '#00E676', Icons.receipt_long_rounded),
+    CategoryItem('🏠', 'Rent',        '#FF9100', Icons.home_rounded),
+    CategoryItem('🎉', 'Fun',         '#7C4DFF', Icons.celebration_rounded),
+    CategoryItem('💊', 'Health',      '#1DE9B6', Icons.favorite_rounded),
+    CategoryItem('📚', 'Education',   '#546E7A', Icons.school_rounded),
+    CategoryItem('✈️', 'Travel',      '#00B0FF', Icons.flight_rounded),
+    CategoryItem('💰', 'Other',       '#9E9E9E', Icons.category_rounded),
   ];
 
   static const List<CategoryItem> incomeCategories = [
-    CategoryItem('💼', 'Salary', '#00C853'), // Green
-    CategoryItem('💻', 'Freelance', '#2979FF'), // Blue
-    CategoryItem('🎁', 'Gift', '#FFD600'), // Yellow
-    CategoryItem('📈', 'Investment', '#7C4DFF'), // Deep Purple
-    CategoryItem('📚', 'Scholarship', '#00B8D4'), // Cyan
-    CategoryItem('🏧', 'Allowance', '#FFAB00'), // Amber
-    CategoryItem('🏠', 'Rent Income', '#64DD17'), // Light Green
-    CategoryItem('💰', 'Other', '#757575'), // Grey
+    CategoryItem('💼', 'Salary',      '#00C853', Icons.work_rounded),
+    CategoryItem('💻', 'Freelance',   '#2979FF', Icons.laptop_rounded),
+    CategoryItem('🎁', 'Gift',        '#FFD600', Icons.card_giftcard_rounded),
+    CategoryItem('📈', 'Investment',  '#7C4DFF', Icons.trending_up_rounded),
+    CategoryItem('📚', 'Scholarship', '#00B8D4', Icons.menu_book_rounded),
+    CategoryItem('🏧', 'Allowance',   '#FFAB00', Icons.account_balance_wallet_rounded),
+    CategoryItem('🏠', 'Rent Income', '#64DD17', Icons.real_estate_agent_rounded),
+    CategoryItem('💰', 'Other',       '#757575', Icons.category_rounded),
   ];
 
   static const List<String> settleMethods = [
@@ -231,6 +257,14 @@ class AppState extends ChangeNotifier {
   List<ReminderData> reminders = [];
   List<SavingGoal> savingGoals = [];
   GroupData? currentGroup;
+
+  /// Globally selected currency for Home and Overview tabs
+  String? dashboardCurrency;
+  String? homeCurrency;
+
+  /// Custom date range for Overview tab (if null, defaults to current month)
+  DateTime? overviewStartDate;
+  DateTime? overviewEndDate;
 
   /// Real-time Firestore expense watchers keyed by group ID.
   /// Active only when signed in; automatically updated when any group member
@@ -254,6 +288,19 @@ class AppState extends ChangeNotifier {
     await _load();
   }
 
+  void stopRealtimeServices() {
+    _cancelExpenseWatchers();
+    _entitlementSub?.cancel();
+    _entitlementSub = null;
+    unawaited(PushNotificationService.instance.dispose());
+  }
+
+  @override
+  void dispose() {
+    stopRealtimeServices();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     isLoading = true;
     // Do NOT call notifyListeners() here — we're inside initState's
@@ -275,10 +322,10 @@ class AppState extends ChangeNotifier {
       subscriptions = await db.loadSubscriptions();
       reminders = await db.loadReminders();
 
-      // PERSISTENCE FIX: Rebuild the in-memory Firestore doc-ID cache from
-      // SQLite-stored firestoreId values. This ensures mutations (add expense,
-      // settle up, etc.) work immediately after a cold start — even before
-      // Firestore data has been fetched — without needing a network round-trip.
+    // PERSISTENCE FIX: Rebuild the in-memory Firestore doc-ID cache from
+    // SQLite-stored firestoreId values. This ensures mutations (add expense,
+    // settle up, etc.) work immediately after a cold start — even before
+    // Firestore data has been fetched — without needing a network round-trip.
       for (final g in localGroups) {
         if (g.firestoreId != null) {
           FirestoreService.instance.cacheDocId(g.id, g.firestoreId!);
@@ -296,10 +343,18 @@ class AppState extends ChangeNotifier {
       // 2. Migrate local-only groups to Firestore before fetching cloud data.
       //    This prevents data loss when switching from local → cloud mode
       //    (e.g. after reinstalling the app and signing back in).
+      //
+      //    CRITICAL: only FULL accounts migrate. A guest (anonymous) session
+      //    must NEVER upload the device's local SQLite history onto a
+      //    throwaway anonymous uid — see shouldMigrateLocalData().
       final fs = FirestoreService.instance;
-      await _migrateLocalGroupsToCloud(fs, localGroups);
-      await _migrateLocalTransactionsToCloud(fs, transactions);
-      await _migrateLocalRemindersToCloud(fs, reminders);
+      if (shouldMigrateLocalData(tier)) {
+        await _migrateLocalGroupsToCloud(fs, localGroups);
+        await _migrateLocalTransactionsToCloud(fs, transactions);
+        await _migrateLocalRemindersToCloud(fs, reminders);
+      } else {
+        debugPrint('[AppState] Guest session — skipping local→cloud migration');
+      }
 
       // 3. Fetch fresh data from Firestore (now includes migrated data)
       try {
@@ -337,6 +392,12 @@ class AppState extends ChangeNotifier {
       // expenses added by OTHER group members appear immediately in the
       // Activity screen without requiring an app restart.
       _startExpenseWatchers();
+
+      // ── Premium entitlement ───────────────────────────────────────────────
+      // Only full accounts can hold an entitlement; guests never pay.
+      if (tier == AccountTier.full) {
+        await _initEntitlement();
+      }
     } else {
       // ── Local path: same as before ──
       groups = await db.loadGroups();
@@ -350,6 +411,9 @@ class AppState extends ChangeNotifier {
 
       // (Sample data seeding has been removed for production)
     }
+
+    // Restore last-selected currencies (works for both cloud and local paths)
+    await _loadCurrencyPrefs();
 
     isLoading = false;
     notifyListeners();
@@ -501,6 +565,12 @@ class AppState extends ChangeNotifier {
     await _load();
   }
 
+  /// Pull-to-refresh handler — re-syncs data from Firestore (cloud) or
+  /// SQLite (local) and notifies listeners so all tabs update instantly.
+  Future<void> refresh() async {
+    await _load();
+  }
+
   /// Cache cloud data to local SQLite for offline resilience.
   ///
   /// CRASH-SAFE: Groups are replaced inside a single SQLite transaction via
@@ -555,6 +625,156 @@ class AppState extends ChangeNotifier {
 
 
 
+  // ─── Premium entitlement lifecycle ───────────────────────────────────────
+
+  /// Load the cached entitlement (instant, offline) then start a live watcher
+  /// against the server-written `users/{uid}.entitlement`.
+  Future<void> _initEntitlement() async {
+    // 1. Instant offline mirror.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(_kEntitlementPrefsKey);
+      if (cached != null) {
+        _entitlement = Entitlement.fromMap(
+          Map<String, dynamic>.from(jsonDecode(cached) as Map),
+        );
+      }
+    } catch (_) {}
+
+    // 2. Authoritative read + live updates.
+    try {
+      final initial = await FirestoreService.instance.loadEntitlement();
+      _applyEntitlement(initial);
+    } catch (e) {
+      debugPrint('[AppState] entitlement load failed: $e');
+    }
+
+    _entitlementSub?.cancel();
+    _entitlementSub = FirestoreService.instance.watchEntitlement().listen(
+      _applyEntitlement,
+      onError: (e) => debugPrint('[AppState] entitlement watch error: $e'),
+    );
+  }
+
+  void _applyEntitlement(Map<String, dynamic>? map) {
+    _entitlement = Entitlement.fromMap(map);
+    // Mirror to prefs for offline.
+    SharedPreferences.getInstance().then(
+      (p) => p.setString(_kEntitlementPrefsKey, jsonEncode(_entitlement.toMap())),
+    );
+    notifyListeners();
+  }
+
+  /// Called by IapService after a verified purchase so the UI unlocks without
+  /// waiting for the Firestore snapshot. Also forces a token refresh so the
+  /// `premium` custom claim is visible to security rules immediately.
+  Future<void> onPurchaseVerified(Entitlement e) async {
+    _entitlement = e;
+    await AuthService.instance.refreshIdToken();
+    notifyListeners();
+  }
+
+  /// Owner enables/disables guest joining for a group they own.
+  /// Requires an active entitlement (enforced again by security rules).
+  Future<bool> setGroupGuestAccess(GroupData g, bool enabled) async {
+    if (enabled && !canEnableGuestAccess(_entitlement)) return false;
+    if (!_useCloud) return false;
+    try {
+      await FirestoreService.instance.setGroupGuestAccess(g.id, enabled);
+      return true;
+    } catch (e) {
+      debugPrint('[AppState] setGroupGuestAccess failed: $e');
+      return false;
+    }
+  }
+
+  // ─── Guest join ───────────────────────────────────────────────────────────
+
+  /// Join a group as an accountless guest via an invite code.
+  ///
+  /// Flow: probe the code (is the group premium?) → if allowed, create an
+  /// anonymous session → join → pull the group into local state. The chosen
+  /// [guestName] becomes this device's member identity (persisted so balances
+  /// resolve correctly).
+  ///
+  /// Returns the joined [GroupData], or null with the reason in [lastGuestJoinError].
+  String? lastGuestJoinError;
+
+  Future<GroupData?> joinAsGuest(String inviteCode, String guestName) async {
+    lastGuestJoinError = null;
+    final auth = AuthService.instance;
+    final fs = FirestoreService.instance;
+
+    // 1. Ensure a session — Firestore rules require auth even to PROBE the
+    //    invite code. If the user is fully signed in, this is a free full
+    //    join; otherwise we mint an anonymous (guest) session that we will
+    //    roll back if the join is rejected (no orphan accounts).
+    bool createdAnon = false;
+    if (!auth.isSignedIn) {
+      try {
+        await auth.signInAnonymously();
+        createdAnon = true;
+      } catch (e) {
+        lastGuestJoinError = 'Could not start a guest session. Try again.';
+        return null;
+      }
+    }
+    final isGuestJoin = auth.isGuest;
+
+    Future<void> rollback() async {
+      if (createdAnon) await auth.deleteAnonymousUser();
+    }
+
+    // 2. Probe (now authenticated).
+    final probe = await fs.probeInviteCode(inviteCode);
+    if (probe == null) {
+      lastGuestJoinError = 'Invalid or expired invite code.';
+      await rollback();
+      return null;
+    }
+
+    // 3. Gate. Only GUESTS are premium-gated; full accounts join free.
+    if (isGuestJoin) {
+      final decision = evaluateGuestJoin(
+        isPremiumGroup: probe['isPremiumGroup'] == true,
+        memberCount: probe['memberCount'] as int? ?? 0,
+        maxMembers: 50,
+      );
+      if (decision != GuestJoinDecision.allowed) {
+        lastGuestJoinError = guestJoinDenialMessage(decision);
+        await rollback();
+        return null;
+      }
+    }
+
+    // 4. Resolve + persist this device's member name.
+    final trimmed = guestName.trim();
+    final safeName = trimmed.isEmpty
+        ? 'Guest'
+        : (trimmed.length > 30 ? trimmed.substring(0, 30) : trimmed);
+    if (isGuestJoin) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('guest_member_name', safeName);
+        _guestMemberName = safeName;
+      } catch (_) {}
+    }
+
+    // 5. Join.
+    final group = await fs.joinGroupByInviteCode(inviteCode, safeName);
+    if (group == null) {
+      lastGuestJoinError = 'Could not join the group. Try again.';
+      await rollback();
+      return null;
+    }
+    await joinGroupLocally(group);
+    return group;
+  }
+
+  /// Cached guest member name (the balance-map key for a guest device),
+  /// loaded from prefs at startup. Null for non-guest sessions.
+  String? _guestMemberName;
+
   // ─── Balance logic ───────────────────────────────────────────────────────
   Map<String, double> getAllBalances(GroupData g) {
     final bal = <String, double>{};
@@ -600,9 +820,27 @@ class AppState extends ChangeNotifier {
     return bal;
   }
 
-  // ARCH-3 FIX: Check both 'You' and the user's actual Firebase display name
+  /// Returns a set of all active currencies across personal wallets and groups.
+  Set<String> get activeCurrencies {
+    final curs = <String>{};
+    curs.addAll(wallets.keys);
+    for (final g in groups) {
+      if (g.expenses.isNotEmpty || g.settlements.isNotEmpty) {
+        curs.add(g.currency);
+      }
+    }
+    return curs;
+  }
+
+  // ARCH-3 FIX: Check 'You', the user's display name, and (for guests) the
+  // persisted guest member name.
   double getMyBalance(GroupData g) {
     final balances = getAllBalances(g);
+    // Guests: resolve by their chosen member name first (they have no 'You').
+    if (isGuest && _guestMemberName != null &&
+        balances.containsKey(_guestMemberName)) {
+      return balances[_guestMemberName]!;
+    }
     // Try 'You' first (local/offline groups always use 'You')
     if (balances.containsKey('You')) return balances['You']!;
     // For cloud groups, the member name may be the user's real name
@@ -658,6 +896,34 @@ class AppState extends ChangeNotifier {
 
   // ─── Mutations ───────────────────────────────────────────────────────────
 
+  void setDashboardCurrency(String currencyCode) {
+    dashboardCurrency = currencyCode;
+    SharedPreferences.getInstance().then((p) => p.setString('dashboard_currency', currencyCode));
+    notifyListeners();
+  }
+
+  void setHomeCurrency(String currencyCode) {
+    homeCurrency = currencyCode;
+    SharedPreferences.getInstance().then((p) => p.setString('home_currency', currencyCode));
+    notifyListeners();
+  }
+
+  /// Load last-used currencies from SharedPreferences (called at startup).
+  Future<void> _loadCurrencyPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDashboard = prefs.getString('dashboard_currency');
+    final savedHome      = prefs.getString('home_currency');
+    if (savedDashboard != null) dashboardCurrency = savedDashboard;
+    if (savedHome      != null) homeCurrency      = savedHome;
+    _guestMemberName = prefs.getString('guest_member_name');
+  }
+
+  void setOverviewDateRange(DateTime? start, DateTime? end) {
+    overviewStartDate = start;
+    overviewEndDate = end;
+    notifyListeners();
+  }
+
   Future<void> addGroup(GroupData g) async {
     if (_useCloud) {
       final result = await FirestoreService.instance.insertGroup(g);
@@ -673,6 +939,32 @@ class AppState extends ChangeNotifier {
     _cachedAllTxns = null;
     // Start real-time expense watcher for the new group (cloud only).
     _watchGroupExpenses(g);
+    notifyListeners();
+  }
+
+  /// Manually insert a newly joined cloud group into local state.
+  /// This avoids the ~500ms Firestore index latency that occurs if we
+  /// try to do a full reloadFromDatabase immediately after joining.
+  Future<void> joinGroupLocally(GroupData g) async {
+    final idx = groups.indexWhere((x) => x.id == g.id);
+    if (idx >= 0) {
+      groups[idx] = g;
+    } else {
+      groups = [g, ...groups];
+    }
+    
+    await DatabaseService.instance.insertGroup(g);
+    for (final e in g.expenses) {
+      await DatabaseService.instance.insertExpense(g.id, e);
+    }
+    for (final s in g.settlements) {
+      await DatabaseService.instance.insertSettlement(g.id, s);
+    }
+    
+    _cachedAllTxns = null;
+    if (_useCloud) {
+      _watchGroupExpenses(g);
+    }
     notifyListeners();
   }
 
@@ -698,7 +990,7 @@ class AppState extends ChangeNotifier {
       final members = rawMembers
           .take(30)
           .map((e) {
-            var s = e.toString();
+            final s = e.toString();
             return s.length > 30 ? s.substring(0, 30) : s;
           })
           .toList();
@@ -778,12 +1070,17 @@ class AppState extends ChangeNotifier {
       }
     }
 
+    // Local-first: SQLite write completes instantly and is the offline source
+    // of truth. Awaiting the Firestore write here would hang the UI offline.
+    await DatabaseService.instance.insertExpense(g.id, expenseToSave);
     if (_useCloud) {
-      await FirestoreService.instance.insertExpense(g.id, expenseToSave);
-      // Also cache to SQLite for offline resilience
-      await DatabaseService.instance.insertExpense(g.id, expenseToSave);
-    } else {
-      await DatabaseService.instance.insertExpense(g.id, expenseToSave);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.insertExpense(g.id, expenseToSave);
+        } catch (e) {
+          debugPrint('[cloud] expense sync deferred: $e');
+        }
+      }());
     }
     g.expenses = [expenseToSave, ...g.expenses];
     groups = List.of(groups);
@@ -814,16 +1111,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteExpense(GroupData g, ExpenseData e) async {
-    if (_useCloud) {
-      await FirestoreService.instance.deleteExpense(g.id, e.id);
-    } else {
-      await DatabaseService.instance.deleteExpense(e.id);
+  Future<bool> deleteExpense(GroupData g, ExpenseData e) async {
+    try {
+      if (_useCloud) {
+        await FirestoreService.instance.deleteExpense(g.id, e.id);
+      } else {
+        await DatabaseService.instance.deleteExpense(e.id);
+      }
+      g.expenses = g.expenses.where((x) => x.id != e.id).toList();
+      groups = List.of(groups);
+      _cachedAllTxns = null;
+      notifyListeners();
+      return true;
+    } catch (e2) {
+      debugPrint('[AppState] deleteExpense failed: $e2');
+      // Re-sync to revert any optimistic cache changes
+      notifyListeners();
+      return false;
     }
-    g.expenses = g.expenses.where((x) => x.id != e.id).toList();
-    groups = List.of(groups);
-    _cachedAllTxns = null;
-    notifyListeners();
   }
 
   Future<void> recordSettlement(GroupData g, SettlementData s) async {
@@ -876,10 +1181,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteGroup(GroupData g) async {
     if (_useCloud) {
-      await FirestoreService.instance.deleteGroup(g.id);
-    } else {
-      await DatabaseService.instance.deleteGroup(g.id);
+      try {
+        await FirestoreService.instance.deleteGroup(g);
+      } catch (e) {
+        debugPrint('[AppState] Failed to delete group from cloud: $e');
+        // We still proceed to delete locally so the UI updates
+      }
     }
+    await DatabaseService.instance.deleteGroup(g.id);
     groups = groups.where((x) => x.id != g.id).toList();
     if (currentGroup?.id == g.id) currentGroup = null;
     _cachedAllTxns = null;
@@ -887,22 +1196,43 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addTransaction(TransactionData t) async {
+    final isNewWallet = !wallets.containsKey(t.currency);
     final cur = wallets[t.currency] ?? 0;
     final newBal = double.parse(
       (t.type == 'expense' ? cur - t.amount : cur + t.amount)
           .toStringAsFixed(2),
     );
 
+    // Local-first: persist to SQLite synchronously so the save completes
+    // instantly and survives an app restart. This is the offline source of
+    // truth. Awaiting Firestore here would HANG the UI when offline, because
+    // Firestore write Futures only resolve after a server ack.
+    await DatabaseService.instance.insertTransactionAtomic(t, newBal);
+
+    // Cloud sync runs in the background; offline persistence flushes it
+    // automatically when connectivity returns.
     if (_useCloud) {
-      await FirestoreService.instance.insertTransaction(t);
-      await FirestoreService.instance.upsertWallet(t.currency, newBal);
-    } else {
-      await DatabaseService.instance.insertTransactionAtomic(t, newBal);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.insertTransaction(t);
+          await FirestoreService.instance.upsertWallet(t.currency, newBal);
+        } catch (e) {
+          debugPrint('[cloud] transaction sync deferred: $e');
+        }
+      }());
     }
 
     transactions = [t, ...transactions];
     wallets = Map.of(wallets)..[t.currency] = newBal;
     _cachedAllTxns = null;
+
+    // Auto-switch dashboard to the new currency so balance card is visible
+    if (isNewWallet) {
+      homeCurrency = t.currency;
+      SharedPreferences.getInstance()
+          .then((p) => p.setString('home_currency', t.currency));
+    }
+
     notifyListeners();
   }
 
@@ -929,6 +1259,8 @@ class AppState extends ChangeNotifier {
       await FirestoreService.instance.updateTransaction(updated);
       await FirestoreService.instance.upsertWallet(old.currency, reversedOld);
       await FirestoreService.instance.upsertWallet(updated.currency, newBal);
+      // FIX: also persist wallet changes to SQLite cache so balance survives restart
+      await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
     } else {
       await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
     }
@@ -957,6 +1289,8 @@ class AppState extends ChangeNotifier {
     if (_useCloud) {
       await FirestoreService.instance.deleteTransaction(t.id);
       await FirestoreService.instance.upsertWallet(t.currency, newBal);
+      // FIX: also persist wallet changes to SQLite cache so balance survives restart
+      await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
     } else {
       await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
     }
@@ -975,6 +1309,15 @@ class AppState extends ChangeNotifier {
       await FirestoreService.instance.clearAll();
     }
     await DatabaseService.instance.clearAll();
+
+    // Clear ALL persisted settings so they don't leak into a fresh state
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dashboard_currency');
+    await prefs.remove('home_currency');
+    await prefs.remove('notify_before_days');    // FIX: persisted after reset
+    await prefs.remove('auto_backup_enabled');   // FIX: persisted after reset
+    await prefs.remove('last_auto_backup_ms');   // FIX: persisted after reset
+
     groups = [];
     transactions = [];
     wallets = {};
@@ -984,6 +1327,8 @@ class AppState extends ChangeNotifier {
     reminders = [];
     savingGoals = [];      // FIX: was missing — savingGoals persisted after reset
     currentGroup = null;
+    dashboardCurrency = null;
+    homeCurrency = null;
     _cachedAllTxns = null; // FIX: was missing — stale cache survived reset
     notifyListeners();
   }
@@ -1221,7 +1566,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate}) async {
+  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate, List<GoalDeposit>? deposits}) async {
     final updated = SavingGoal(
       id: g.id,
       currency: g.currency,
@@ -1229,6 +1574,7 @@ class AppState extends ChangeNotifier {
       targetAmount: targetAmount ?? g.targetAmount,
       savedAmount: savedAmount ?? g.savedAmount,
       targetDate: targetDate ?? g.targetDate,
+      deposits: deposits ?? g.deposits,   // ← carry existing deposits forward
     );
     if (_useCloud) {
       await FirestoreService.instance.updateSavingGoal(g.id, updated.toMap());
@@ -1240,6 +1586,17 @@ class AppState extends ChangeNotifier {
       savingGoals[idx] = updated;
       notifyListeners();
     }
+  }
+
+  /// Records a deposit and updates savedAmount. Prefer this over updateSavingGoal
+  /// for the +Money flow so History is automatically populated.
+  Future<void> depositToGoal(SavingGoal g, double amount, {String note = ''}) async {
+    final newDeposit = GoalDeposit(amount: amount, date: DateTime.now(), note: note);
+    final newDeposits = [...g.deposits, newDeposit];
+    await updateSavingGoal(g,
+      savedAmount: g.savedAmount + amount,
+      deposits: newDeposits,
+    );
   }
 
   Future<void> deleteSavingGoal(int id) async {
@@ -1316,13 +1673,17 @@ class CurrencyData {
 
 class CategoryItem {
   final String icon, label, color;
-  const CategoryItem(this.icon, this.label, this.color);
+  final IconData? materialIcon;
+  const CategoryItem(this.icon, this.label, this.color, [this.materialIcon]);
 }
 
 class GroupData {
   final int id;
   String name, emoji, currency, sym;
   bool isArchived;
+  /// True when the group owner has Premium and has enabled guest joining.
+  /// Mirrors `groups/{id}.isPremiumGroup` in Firestore.
+  bool isPremiumGroup;
   String? inviteCode;
   /// Raw Firestore document ID (e.g. "abc123xyz"). Stored in SQLite so that
   /// FirestoreService._docIdCache can be rebuilt after an app kill/restart.
@@ -1341,6 +1702,7 @@ class GroupData {
     List<ExpenseData>? expenses,
     List<SettlementData>? settlements,
     this.isArchived = false,
+    this.isPremiumGroup = false,
     this.inviteCode,
     this.firestoreId,
   })  : expenses = expenses ?? [],
@@ -1652,6 +2014,26 @@ class SubscriptionData {
   }
 }
 
+// ─── Deposit entry for a saving goal ─────────────────────────────────────────
+class GoalDeposit {
+  final double amount;
+  final DateTime date;
+  final String note;
+  GoalDeposit({required this.amount, required this.date, this.note = ''});
+
+  Map<String, dynamic> toMap() => {
+    'amount': amount,
+    'date': date.toIso8601String(),
+    'note': note,
+  };
+
+  factory GoalDeposit.fromMap(Map<String, dynamic> m) => GoalDeposit(
+    amount: (m['amount'] as num).toDouble(),
+    date: DateTime.parse(m['date'] as String),
+    note: (m['note'] as String?) ?? '',
+  );
+}
+
 class SavingGoal {
   final int id;
   final String currency;
@@ -1659,6 +2041,7 @@ class SavingGoal {
   final double targetAmount;
   final double savedAmount;
   final DateTime? targetDate;
+  final List<GoalDeposit> deposits;
 
   SavingGoal({
     required this.id,
@@ -1667,9 +2050,25 @@ class SavingGoal {
     required this.targetAmount,
     this.savedAmount = 0.0,
     this.targetDate,
-  });
+    List<GoalDeposit>? deposits,
+  }) : deposits = deposits ?? [];
 
   factory SavingGoal.fromMap(Map<String, dynamic> map) {
+    List<GoalDeposit> deps = [];
+    try {
+      final raw = map['deposits'];
+      if (raw != null && raw is String && raw.isNotEmpty) {
+        deps = raw.split('||').map<GoalDeposit?>((s) {
+          final parts = s.split('|');
+          if (parts.length < 2) return null;
+          return GoalDeposit(
+            amount: double.tryParse(parts[0]) ?? 0,
+            date: DateTime.tryParse(parts[1]) ?? DateTime.now(),
+            note: parts.length > 2 ? parts[2] : '',
+          );
+        }).whereType<GoalDeposit>().toList();
+      }
+    } catch (_) {}
     return SavingGoal(
       id: map['id'] as int,
       currency: (map['currency'] as String?) ?? 'USD',
@@ -1677,16 +2076,39 @@ class SavingGoal {
       targetAmount: (map['target_amount'] as num?)?.toDouble() ?? 0.0,
       savedAmount: (map['saved_amount'] as num?)?.toDouble() ?? 0.0,
       targetDate: map['target_date'] != null ? DateTime.tryParse(map['target_date']) : null,
+      deposits: deps,
     );
   }
 
   Map<String, dynamic> toMap() {
+    final depsStr = deposits.map((d) =>
+      '${d.amount}|${d.date.toIso8601String()}|${d.note}'
+    ).join('||');
     return {
       'currency': currency,
       'title': title,
       'target_amount': targetAmount,
       'saved_amount': savedAmount,
       'target_date': targetDate?.toIso8601String(),
+      'deposits': depsStr,
     };
+  }
+
+  SavingGoal copyWith({
+    double? savedAmount,
+    double? targetAmount,
+    String? title,
+    DateTime? targetDate,
+    List<GoalDeposit>? deposits,
+  }) {
+    return SavingGoal(
+      id: id,
+      currency: currency,
+      title: title ?? this.title,
+      targetAmount: targetAmount ?? this.targetAmount,
+      savedAmount: savedAmount ?? this.savedAmount,
+      targetDate: targetDate ?? this.targetDate,
+      deposits: deposits ?? this.deposits,
+    );
   }
 }

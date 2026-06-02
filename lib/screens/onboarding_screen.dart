@@ -1,11 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import '../main.dart';
-import '../utils/theme_utils.dart';
 import '../services/analytics_service.dart';
 
-/// 3-page swipeable onboarding — shown only on first launch.
+// ── Onboarding page data ───────────────────────────────────────────────────
+class _PageData {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+
+  const _PageData({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+  });
+}
+
+const _green = Color(0xFF2DB85A);
+const _darkNavy = Color(0xFF1A2340);
+const _subtitleGrey = Color(0xFF8A8FA8);
+
+const List<_PageData> _pages = [
+  _PageData(
+    icon: Icons.account_balance_wallet_rounded,
+    iconColor: Color(0xFF2DB85A),
+    title: 'Track Every\nRupee & Euro.',
+    subtitle: 'Monitor income and expenses\nacross all your currencies.',
+    buttonLabel: 'Next',
+  ),
+  _PageData(
+    icon: Icons.people_rounded,
+    iconColor: Color(0xFF2DB85A),
+    title: 'Split Bills.\nNo Awkwardness.',
+    subtitle: 'Share expenses with friends\nand settle up with one tap.',
+    buttonLabel: 'Next',
+  ),
+  _PageData(
+    icon: Icons.verified_user_rounded,
+    iconColor: Color(0xFF2DB85A),
+    title: 'Secure. Private.\nAlways in control.',
+    subtitle: 'Your data is safe and you\'re\nalways in control.',
+    buttonLabel: 'Get Started',
+  ),
+];
+
+// ── Main widget ────────────────────────────────────────────────────────────
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onDone;
   const OnboardingScreen({super.key, required this.onDone});
@@ -14,360 +56,332 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  final _ctrl = PageController();
-  int _page = 0;
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with TickerProviderStateMixin {
+  final PageController _ctrl = PageController();
+  int _current = 0;
+  late AnimationController _iconAnim;
+  late Animation<double> _iconScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _iconAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _iconScale = CurvedAnimation(parent: _iconAnim, curve: Curves.elasticOut);
+    _iconAnim.forward();
+  }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _iconAnim.dispose();
     super.dispose();
   }
 
   void _next() {
     HapticFeedback.lightImpact();
-    if (_page < 2) {
-      _ctrl.nextPage(
-        duration: const Duration(milliseconds: 380),
-        curve: Curves.easeInOut,
-      );
-    } else {
+    if (_current == _pages.length - 1) {
       AnalyticsService.logOnboardingCompleted();
       widget.onDone();
+      return;
     }
+    _ctrl.nextPage(
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _skip() {
+    HapticFeedback.mediumImpact();
+    AnalyticsService.logOnboardingSkipped();
+    AnalyticsService.logOnboardingCompleted();
+    widget.onDone();
+  }
+
+  void _onPageChanged(int index) {
+    HapticFeedback.selectionClick();
+    setState(() => _current = index);
+    _iconAnim.reset();
+    _iconAnim.forward();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: TC.bg(context),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // ── Pages ──────────────────────────────────────────────────────
-            PageView(
-              controller: _ctrl,
-              onPageChanged: (i) {
-                HapticFeedback.selectionClick();
-                setState(() => _page = i);
-              },
-              children: const [_Page1(), _Page2(), _Page3()],
-            ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // ── Top bar: pill + Skip ─────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Progress pill
+                    Container(
+                      width: 40,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDDE1EA),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    // Skip
+                    GestureDetector(
+                      onTap: _skip,
+                      child: const Text(
+                        'Skip',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF8A8FA8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-            // ── Skip (pages 0 & 1 only) ────────────────────────────────────
-            if (_page < 2)
-              Positioned(
-                top: 12,
-                right: 20,
-                child: GestureDetector(
-                  onTap: () {
-                    AnalyticsService.logOnboardingSkipped();
-                    widget.onDone();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: TC.card(context),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: TC.border(context)),
-                    ),
-                    child: Text(
-                      'Skip',
-                      style: TextStyle(
-                        color: TC.text2(context),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+              // ── Swipeable pages ──────────────────────────────────────
+              Expanded(
+                child: PageView.builder(
+                  controller: _ctrl,
+                  itemCount: _pages.length,
+                  onPageChanged: _onPageChanged,
+                  itemBuilder: (_, i) => _PageContent(
+                    page: _pages[i],
+                    iconAnim: _iconScale,
+                    isCurrent: i == _current,
+                  ),
+                ),
+              ),
+
+              // ── Dots ────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _pages.length,
+                    (i) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 280),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: i == _current ? 22 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: i == _current ? _green : const Color(0xFFCED2DC),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                   ),
                 ),
               ),
 
-            // ── Bottom controls ────────────────────────────────────────────
-            Positioned(
-              bottom: 48,
-              left: 24,
-              right: 24,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Dot indicators
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      3,
-                      (i) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: _page == i ? 28 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _page == i
-                              ? AppColors.green
-                              : TC.border(context),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // CTA button
-                  GestureDetector(
-                    onTap: _next,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 17),
-                      decoration: BoxDecoration(
-                        color: AppColors.green,
+              // ── CTA Button ──────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 58,
+                  child: ElevatedButton(
+                    onPressed: _next,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _green,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.green.withValues(alpha: 0.35),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
                       ),
-                      alignment: Alignment.center,
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
                       child: Text(
-                        _page == 2 ? '🚀  Get Started' : 'Next  →',
+                        _pages[_current].buttonLabel,
+                        key: ValueKey(_pages[_current].buttonLabel),
                         style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─── Shared page layout ───────────────────────────────────────────────────────
-class _PageShell extends StatelessWidget {
-  final Widget illustration;
-  final String badge;
-  final Color badgeColor;
-  final Color badgeBg;
-  final String headline;
-  final String subtext;
+// ── Single page content ────────────────────────────────────────────────────
+class _PageContent extends StatelessWidget {
+  final _PageData page;
+  final Animation<double> iconAnim;
+  final bool isCurrent;
 
-  const _PageShell({
-    required this.illustration,
-    required this.badge,
-    required this.badgeColor,
-    required this.badgeBg,
-    required this.headline,
-    required this.subtext,
+  const _PageContent({
+    required this.page,
+    required this.iconAnim,
+    required this.isCurrent,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 140),
+      padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: illustration,
-              ),
-            ),
+          const Spacer(flex: 2),
+
+          // ── Icon illustration ────────────────────────────────────────
+          ScaleTransition(
+            scale: iconAnim,
+            child: _IllustrationCircle(icon: page.icon),
           ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              color: badgeBg,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              badge,
-              style: TextStyle(
-                color: badgeColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
+
+          const Spacer(flex: 2),
+
+          // ── Title ────────────────────────────────────────────────────
           Text(
-            headline,
-            style: TextStyle(
-              fontSize: 38,
+            page.title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 28,
               fontWeight: FontWeight.w800,
-              color: TC.text(context),
-              height: 1.1,
-              letterSpacing: -0.5,
+              color: _darkNavy,
+              height: 1.25,
+              letterSpacing: -0.3,
             ),
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
+          // ── Subtitle ─────────────────────────────────────────────────
           Text(
-            subtext,
-            style: TextStyle(
-              fontSize: 16,
-              color: TC.text2(context),
-              height: 1.6,
+            page.subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w400,
+              color: _subtitleGrey,
+              height: 1.55,
             ),
           ),
+
+          const Spacer(flex: 3),
         ],
       ),
     );
   }
 }
 
-// ─── Page 1: Split bills, no drama ───────────────────────────────────────────
-class _Page1 extends StatelessWidget {
-  const _Page1();
+// ── Illustration circle widget ─────────────────────────────────────────────
+class _IllustrationCircle extends StatelessWidget {
+  final IconData icon;
 
-  @override
-  Widget build(BuildContext context) {
-    return _PageShell(
-      badge: '💰  Expense Tracking',
-      badgeColor: AppColors.green,
-      badgeBg: AppColors.greenDim,
-      headline: 'Smart Expense\nTracking.',
-      subtext: 'Manage your personal finances and track group splits effortlessly.',
-      illustration: _SplitIllustration(),
-    );
-  }
-}
+  const _IllustrationCircle({required this.icon});
 
-// ─── Page 2: Track your money ─────────────────────────────────────────────────
-class _Page2 extends StatelessWidget {
-  const _Page2();
-
-  @override
-  Widget build(BuildContext context) {
-    return _PageShell(
-      badge: '📊  Money Manager',
-      badgeColor: AppColors.blue,
-      badgeBg: AppColors.blueDim,
-      headline: 'Track your\nmoney.',
-      subtext: 'Personal income and expense\nmanager built right in.',
-      illustration: _BudgetIllustration(),
-    );
-  }
-}
-
-// ─── Page 3: Offline ─────────────────────────────────────────────────────
-class _Page3 extends StatelessWidget {
-  const _Page3();
-
-  @override
-  Widget build(BuildContext context) {
-    return _PageShell(
-      badge: '☁️  Cloud Sync',
-      badgeColor: AppColors.green,
-      badgeBg: AppColors.greenDim,
-      headline: 'Sync Across\nAll Devices.',
-      subtext:
-          'Sign in to sync your data securely via Firebase. Your financial data is encrypted and private.',
-      illustration: _PrivacyIllustration(),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Illustrations (widget-based, no images needed)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/// Illustration 1 — 3 avatars around a floating bill card
-class _SplitIllustration extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 280,
-      height: 220,
+      width: 260,
+      height: 260,
       child: Stack(
-        clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          // Glow background
+          // Outermost very faint glow
           Container(
-            width: 200,
-            height: 200,
-            decoration: BoxDecoration(
+            width: 260,
+            height: 260,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFFF0FBF4),
+            ),
+          ),
+          // Middle glow ring
+          Container(
+            width: 210,
+            height: 210,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFFDDF4E7),
+            ),
+          ),
+          // Inner glow
+          Container(
+            width: 165,
+            height: 165,
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
-                colors: [
-                  AppColors.green.withValues(alpha: 0.1),
-                  Colors.transparent,
-                ],
+                colors: [Color(0xFFB8ECCC), Color(0xFFDDF4E7)],
               ),
             ),
           ),
 
-            // Central bill card
+          // Cloud decoration top-left
+          const Positioned(
+            top: 28,
+            left: 24,
+            child: _CloudShape(size: 36, opacity: 0.55),
+          ),
+          // Cloud decoration bottom-right
+          const Positioned(
+            bottom: 34,
+            right: 20,
+            child: _CloudShape(size: 30, opacity: 0.45),
+          ),
+
+          // Sparkle top-right
+          Positioned(
+            top: 52,
+            right: 40,
+            child: _Sparkle(size: 10, color: _green.withValues(alpha: 0.7)),
+          ),
+          // Sparkle bottom-left
+          Positioned(
+            bottom: 58,
+            left: 38,
+            child: _Sparkle(size: 7, color: _green.withValues(alpha: 0.5)),
+          ),
+
+          // Main icon container (shield-like card)
           Container(
-            width: 140,
-            padding: const EdgeInsets.all(16),
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
-              color: TC.card(context),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: TC.border(context)),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF3DD68C), Color(0xFF1AAD5A)],
+              ),
+              borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
-                  color: TC.shadow(context),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
+                  color: _green.withValues(alpha: 0.35),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🍽️', style: TextStyle(fontSize: 28)),
-                const SizedBox(height: 8),
-                Text(
-                  'Dinner',
-                  style: TextStyle(
-                    color: TC.text(context),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '€42.00',
-                  style: TextStyle(
-                    color: AppColors.green,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(height: 1, color: TC.border(context)),
-                const SizedBox(height: 8),
-                Text(
-                  '÷ 3 people',
-                  style: TextStyle(color: TC.text2(context), fontSize: 11),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '€14 each',
-                  style: TextStyle(
-                    color: AppColors.green,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+            child: const Icon(
+              Icons.verified_user_rounded,
+              size: 54,
+              color: Colors.white,
             ),
           ),
         ],
@@ -376,127 +390,29 @@ class _SplitIllustration extends StatelessWidget {
   }
 }
 
-/// Illustration 2 — Budget bars with income/expense breakdown
-class _BudgetIllustration extends StatelessWidget {
+// ── Cloud shape ────────────────────────────────────────────────────────────
+class _CloudShape extends StatelessWidget {
+  final double size;
+  final double opacity;
+  const _CloudShape({required this.size, required this.opacity});
+
   @override
   Widget build(BuildContext context) {
-    final bars = [
-      ('🍽️', 'Food', 0.75, AppColors.red),
-      ('🚗', 'Transport', 0.45, AppColors.blue),
-      ('🛒', 'Shopping', 0.9, AppColors.yellow),
-      ('💡', 'Bills', 0.3, AppColors.green),
-      ('🎉', 'Fun', 0.55, AppColors.purple),
-    ];
-
-    return Container(
-      width: 280,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: TC.card(context),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: TC.border(context)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                DateFormat('MMM yyyy').format(DateTime.now()),
-                style: TextStyle(
-                  color: TC.text(context),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.greenDim,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'On track ✓',
-                  style: TextStyle(
-                    color: AppColors.green,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...bars.map(
-            (b) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(b.$1, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 6),
-                      Text(
-                        b.$2,
-                        style: TextStyle(
-                          color: TC.text2(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${(b.$3 * 100).toInt()}%',
-                        style: TextStyle(
-                          color: b.$4,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: b.$3,
-                      backgroundColor: TC.border(context),
-                      valueColor: AlwaysStoppedAnimation(b.$4),
-                      minHeight: 6,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Opacity(
+      opacity: opacity,
+      child: Icon(Icons.cloud_rounded, size: size, color: const Color(0xFFB8C4D0)),
     );
   }
 }
 
-/// Illustration 3 — Privacy
-class _PrivacyIllustration extends StatelessWidget {
+// ── Sparkle / star ─────────────────────────────────────────────────────────
+class _Sparkle extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _Sparkle({required this.size, required this.color});
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      height: 200,
-      decoration: BoxDecoration(
-        color: AppColors.greenDim,
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.green.withValues(alpha: 0.5), width: 2),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.shield_rounded, size: 100, color: AppColors.green.withValues(alpha: 0.2)),
-          const Icon(Icons.lock_rounded, size: 50, color: AppColors.green),
-        ],
-      ),
-    );
+    return Icon(Icons.auto_awesome_rounded, size: size, color: color);
   }
 }

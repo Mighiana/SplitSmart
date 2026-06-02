@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SplitSmart – App Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal-900: #0D5C5A;
+    --teal-800: #117A77;
+    --teal-700: #138A87;
+    --teal-600: #1A9B97;
+    --teal-50:  #E3F0EE;
+    --cream:    #F5F1EA;
+    --cream-2:  #EFE9DF;
+    --ink:      #14211F;
+    --muted:    #6B7B79;
+    --red:      #D94A5E;
+    --pink-bg:  #FBE3E0;
+    --orange-bg:#FFE5C9;
+    --mint-bg:  #DCEDE3;
+    --green-pill:#A8D8B9;
+    --pink-icon:#F4C6C0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #1a1a1a;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 24px;
+  }
+  h1.page-title { color: #fff; font-size: 22px; font-weight: 700; text-align: center; }
+  .subtitle { color: #888; font-size: 13px; text-align: center; margin-bottom: 24px; }
+
+  .screens-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 36px;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .serif { font-family: 'Fraunces', Georgia, serif; }
+
+  /* Phone shell */
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--cream);
+    border-radius: 52px;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px #333, 0 0 0 8px #1a1a2e, 0 40px 80px rgba(0,0,0,0.6);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .phone::before {
+    content: '';
+    position: absolute;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 32px;
+    background: #1a1a2e;
+    border-radius: 18px;
+    z-index: 100;
+  }
+  .screen-label { color: #aaa; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+  .status-bar {
+    height: 48px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 32px 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  /* Bottom nav (shared) */
+  .bottom-nav {
+    height: 90px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 12px 24px;
+    flex-shrink: 0;
+    margin-top: auto;
+    border-top: 1px solid rgba(0,0,0,0.04);
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    flex: 1; cursor: pointer;
+  }
+  .nav-item svg { width: 24px; height: 24px; color: #98A8A6; }
+  .nav-item span { font-size: 11px; color: #98A8A6; font-weight: 500; }
+  .nav-item.active svg { color: var(--teal-800); }
+  .nav-item.active span { color: var(--teal-800); font-weight: 600; }
+  .fab-nav {
+    width: 60px; height: 60px;
+    background: var(--teal-800);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(17,122,119,0.4);
+    margin-bottom: 18px;
+  }
+  .fab-nav svg { width: 28px; height: 28px; color: #fff; }
+
+  .scroll-inner {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .scroll-inner::-webkit-scrollbar { display: none; }
+
+  /* ════ SCREEN 1: HOME (matches user's screenshot 1) ════ */
+  .top-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 22px 18px;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .header-avatar {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #4a3a2e, #8a6e54);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 20px;
+    overflow: hidden;
+    background-image: radial-gradient(circle at 30% 35%, #d4a574 0%, #6b4d3a 60%, #2c1f17 100%);
+  }
+  .greeting-block .small { font-family: 'Fraunces', serif; font-style: italic; color: #98A8A6; font-size: 15px; font-weight: 500; }
+  .greeting-block .name { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--ink); margin-top: -2px; letter-spacing: -0.3px; }
+  .gear-btn {
+    width: 56px; height: 56px; border-radius: 18px;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .gear-btn svg { width: 24px; height: 24px; color: #9B7CD8; }
+
+  .net-card {
+    margin: 8px 18px 0;
+    background: linear-gradient(160deg, var(--teal-700) 0%, var(--teal-900) 100%);
+    border-radius: 28px;
+    padding: 26px 24px 22px;
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+  }
+  .net-card::after {
+    content: '';
+    position: absolute;
+    bottom: -50px; right: -50px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(168,216,185,0.3), transparent 70%);
+    border-radius: 50%;
+  }
+  .net-label {
+    display: flex; align-items: center; gap: 6px;
+    color: rgba(255,255,255,0.75);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+  }
+  .currency-pill {
+    position: absolute; top: 24px; right: 24px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: #fff;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .net-amount { font-family: 'Fraunces', serif; font-size: 78px; font-weight: 700; line-height: 1; margin: 14px 0 12px; letter-spacing: -3px; }
+  .net-detail { color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 22px; }
+
+  .net-stats {
+    display: flex; gap: 10px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 4px;
+    backdrop-filter: blur(8px);
+  }
+  .net-stat {
+    flex: 1;
+    padding: 14px 18px;
+    border-radius: 16px;
+  }
+  .net-stat:first-child { border-right: 1px solid rgba(255,255,255,0.15); }
+  .ns-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; }
+  .ns-head.personal { color: #C29DEF; }
+  .ns-head.groups { color: #F4A88C; }
+  .ns-head svg { width: 14px; height: 14px; }
+  .ns-amount { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 700; color: #A8D8B9; margin: 4px 0 2px; }
+  .ns-foot { color: rgba(255,255,255,0.65); font-size: 12px; }
+
+  .action-row { display: flex; gap: 12px; margin: 18px; }
+  .btn-fill, .btn-outline {
+    flex: 1;
+    padding: 18px;
+    border-radius: 22px;
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-fill { background: var(--teal-800); color: #fff; }
+  .btn-outline { background: #fff; color: var(--teal-800); }
+  .btn-fill svg, .btn-outline svg { width: 18px; height: 18px; }
+
+  .mini-stats-row { display: flex; gap: 12px; padding: 0 18px; }
+  .mini-stat-card {
+    flex: 1;
+    background: #fff;
+    border-radius: 22px;
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .ms-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--mint-bg);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px;
+  }
+  .ms-icon svg { width: 20px; height: 20px; }
+  .ms-icon.orange { background: var(--orange-bg); }
+  .ms-icon.mint   { background: var(--mint-bg); }
+  .ms-value { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1; }
+  .ms-value.small { font-size: 24px; }
+  .ms-label { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* ════ SCREEN 2: HOME-SCROLL (matches user's screenshot 2) ════ */
+  .alert-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 6px;
+    margin: 12px 18px 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .alert-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px;
+  }
+  .alert-row + .alert-row { border-top: 1px solid #F0EDE5; }
+  .alert-icon-box {
+    width: 56px; height: 56px; border-radius: 16px;
+    background: #FFF0D4;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 28px;
+  }
+  .alert-icon-box.target { background: #E1F0EE; }
+  .alert-info { flex: 1; }
+  .alert-info h4 { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; color: var(--ink); }
+  .alert-info p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .alert-right {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--ink);
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .alert-right svg { width: 14px; height: 14px; color: var(--muted); }
+  .progress-track { width: 70px; height: 4px; background: #E5E0D6; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .progress-fill { width: 71%; height: 100%; background: var(--teal-700); }
+
+  .section-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 24px 22px 14px;
+  }
+  .section-title h2 { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 700; letter-spacing: -1px; color: var(--ink); }
+  .section-title a { color: var(--teal-800); font-weight: 600; font-size: 14px; display:flex; align-items:center; gap:4px; }
+
+  .recent-list {
+    background: #fff;
+    border-radius: 22px;
+    margin: 0 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    overflow: hidden;
+  }
+  .recent-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+  }
+  .recent-row + .recent-row { border-top: 1px solid #F0EDE5; }
+  .recent-icon {
+    width: 50px; height: 50px; border-radius: 14px;
+    background: var(--pink-icon);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+  }
+  .recent-info { flex: 1; min-width: 0; }
+  .recent-info h4 { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 700; color: var(--ink); }
+  .recent-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .recent-meta span { font-size: 13px; color: var(--muted); }
+  .currency-tag {
+    background: var(--green-pill);
+    color: #1F5C3D;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+  }
+  .recent-amount { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--red); }
+
+  /* ════ SCREEN 3: GROUPS LIST ════ */
+  .page-title-big {
+    padding: 12px 22px 8px;
+  }
+  .page-title-big h1 { font-family: 'Fraunces', serif; font-size: 36px; font-weight: 700; color: var(--ink); letter-spacing: -1.5px; }
+  .page-title-big p { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+  .filter-pills { display: flex; gap: 8px; padding: 8px 22px 16px; overflow-x: auto; scrollbar-width: none; }
+  .filter-pills::-webkit-scrollbar { display: none; }
+  .pill {
+    padding: 8px 16px;
+    background: #fff;
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .pill.active { background: var(--teal-800); color: #fff; }
+
+  .group-list { padding: 0 18px; display: flex; flex-direction: column; gap: 12px; }
+  .group-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .gc-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .gc-emoji {
+    width: 56px; height: 56px; border-radius: 18px;
+    background: var(--mint-bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .gc-emoji.orange { background: var(--orange-bg); }
+  .gc-emoji.pink { background: var(--pink-icon); }
+  .gc-emoji.blue { background: #D4E8F4; }
+  .gc-name { flex: 1; }
+  .gc-name h3 { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -0.5px; }
+  .gc-name p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .gc-arrow svg { width: 22px; height: 22px; color: var(--muted); }
+  .gc-bot { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid #F0EDE5; }
+  .gc-members { display: flex; }
+  .gc-mem {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2.5px solid #fff;
+    margin-left: -10px;
+    font-size: 12px; font-weight: 700; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gc-mem:first-child { margin-left: 0; }
+  .gc-total { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--ink); }
+  .gc-total small { font-size: 12px; color: var(--muted); font-family: 'Inter', sans-serif; font-weight: 500; display:block; text-align:right; }
+
+  /* ════ SCREEN 4: ADD EXPENSE ════ */
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 22px 4px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px; border-radius: 14px;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .icon-btn svg { width: 20px; height: 20px; color: var(--ink); }
+  .modal-header h2 { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--ink); }
+
+  .amount-hero {
+    text-align: center;
+    padding: 24px 20px 8px;
+  }
+  .amount-hero p { font-family: 'Fraunces', serif; font-style: italic; color: var(--muted); font-size: 16px; margin-bottom: 6px; }
+  .amount-big { font-family: 'Fraunces', serif; font-size: 76px; font-weight: 700; color: var(--ink); letter-spacing: -3px; line-height: 1; }
+  .amount-big span.cur { color: var(--teal-700); }
+  .amount-currency-row { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+  .amount-currency-row .pill { background: #fff; }
+  .amount-currency-row .pill.active { background: var(--teal-800); color: #fff; }
+
+  .form-section {
+    background: #fff;
+    border-radius: 28px 28px 0 0;
+    margin-top: 16px;
+    padding: 24px 20px 12px;
+    flex: 1;
+  }
+  .form-field { margin-bottom: 18px; }
+  .form-label { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 10px; }
+  .form-input {
+    width: 100%;
+    padding: 16px 18px;
+    background: var(--cream-2);
+    border: none;
+    border-radius: 16px;
+    font-size: 16px;
+    font-family: 'Inter', sans-serif;
+    color: var(--ink);
+    outline: none;
+  }
+  .category-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cat-chip {
+    padding: 10px 14px;
+    background: var(--cream-2);
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cat-chip.active { background: var(--teal-800); color: #fff; }
+
+  .split-type-row { display: flex; background: var(--cream-2); border-radius: 16px; padding: 4px; gap: 4px; }
+  .split-type {
+    flex: 1; text-align: center;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .split-type.active { background: #fff; color: var(--teal-800); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  .save-bar {
+    padding: 12px 20px 12px;
+    background: #fff;
+  }
+  .save-bar .btn-fill { width: 100%; padding: 20px; border-radius: 22px; }
+
+  /* ════ SCREEN 5: GROUP DETAIL / SETTLE ════ */
+  .gd-hero {
+    margin: 8px 18px 0;
+    background: linear-gradient(160deg, var(--teal-700), var(--teal-900));
+    border-radius: 28px;
+    padding: 24px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .gd-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: radial-gradient(circle, rgba(168,216,185,0.3), transparent 70%);
+    border-radius: 50%;
+  }
+  .gd-emoji-big { font-size: 38px; margin-bottom: 6px; }
+  .gd-hero h2 { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 700; letter-spacing: -1px; }
+  .gd-hero .meta { color: rgba(255,255,255,0.7); font-size: 13px; margin-top: 4px; }
+  .gd-amount-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.15); }
+  .gd-amount-row > div p { font-size: 11px; color: rgba(255,255,255,0.65); letter-spacing: 1.5px; font-weight: 600; text-transform: uppercase; }
+  .gd-amount-row > div h3 { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 700; }
+  .gd-amount-row > div h3.green { color: #A8D8B9; }
+  .gd-members-line { display: flex; margin-top: 18px; align-items: center; gap: 12px; }
+  .gd-members-line .gc-mem { width: 34px; height: 34px; }
+  .gd-members-line span { font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500; }
+
+  .settle-list-w { padding: 0 18px; display: flex; flex-direction: column; gap: 10px; }
+  .settle-row {
+    background: #fff;
+    border-radius: 20px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .settle-avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 16px;
+  }
+  .settle-text { flex: 1; }
+  .settle-text h4 { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--ink); }
+  .settle-text p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .settle-amount { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; }
+  .settle-amount.green { color: #1A8A6B; }
+  .settle-amount.red { color: var(--red); }
+  .settle-pill-btn {
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+  }
+  .settle-pill-btn.teal { background: var(--teal-800); color: #fff; }
+  .settle-pill-btn.outline { background: var(--mint-bg); color: var(--teal-800); }
+
+</style>
+</head>
+<body>
+
+<h1 class="page-title">SplitSmart — Refined Prototype</h1>
+<p class="subtitle">Matches your actual app: teal & cream · Fraunces serif · iOS 18 phone shell</p>
+
+<div class="screens-row">
+
+  <!-- ═══════════ SCREEN 1: HOME TOP ═══════════ -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span style="font-weight:600;">●●● 100%</span>
+      </div>
+
+      <div class="top-header">
+        <div class="header-left">
+          <div class="header-avatar"></div>
+          <div class="greeting-block">
+            <div class="small">Good evening,</div>
+            <div class="name">Muhammad Us...</div>
+          </div>
+        </div>
+        <div class="gear-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+      </div>
+
+      <div class="net-card">
+        <div class="net-label">
+          NET POSITION
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div class="currency-pill">🇪🇺 EUR ⌄</div>
+        <div class="net-amount">-€5</div>
+        <div class="net-detail">Personal €5 · Groups €0 owed</div>
+        <div class="net-stats">
+          <div class="net-stat">
+            <div class="ns-head personal">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              PERSONAL
+            </div>
+            <div class="ns-amount">€5</div>
+            <div class="ns-foot">Your own balance</div>
+          </div>
+          <div class="net-stat">
+            <div class="ns-head groups">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              GROUPS
+            </div>
+            <div class="ns-amount">€0</div>
+            <div class="ns-foot">You are settled</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn-fill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          Add Expense
+        </button>
+        <button class="btn-outline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          Add Income
+        </button>
+      </div>
+
+      <div class="mini-stats-row">
+        <div class="mini-stat-card">
+          <div class="ms-icon mint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#1A8A6B" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </div>
+          <div class="ms-value">71%</div>
+          <div class="ms-label">Goals</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="ms-icon orange">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#C97A2A" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div class="ms-value">2</div>
+          <div class="ms-label">Overdue</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="ms-icon mint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#1A8A6B" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div class="ms-value small">€1,460</div>
+          <div class="ms-label">This Month</div>
+        </div>
+      </div>
+
+      <div class="bottom-nav" style="margin-top:auto;">
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Home</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 7"/></svg>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Groups</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Planner</span>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">1 · Home (above fold)</span>
+  </div>
+
+  <!-- ═══════════ SCREEN 2: HOME (below fold — alerts + recent) ═══════════ -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span style="font-weight:600;">●●● 100%</span>
+      </div>
+
+      <div class="alert-card">
+        <div class="alert-row">
+          <div class="alert-icon-box">🔔</div>
+          <div class="alert-info">
+            <h4>Chatgpt</h4>
+            <p>29 days ago</p>
+          </div>
+          <div class="alert-right">18
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="alert-row">
+          <div class="alert-icon-box target">🎯</div>
+          <div class="alert-info">
+            <h4>Mobile</h4>
+            <p>71% completed</p>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+          <div class="alert-right">€22,655 left
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <h2>Recent</h2>
+        <a>See all <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><polyline points="9 18 15 12 9 6"/></svg></a>
+      </div>
+
+      <div class="recent-list">
+        <div class="recent-row">
+          <div class="recent-icon">🏠</div>
+          <div class="recent-info">
+            <h4>gg</h4>
+            <div class="recent-meta">
+              <span>2026-05-16</span>
+              <span class="currency-tag">EUR</span>
+            </div>
+          </div>
+          <span class="recent-amount">-€80.00</span>
+        </div>
+        <div class="recent-row">
+          <div class="recent-icon">📚</div>
+          <div class="recent-info">
+            <h4>football: edy</h4>
+            <div class="recent-meta">
+              <span>Group Expen…</span>
+              <span class="currency-tag">USD</span>
+            </div>
+          </div>
+          <span class="recent-amount">-$166.67</span>
+        </div>
+        <div class="recent-row">
+          <div class="recent-icon">📚</div>
+          <div class="recent-info">
+            <h4>abc</h4>
+            <div class="recent-meta">
+              <span>2026-05-15</span>
+              <span class="currency-tag">USD</span>
+            </div>
+          </div>
+          <span class="recent-amount">-$800.00</span>
+        </div>
+        <div class="recent-row">
+          <div class="recent-icon">📚</div>
+          <div class="recent-info">
+            <h4>Study</h4>
+            <div class="recent-meta">
+              <span>2026-05-15</span>
+              <span class="currency-tag">USD</span>
+            </div>
+          </div>
+          <span class="recent-amount">-$48.00</span>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Home</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 7"/></svg>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Groups</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Planner</span>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">2 · Home (alerts & recent)</span>
+  </div>
+
+  <!-- ═══════════ SCREEN 3: GROUPS LIST ═══════════ -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span style="font-weight:600;">●●● 100%</span>
+      </div>
+
+      <div class="page-title-big">
+        <h1>Groups</h1>
+        <p>4 active groups · €1,233 in flight</p>
+      </div>
+
+      <div class="filter-pills">
+        <div class="pill active">All</div>
+        <div class="pill">You owe</div>
+        <div class="pill">You're owed</div>
+        <div class="pill">Settled</div>
+      </div>
+
+      <div class="scroll-inner">
+        <div class="group-list" style="padding-bottom:16px;">
+          <div class="group-card">
+            <div class="gc-top">
+              <div class="gc-emoji">⚽</div>
+              <div class="gc-name">
+                <h3>football: edy</h3>
+                <p>5 members · last activity today</p>
+              </div>
+              <div class="gc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+            </div>
+            <div class="gc-bot">
+              <div class="gc-members">
+                <div class="gc-mem" style="background:#D94A5E;">U</div>
+                <div class="gc-mem" style="background:var(--teal-800);">E</div>
+                <div class="gc-mem" style="background:#C97A2A;">A</div>
+                <div class="gc-mem" style="background:#7A4BCC;">+2</div>
+              </div>
+              <div>
+                <div class="gc-total">-$166.67</div>
+                <small>you owe</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="gc-top">
+              <div class="gc-emoji orange">🏠</div>
+              <div class="gc-name">
+                <h3>Roommates</h3>
+                <p>4 members · 12 expenses</p>
+              </div>
+              <div class="gc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+            </div>
+            <div class="gc-bot">
+              <div class="gc-members">
+                <div class="gc-mem" style="background:var(--teal-800);">U</div>
+                <div class="gc-mem" style="background:#D94A5E;">A</div>
+                <div class="gc-mem" style="background:#C97A2A;">S</div>
+                <div class="gc-mem" style="background:#7A4BCC;">L</div>
+              </div>
+              <div>
+                <div class="gc-total" style="color:#1A8A6B;">+€320</div>
+                <small>you're owed</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="gc-top">
+              <div class="gc-emoji pink">📚</div>
+              <div class="gc-name">
+                <h3>Study Group</h3>
+                <p>3 members · 8 expenses</p>
+              </div>
+              <div class="gc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+            </div>
+            <div class="gc-bot">
+              <div class="gc-members">
+                <div class="gc-mem" style="background:#7A4BCC;">U</div>
+                <div class="gc-mem" style="background:#1A8A6B;">M</div>
+                <div class="gc-mem" style="background:#C97A2A;">+1</div>
+              </div>
+              <div>
+                <div class="gc-total" style="color:var(--muted);">€0</div>
+                <small>settled up ✓</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="gc-top">
+              <div class="gc-emoji blue">✈️</div>
+              <div class="gc-name">
+                <h3>NYC Trip</h3>
+                <p>6 members · 24 expenses</p>
+              </div>
+              <div class="gc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+            </div>
+            <div class="gc-bot">
+              <div class="gc-members">
+                <div class="gc-mem" style="background:var(--teal-800);">U</div>
+                <div class="gc-mem" style="background:#D94A5E;">J</div>
+                <div class="gc-mem" style="background:#7A4BCC;">K</div>
+                <div class="gc-mem" style="background:#C97A2A;">+3</div>
+              </div>
+              <div>
+                <div class="gc-total" style="color:#1A8A6B;">+$245</div>
+                <small>you're owed</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Home</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 7"/></svg>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+        </div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Groups</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Planner</span>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">3 · Groups list</span>
+  </div>
+
+  <!-- ═══════════ SCREEN 4: ADD EXPENSE ═══════════ -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span style="font-weight:600;">●●● 100%</span>
+      </div>
+
+      <div class="modal-header">
+        <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></div>
+        <h2>Add Expense</h2>
+        <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></div>
+      </div>
+
+      <div class="amount-hero">
+        <p>How much did you spend?</p>
+        <div class="amount-big"><span class="cur">€</span>80<span style="font-size:48px;">.00</span></div>
+        <div class="amount-currency-row">
+          <div class="pill active">EUR</div>
+          <div class="pill">USD</div>
+          <div class="pill">GBP</div>
+        </div>
+      </div>
+
+      <div class="scroll-inner">
+        <div class="form-section">
+          <div class="form-field">
+            <label class="form-label">Description</label>
+            <input class="form-input" value="gg — house rent share" />
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Category</label>
+            <div class="category-row">
+              <div class="cat-chip active">🏠 Home</div>
+              <div class="cat-chip">🍽️ Food</div>
+              <div class="cat-chip">📚 Study</div>
+              <div class="cat-chip">⚽ Sports</div>
+              <div class="cat-chip">✈️ Travel</div>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Group</label>
+            <div class="form-input" style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">🏠</span> Roommates</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--muted);"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Split Type</label>
+            <div class="split-type-row">
+              <div class="split-type active">Equal</div>
+              <div class="split-type">Custom</div>
+              <div class="split-type">Percent</div>
+              <div class="split-type">Shares</div>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Split between 4 people</label>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream-2);border-radius:14px;">
+                <div class="settle-avatar" style="width:34px;height:34px;font-size:13px;background:var(--teal-800);">U</div>
+                <span style="flex:1;font-weight:500;color:var(--ink);">Usman (You)</span>
+                <span style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--teal-800);">€20.00</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream-2);border-radius:14px;">
+                <div class="settle-avatar" style="width:34px;height:34px;font-size:13px;background:#D94A5E;">A</div>
+                <span style="flex:1;font-weight:500;color:var(--ink);">Ahmed</span>
+                <span style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--teal-800);">€20.00</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream-2);border-radius:14px;">
+                <div class="settle-avatar" style="width:34px;height:34px;font-size:13px;background:#7A4BCC;">S</div>
+                <span style="flex:1;font-weight:500;color:var(--ink);">Sarah</span>
+                <span style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--teal-800);">€20.00</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream-2);border-radius:14px;">
+                <div class="settle-avatar" style="width:34px;height:34px;font-size:13px;background:#C97A2A;">L</div>
+                <span style="flex:1;font-weight:500;color:var(--ink);">Ali</span>
+                <span style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--teal-800);">€20.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="save-bar">
+          <button class="btn-fill">Save Expense</button>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">4 · Add Expense</span>
+  </div>
+
+  <!-- ═══════════ SCREEN 5: GROUP DETAIL & SETTLE ═══════════ -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span style="font-weight:600;">●●● 100%</span>
+      </div>
+
+      <div class="modal-header">
+        <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></div>
+        <h2>Roommates</h2>
+        <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></div>
+      </div>
+
+      <div class="gd-hero">
+        <div class="gd-emoji-big">🏠</div>
+        <h2>Roommates</h2>
+        <div class="meta">4 members · 12 expenses · April 2026</div>
+        <div class="gd-amount-row">
+          <div>
+            <p>TOTAL SPENT</p>
+            <h3>€1,280</h3>
+          </div>
+          <div style="text-align:right;">
+            <p>YOU'RE OWED</p>
+            <h3 class="green">+€320</h3>
+          </div>
+        </div>
+        <div class="gd-members-line">
+          <div class="gc-members">
+            <div class="gc-mem" style="background:var(--teal-800);">U</div>
+            <div class="gc-mem" style="background:#D94A5E;">A</div>
+            <div class="gc-mem" style="background:#C97A2A;">S</div>
+            <div class="gc-mem" style="background:#7A4BCC;">L</div>
+          </div>
+          <span>Usman, Ahmed, Sarah, Ali</span>
+        </div>
+      </div>
+
+      <div class="section-title" style="padding-bottom:8px;">
+        <h2 style="font-size:24px;">Balances</h2>
+        <a>Settle all <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><polyline points="9 18 15 12 9 6"/></svg></a>
+      </div>
+
+      <div class="scroll-inner">
+        <div class="settle-list-w" style="padding-bottom:16px;">
+          <div class="settle-row">
+            <div class="settle-avatar" style="background:#D94A5E;">A</div>
+            <div class="settle-text">
+              <h4>Ahmed owes you</h4>
+              <p>From 4 expenses</p>
+            </div>
+            <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              <span class="settle-amount green">+€180</span>
+              <button class="settle-pill-btn teal">Remind</button>
+            </div>
+          </div>
+          <div class="settle-row">
+            <div class="settle-avatar" style="background:#C97A2A;">S</div>
+            <div class="settle-text">
+              <h4>Sarah owes you</h4>
+              <p>From 3 expenses</p>
+            </div>
+            <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              <span class="settle-amount green">+€155</span>
+              <button class="settle-pill-btn teal">Remind</button>
+            </div>
+          </div>
+          <div class="settle-row">
+            <div class="settle-avatar" style="background:#7A4BCC;">L</div>
+            <div class="settle-text">
+              <h4>You owe Ali</h4>
+              <p>From 1 expense</p>
+            </div>
+            <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              <span class="settle-amount red">-€15</span>
+              <button class="settle-pill-btn outline">Pay Now</button>
+            </div>
+          </div>
+
+          <div class="section-title" style="padding:18px 4px 8px;">
+            <h2 style="font-size:22px;">Recent Activity</h2>
+          </div>
+
+          <div class="recent-list" style="margin:0;">
+            <div class="recent-row">
+              <div class="recent-icon">🏠</div>
+              <div class="recent-info">
+                <h4>Rent April</h4>
+                <div class="recent-meta">
+                  <span>You paid · Split 4 ways</span>
+                </div>
+              </div>
+              <span class="recent-amount" style="color:#1A8A6B;">+€900</span>
+            </div>
+            <div class="recent-row">
+              <div class="recent-icon" style="background:#D4E8F4;">📶</div>
+              <div class="recent-info">
+                <h4>Internet</h4>
+                <div class="recent-meta">
+                  <span>Ahmed paid · Split 4 ways</span>
+                </div>
+              </div>
+              <span class="recent-amount">-€15</span>
+            </div>
+            <div class="recent-row">
+              <div class="recent-icon" style="background:var(--mint-bg);">🛒</div>
+              <div class="recent-info">
+                <h4>Groceries</h4>
+                <div class="recent-meta">
+                  <span>Sarah paid · Split 4 ways</span>
+                </div>
+              </div>
+              <span class="recent-amount">-€21.37</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Home</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 7"/></svg>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+        </div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Groups</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Planner</span>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">5 · Group Detail + Settle</span>
+  </div>
+
+</div><!-- /screens-row -->
+
+<p style="color:#666;font-size:12px;text-align:center;margin:20px 0 40px;">
+  Design system: Teal #117A77 · Cream #F5F1EA · Fraunces serif headings · Inter body
+</p>
+
+</body>
+</html>

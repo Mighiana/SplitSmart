@@ -136,7 +136,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
   CurrencyData get _selectedCurrency =>
       AppState.currencies.firstWhere(
         (c) => c.code == _currency,
-        orElse: () => CurrencyData('USD', 'US Dollar', '🇺🇸', '\$'),
+        orElse: () => const CurrencyData('USD', 'US Dollar', '🇺🇸', '\$'),
       );
 
   // ── Validation ─────────────────────────────────────────────────────────────
@@ -190,12 +190,13 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
         isActive:     true,
         createdAt:    DateTime.now(),
       );
-      await context.read<AppState>().addSubscription(sub);
+      final appState = context.read<AppState>();
+      await appState.addSubscription(sub);
       AnalyticsService.logSubscriptionAdded(_cycle);
 
-      // Schedule notifications — but never let it block the save
+      // Schedule notifications — capture state ref before async gap
       try {
-        final saved = context.read<AppState>().subscriptions.first;
+        final saved = appState.subscriptions.first;
         await NotificationService.scheduleForSub(saved);
       } catch (_) {}
 
@@ -329,7 +330,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _Label('Color'),
+                                  const _Label('Color'),
                                   const SizedBox(height: 6),
                                   Wrap(
                                     spacing: 8, runSpacing: 8,
@@ -376,7 +377,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         const SizedBox(height: 20),
 
                         // ── Name ──────────────────────────────────────────
-                        _Label('Subscription name'),
+                        const _Label('Subscription name'),
                         const SizedBox(height: 8),
                         AnimatedBuilder(
                           animation: _shakeAnim,
@@ -405,7 +406,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _Label('Amount'),
+                                  const _Label('Amount'),
                                   const SizedBox(height: 8),
                                   AnimatedBuilder(
                                     animation: _shakeAnim,
@@ -417,7 +418,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                                       controller: _amountCtrl,
                                       hint: '0.00',
                                       keyboardType:
-                                          TextInputType.numberWithOptions(
+                                          const TextInputType.numberWithOptions(
                                               decimal: true),
                                       prefix:
                                           '${_selectedCurrency.sym} ',
@@ -435,7 +436,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _Label('Currency'),
+                                  const _Label('Currency'),
                                   const SizedBox(height: 8),
                                   _DropdownField<String>(
                                     value: _currency,
@@ -462,7 +463,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         const SizedBox(height: 20),
 
                         // ── Billing cycle ─────────────────────────────────
-                        _Label('Billing cycle'),
+                        const _Label('Billing cycle'),
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -520,7 +521,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
 
                         // ── Billing day picker ────────────────────────────
                         if (_cycle == BillingCycle.monthly) ...[
-                          _Label('Billing day of month'),
+                          const _Label('Billing day of month'),
                           const SizedBox(height: 8),
                           _DayPicker(
                             selected: _billingDay,
@@ -533,7 +534,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         ],
 
                         if (_cycle == BillingCycle.weekly) ...[
-                          _Label('Billing day of week'),
+                          const _Label('Billing day of week'),
                           const SizedBox(height: 8),
                           Wrap(
                             spacing: 8, runSpacing: 8,
@@ -572,7 +573,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         ],
 
                         if (_cycle == BillingCycle.yearly) ...[
-                          _Label('Billing month'),
+                          const _Label('Billing month'),
                           const SizedBox(height: 8),
                           _DropdownField<int>(
                             value: _billingMonth,
@@ -590,12 +591,12 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                                 setState(() => _billingMonth = v!),
                           ),
                           const SizedBox(height: 10),
-                          _Label('Billing day'),
+                          const _Label('Billing day'),
                           const SizedBox(height: 8),
                           _DayPicker(
                             selected: _billingDay,
                             max: 28,
-                            label: (i) => '${i}',
+                            label: (i) => '$i',
                             accent: _accent,
                             onSelect: (d) =>
                                 setState(() => _billingDay = d),
@@ -605,7 +606,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         const SizedBox(height: 20),
 
                         // ── Category ──────────────────────────────────────
-                        _Label('Category'),
+                        const _Label('Category'),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8, runSpacing: 8,

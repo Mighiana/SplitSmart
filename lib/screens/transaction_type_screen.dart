@@ -50,9 +50,8 @@ class TransactionTypeScreen extends StatelessWidget {
 
               // ── Title ───────────────────────────────────────────────
               Text('What would you\nlike to record?',
-                  style: TextStyle(
-                      fontSize: 28, fontWeight: FontWeight.w800,
-                      color: TC.text(context), height: 1.15)),
+                  style: TC.gloock(context,
+                      fontSize: 28, letterSpacing: -0.5, height: 1.2)),
               const SizedBox(height: 8),
               Text('Choose the type of transaction below',
                   style: TextStyle(fontSize: 14, color: TC.text2(context))),

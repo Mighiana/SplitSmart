@@ -15,11 +15,11 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _DrawerItem(Icons.account_balance_wallet_outlined, 'Accounts', AppColors.green),
-      _DrawerItem(Icons.bar_chart_rounded, 'Charts', AppColors.blue),
-      _DrawerItem(Icons.repeat_rounded, 'Subscriptions', AppColors.purple),
-      _DrawerItem(Icons.notifications_outlined, 'Reminders', AppColors.amber),
-      _DrawerItem(Icons.track_changes_outlined, 'Saving Goals', AppColors.red),
+      const _DrawerItem(Icons.account_balance_wallet_outlined, 'Accounts', AppColors.green),
+      const _DrawerItem(Icons.bar_chart_rounded, 'Charts', AppColors.blue),
+      const _DrawerItem(Icons.repeat_rounded, 'Subscriptions', AppColors.purple),
+      const _DrawerItem(Icons.notifications_outlined, 'Reminders', AppColors.amber),
+      const _DrawerItem(Icons.track_changes_outlined, 'Saving Goals', AppColors.red),
     ];
 
     return Container(
@@ -56,7 +56,7 @@ class AppDrawer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('SplitSmart', style: TextStyle(color: TC.text(context), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                    Text('Premium Edition', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                    const Text('Premium Edition', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
                   ],
                 ),
               ],

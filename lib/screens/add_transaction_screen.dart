@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
@@ -14,7 +13,8 @@ import '../widgets/common_widgets.dart';
 class AddTransactionScreen extends StatefulWidget {
   final TransactionData? existing;
   final String? fixedCurrency;
-  const AddTransactionScreen({super.key, this.existing, this.fixedCurrency});
+  final String? initialType; // 'expense' or 'income'
+  const AddTransactionScreen({super.key, this.existing, this.fixedCurrency, this.initialType});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -48,11 +48,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         (c) => c.code == e.currency,
         orElse: () => AppState.currencies.first,
       );
-    } else if (widget.fixedCurrency != null) {
-      _currency = AppState.currencies.firstWhere(
-        (c) => c.code == widget.fixedCurrency,
-        orElse: () => AppState.currencies.first,
-      );
+    } else {
+      if (widget.initialType != null) {
+        _type = widget.initialType!;
+        _cat = _type == 'income'
+            ? AppState.incomeCategories.first.icon
+            : AppState.expenseCategories.first.icon;
+      }
+      if (widget.fixedCurrency != null) {
+        _currency = AppState.currencies.firstWhere(
+          (c) => c.code == widget.fixedCurrency,
+          orElse: () => AppState.currencies.first,
+        );
+      }
     }
   }
 
@@ -60,6 +68,37 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void dispose() {
     _descCtrl.dispose();
     super.dispose();
+  }
+
+  Widget _receiptPreviewImage(String path) {
+    final isRemote = path.startsWith('http://') || path.startsWith('https://');
+    if (isRemote) {
+      return Image.network(
+        path,
+        height: 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _receiptPreviewError(),
+      );
+    }
+
+    return Image.file(
+      File(path),
+      height: 200,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _receiptPreviewError(),
+    );
+  }
+
+  Widget _receiptPreviewError() {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      color: TC.erPale(context),
+      alignment: Alignment.center,
+      child: Icon(Icons.broken_image_outlined, color: TC.er(context)),
+    );
   }
 
   void _onKey(String k) {
@@ -91,36 +130,38 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: TC.border(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Attach Receipt',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Text('📷', style: TextStyle(fontSize: 22)),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Text('🖼️', style: TextStyle(fontSize: 22)),
-              title: const Text('Choose from gallery'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Attach Receipt',
+                style: TC.geist(context, fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Text('📷', style: TextStyle(fontSize: 22)),
+                title: Text('Take a photo', style: TC.geist(context)),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Text('🖼️', style: TextStyle(fontSize: 22)),
+                title: Text('Choose from gallery', style: TC.geist(context)),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -142,7 +183,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to attach receipt: $e'),
+            content: Text('Failed to attach receipt: $e', style: TC.geist(context)),
           ),
         );
       }
@@ -152,10 +193,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final isExpense = _type == 'expense';
-    final color = isExpense ? AppColors.red : AppColors.green;
+    final activeColor = isExpense ? TC.er(context) : TC.ok(context);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: TC.bg(context),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 56, 20, 40),
         child: Column(
@@ -178,20 +219,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       border: Border.all(color: TC.border(context)),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      '←',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: TC.text(context),
-                      ),
-                    ),
+                    child: Icon(Icons.arrow_back_ios_new_rounded, color: TC.text(context), size: 14),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Text(
                   _isEdit ? 'Edit Transaction' : 'Personal Transaction',
-                  style: TextStyle(
-                    fontSize: 17,
+                  style: TC.gloock(
+                    context,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: TC.text(context),
                   ),
@@ -239,7 +275,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               key: _amtKey,
               amount: _amount,
               symbol: _currency.sym,
-              color: color,
+              color: activeColor,
               label: 'Amount',
             ),
             const SizedBox(height: 16),
@@ -252,9 +288,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             _label('Description'),
             TextField(
               controller: _descCtrl,
-              style: TextStyle(color: TC.text(context), fontSize: 15),
-              decoration:
-                  const InputDecoration(hintText: 'What was this for?'),
+              style: TC.geist(context, fontSize: 15, color: TC.text(context)),
+              decoration: InputDecoration(
+                hintText: 'What was this for?',
+                hintStyle: TC.geist(context, color: TC.text3(context)),
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -265,14 +303,60 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               runSpacing: 8,
               children: _cats
                   .map(
-                    (c) => SSChip(
-                      label: '${c.icon} ${c.label}',
-                      active: c.icon == _cat,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _cat = c.icon);
-                      },
-                    ),
+                    (c) {
+                      final isActive = c.icon == _cat;
+                      final catColor = Color(
+                        int.tryParse(c.color.replaceAll('#', '0xFF')) ?? 0xFF1E7D4F,
+                      );
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _cat = c.icon);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? catColor.withValues(alpha: 0.15)
+                                : TC.card(context),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isActive ? catColor : TC.border(context),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  color: catColor.withValues(alpha: isActive ? 0.25 : 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  c.materialIcon ?? Icons.category_rounded,
+                                  size: 14,
+                                  color: catColor,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                c.label,
+                                style: TC.geist(
+                                  context,
+                                  fontSize: 13,
+                                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                                  color: isActive ? catColor : TC.text2(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   )
                   .toList(),
             ),
@@ -301,7 +385,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       const SizedBox(width: 8),
                       Text(
                         '${_currency.code} — ${_currency.name}',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: TC.text(context),
@@ -338,14 +423,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Tap to attach receipt photo',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 13,
                           color: TC.text2(context),
                         ),
                       ),
                       Text(
                         'Camera or gallery',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 11,
                           color: TC.text3(context),
                         ),
@@ -369,12 +456,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.file(
-                        File(_receiptPath!),
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
+                      child: _receiptPreviewImage(_receiptPath!),
                     ),
                     Positioned(
                       top: 8,
@@ -407,15 +489,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.green,
+                          color: TC.ok(context),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
+                        child: Text(
                           '📎 Receipt attached',
-                          style: TextStyle(
+                          style: TC.geist(
+                            context,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -435,7 +518,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: AppColors.green,
+                  color: TC.primary(context),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
@@ -444,14 +527,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
-                          color: Colors.black,
+                          color: Colors.white,
                           strokeWidth: 2,
                         ),
                       )
                     : Text(
                         _isEdit ? 'Save Changes →' : 'Save →',
-                        style: const TextStyle(
-                          color: Colors.black,
+                        style: TC.geist(
+                          context,
+                          color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -468,7 +552,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
           text.toUpperCase(),
-          style: TextStyle(
+          style: TC.geist(
+            context,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: TC.text3(context),
@@ -541,21 +626,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 backgroundColor: TC.card(context),
                 title: Text(
                   'Change currency?',
-                  style: TextStyle(
+                  style: TC.geist(
+                    context,
                     fontWeight: FontWeight.w700,
                     color: TC.text(context),
                   ),
                 ),
                 content: Text(
                   'Changing from ${_currency.code} to ${c.code} will update both wallet balances. Make sure both wallets exist.',
-                  style: TextStyle(color: TC.text2(context)),
+                  style: TC.geist(context, color: TC.text2(context)),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text(
                       'Cancel',
-                      style: TextStyle(color: TC.text2(context)),
+                      style: TC.geist(context, color: TC.text2(context)),
                     ),
                   ),
                   TextButton(
@@ -563,10 +649,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       Navigator.pop(context);
                       setState(() => _currency = c);
                     },
-                    child: const Text(
+                    child: Text(
                       'Change',
-                      style: TextStyle(
-                        color: AppColors.green,
+                      style: TC.geist(
+                        context,
+                        color: TC.primary(context),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -585,7 +672,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void _showToast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg, style: TC.geist(context)),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -635,7 +722,8 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
               children: [
                 Text(
                   'Select Currency',
-                  style: TextStyle(
+                  style: TC.geist(
+                    context,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     color: TC.text(context),
@@ -643,8 +731,11 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
-                  style: TextStyle(color: TC.text(context), fontSize: 15),
-                  decoration: const InputDecoration(hintText: '🔍  Search...'),
+                  style: TC.geist(context, color: TC.text(context), fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: '🔍  Search...',
+                    hintStyle: TC.geist(context, color: TC.text3(context)),
+                  ),
                   onChanged: (v) => setState(() => _search = v),
                 ),
               ],
@@ -678,7 +769,8 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                             children: [
                               Text(
                                 c.code,
-                                style: TextStyle(
+                                style: TC.geist(
+                                  context,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
                                   color: TC.text(context),
@@ -686,7 +778,8 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                               ),
                               Text(
                                 c.name,
-                                style: TextStyle(
+                                style: TC.geist(
+                                  context,
                                   fontSize: 12,
                                   color: TC.text2(context),
                                 ),
@@ -696,9 +789,10 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                         ),
                         Text(
                           c.sym,
-                          style: const TextStyle(
+                          style: TC.gloock(
+                            context,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.green,
+                            color: TC.primary(context),
                             fontSize: 16,
                           ),
                         ),

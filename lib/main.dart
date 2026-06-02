@@ -20,6 +20,7 @@ import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'providers/app_state.dart';
 import 'services/notification_service.dart';
+import 'services/iap_service.dart';
 import 'services/backup_service.dart';
 
 import 'services/security_service.dart';
@@ -178,13 +179,16 @@ class SplitSmartApp extends StatelessWidget {
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
 
-    final bg = isDark ? AppColors.bg : const Color(0xFFF4F6FA);
-    final surface = isDark ? AppColors.surface : const Color(0xFFFFFFFF);
-    final card = isDark ? AppColors.card : const Color(0xFFFFFFFF);
-    final border = isDark ? AppColors.border : const Color(0xFFE0E4EE);
-    final text = isDark ? AppColors.text : const Color(0xFF1A1A2E);
-    final text2 = isDark ? AppColors.text2 : const Color(0xFF6B7280);
-    final text3 = isDark ? AppColors.text3 : const Color(0xFFADB5BD);
+    // ─── New SplitSmart design system colours ─────────────
+    final bg = isDark ? AppColors.bg : const Color(0xFFF7F5F0);
+    final surface = isDark ? AppColors.surface : const Color(0xFFFDFCFA);
+    final card = isDark ? AppColors.card : const Color(0xFFFDFCFA);
+    final border = isDark
+        ? AppColors.border
+        : const Color(0xFF111918).withValues(alpha: 0.07);
+    final text = isDark ? AppColors.text : const Color(0xFF111918);
+    final text2 = isDark ? AppColors.text2 : const Color(0xFF4E6560);
+    final text3 = isDark ? AppColors.text3 : const Color(0xFF9BB5B0);
 
     return ThemeData(
       useMaterial3: true,
@@ -196,7 +200,7 @@ class SplitSmartApp extends StatelessWidget {
         secondary: AppColors.blue,
         surface: surface,
         error: AppColors.red,
-        onPrimary: Colors.black,
+        onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: text,
         onError: Colors.white,
@@ -206,7 +210,7 @@ class SplitSmartApp extends StatelessWidget {
         color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: border),
         ),
       ),
@@ -230,15 +234,15 @@ class SplitSmartApp extends StatelessWidget {
         filled: true,
         fillColor: card,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: border, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: border, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: border, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.green, width: 1.5),
         ),
         hintStyle: TextStyle(color: text3),
@@ -256,16 +260,22 @@ class SplitSmartApp extends StatelessWidget {
     );
   }
 
-  /// Build text theme with PlusJakartaSans, falling back to system font
-  /// if the Google Font isn't available (e.g. first launch without network).
+  /// Build text theme with Geist font, falling back to system font
+  /// if unavailable (e.g. first launch without network).
   static TextTheme _safeTextTheme(bool isDark) {
     final base = isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme;
-    final Color textColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A);
+    final Color textColor = isDark ? const Color(0xFFE8F4F5) : const Color(0xFF111918);
     try {
-      return GoogleFonts.plusJakartaSansTextTheme(base).apply(
-        bodyColor: textColor,
-        displayColor: textColor,
-      );
+      return GoogleFonts.getFont('Geist').fontFamily != null
+          ? base.apply(
+              fontFamily: GoogleFonts.getFont('Geist').fontFamily,
+              bodyColor: textColor,
+              displayColor: textColor,
+            )
+          : base.apply(
+              bodyColor: textColor,
+              displayColor: textColor,
+            );
     } catch (_) {
       return base.apply(
         bodyColor: textColor,
@@ -277,7 +287,8 @@ class SplitSmartApp extends StatelessWidget {
   /// AppBar title style with safe GoogleFonts fallback.
   static TextStyle _safeTitleStyle(Color color) {
     try {
-      return GoogleFonts.plusJakartaSans(
+      return GoogleFonts.getFont(
+        'Geist',
         fontSize: 16,
         fontWeight: FontWeight.w700,
         color: color,
@@ -405,6 +416,13 @@ class _AppGateState extends State<_AppGate>
       debugPrint('[AppGate] NotificationService.init failed: $e');
     }
 
+    // 2b. In-app purchase store connection (premium). Non-fatal.
+    try {
+      await IapService.instance.init();
+    } catch (e) {
+      debugPrint('[AppGate] IapService.init failed: $e');
+    }
+
     // 3. Reschedule subscription & reminder notifications
     try {
       await NotificationService.rescheduleAll(appState.subscriptions);
@@ -459,7 +477,7 @@ class _AppGateState extends State<_AppGate>
 
 
   double _charOpacity(int index, double ctrlValue) {
-    final sliceWidth = _typeRange / _totalChars;
+    const sliceWidth = _typeRange / _totalChars;
     final charStart = _typeStart + index * sliceWidth;
     final charEnd = charStart + sliceWidth;
 
@@ -622,47 +640,47 @@ class _AppGateState extends State<_AppGate>
       );
     }
 
-    return _AppLockGate(child: const HomeScreen());
+    return const _AppLockGate(child: HomeScreen());
   }
 }
 
 class AppColors {
-  // --- Dark Theme (Luxury) ---
-  static const bg = Color(0xFF060608); // Deep black-blue
-  static const surface = Color(0xFF0E0E12); // Slightly lighter black
-  static const card = Color(0xFF16161C); // Elevated surface
-  static const card2 = Color(0xFF1E1E26); // Nested elevation
-  static const border = Color(0xFF23232D); // Subtle separators
+  // --- Dark Theme (Luxury SplitSmart) ---
+  static const bg = Color(0xFF0A1A1C); // Deep Ocean
+  static const surface = Color(0xFF122228); // Dark surface
+  static const card = Color(0xFF122228); 
+  static const card2 = Color(0xFF162B30); // Nested surface
+  static const border = Color(0x1AF3F4F6);
 
-  // --- Brand Accents (Emerald & Mint) ---
-  static const green = Color(0xFF00E69B); // High-vibrancy Emerald
+  // --- Brand Accents (SplitSmart Teal) ---
+  static const green = Color(0xFF14A085); // Mint Teal primary
   static const greenGradient = LinearGradient(
-    colors: [Color(0xFF00E69B), Color(0xFF00BFA5)],
+    colors: [Color(0xFF14A085), Color(0xFF1AB899)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-  static const greenDim = Color(0x1A00E69B);
-  static const greenDim2 = Color(0x0D00E69B);
+  static const greenDim = Color(0x1A14A085);
+  static const greenDim2 = Color(0x0D14A085);
 
   // --- Secondary Accents ---
-  static const red = Color(0xFFFF4B6E); // Vibrant Pinkish Red
-  static const redDim = Color(0x1AFF4B6E);
+  static const red = Color(0xFFEF4444); // Vibrant Coral Red
+  static const redDim = Color(0x1AEF4444);
   
-  static const blue = Color(0xFF00A3FF); // Bright Electric Blue
+  static const blue = Color(0xFF00A3FF);
   static const blueDim = Color(0x1A00A3FF);
 
-  static const yellow = Color(0xFFFFD600);
-  static const yellowDim = Color(0x1AFFD600);
+  static const yellow = Color(0xFFF59E0B);
+  static const yellowDim = Color(0x1AF59E0B);
 
-  static const purple = Color(0xFF7C4DFF);
-  static const purpleDim = Color(0x1A7C4DFF);
+  static const purple = Color(0xFF8B5CF6);
+  static const purpleDim = Color(0x1A8B5CF6);
 
-  static const amber = Color(0xFFFFAB00);
+  static const amber = Color(0xFFF59E0B);
 
   // --- Text & Greys ---
-  static const text = Color(0xFFFDFDFD); // Clean white
-  static const text2 = Color(0xFFA1A1B2); // Muted secondary
-  static const text3 = Color(0xFF626274); // Hint/Disabled
+  static const text = Color(0xFFF3F4F6); // Clean white-grey
+  static const text2 = Color(0xFF9CA3AF); // Muted secondary
+  static const text3 = Color(0xFF6B7280); // Hint/Disabled
 }
 
 class _SpringSlideTransitionBuilder extends PageTransitionsBuilder {
@@ -815,7 +833,7 @@ class _WelcomeNameScreenState extends State<_WelcomeNameScreen> {
                   GestureDetector(
                     onTap: () async {
                       HapticFeedback.lightImpact();
-                      String name = _ctrl.text.trim();
+                      final String name = _ctrl.text.trim();
                       if (name.isEmpty) return;
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.setString('user_first_name', name);

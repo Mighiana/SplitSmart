@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../providers/app_state.dart';
-
 import '../../utils/app_utils.dart';
-import '../../main.dart';
 
 class GroupSettlementsTab extends StatefulWidget {
   final GroupData g;
@@ -16,8 +14,9 @@ class GroupSettlementsTab extends StatefulWidget {
 class _GroupSettlementsTabState extends State<GroupSettlementsTab> {
   @override
   Widget build(BuildContext context) {
-    final plan = widget.state.buildSettlePlan(widget.g);
-    
+    final g = widget.g;
+    final plan = widget.state.buildSettlePlan(g);
+
     if (plan.isEmpty) {
       return Center(
         child: Padding(
@@ -27,64 +26,117 @@ class _GroupSettlementsTabState extends State<GroupSettlementsTab> {
             children: [
               const Text('✨', style: TextStyle(fontSize: 48)),
               const SizedBox(height: 16),
-              const Text('All settled up!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('All settled up!',
+                  style: TC.gloock(context, fontSize: 20, color: TC.text(context))),
               const SizedBox(height: 8),
-              Text('No payments needed.', style: TextStyle(color: TC.text2(context))),
+              Text('No payments needed.',
+                  style: TC.geist(context, fontSize: 13, color: TC.text2(context))),
             ],
           ),
         ),
       );
     }
-    
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: plan.length,
-      itemBuilder: (context, i) {
-        final p = plan[i];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
+
+    return ListView(
+      padding: const EdgeInsets.only(top: 16, bottom: 40),
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: TC.card(context),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.green.withValues(alpha: 0.2)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle),
-                child: const Icon(Icons.payment, color: AppColors.green, size: 20),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RichText(
-                      text: TextSpan(
-                        style: TextStyle(fontSize: 14, color: TC.text(context)),
-                        children: [
-                          TextSpan(text: p.from, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const TextSpan(text: ' pays '),
-                          TextSpan(text: p.to, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Settle debt manually', style: TextStyle(fontSize: 12, color: TC.text3(context))),
-                  ],
-                ),
-              ),
-              Text(
-                '${widget.g.sym}${p.amount.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.green),
-              ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4)),
             ],
           ),
-        );
-      },
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                        color: TC.primaryPale(context),
+                        borderRadius: BorderRadius.circular(12)),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.compare_arrows_rounded,
+                        color: TC.primary(context)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Suggested settlements',
+                        style: TC.geist(context,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: TC.text(context))),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: TC.primaryPale(context),
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text('Optimized',
+                        style: TC.geist(context,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: TC.primary(context))),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ...plan.map((p) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(
+                            color: p == plan.last
+                                ? Colors.transparent
+                                : TC.border(context))),
+                  ),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(p.from,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TC.geist(context,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: TC.text(context))),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(Icons.arrow_forward_rounded,
+                            size: 16, color: TC.text3(context)),
+                      ),
+                      Expanded(
+                        child: Text(p.to,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TC.geist(context,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: TC.text(context))),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${g.sym}${p.amount.toStringAsFixed(2)}',
+                          style: TC.gloock(context,
+                              fontSize: 16, color: TC.primary(context))),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

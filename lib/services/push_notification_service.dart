@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -16,6 +18,8 @@ class PushNotificationService {
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   bool _initialized = false;
+  StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+  StreamSubscription<String>? _tokenRefreshSub;
 
   // Notification channel for group activity — separate from subscriptions channel
   static const _channelId   = 'splitsmart_group';
@@ -49,18 +53,27 @@ class PushNotificationService {
       await _initLocalNotifications();
 
       // 4. Handle foreground messages — show as local notification
-      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      _foregroundMessageSub =
+          FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
       // 5. Save device token
       await _saveTokenToFirestore();
 
       // 6. Listen for token refreshes
-      _fcm.onTokenRefresh.listen((token) {
+      _tokenRefreshSub = _fcm.onTokenRefresh.listen((token) {
         _updateTokenInFirestore(token);
       });
     }
 
     _initialized = true;
+  }
+
+  Future<void> dispose() async {
+    await _foregroundMessageSub?.cancel();
+    await _tokenRefreshSub?.cancel();
+    _foregroundMessageSub = null;
+    _tokenRefreshSub = null;
+    _initialized = false;
   }
 
   // ─── Foreground notification display via flutter_local_notifications ───────

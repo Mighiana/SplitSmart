@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:Splitsmart/providers/app_state.dart';
+import 'package:splitsmart/providers/app_state.dart';
 
 /// Unit tests for the core settle-up algorithm and balance calculations.
 ///
@@ -133,7 +133,7 @@ void main() {
           ),
         ],
         settlements: [
-          SettlementData(
+          const SettlementData(
             from: 'Ali',
             to: 'You',
             amount: 20,
@@ -285,7 +285,7 @@ void main() {
           ),
         ],
         settlements: [
-          SettlementData(
+          const SettlementData(
             from: 'Ali',
             to: 'You',
             amount: 20,

@@ -23,6 +23,18 @@ class FirestoreService {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Test connectivity to Firestore by attempting a simple read.
+  Future<bool> ping() async {
+    try {
+      // Try to read a dummy document with a very short timeout
+      await _db.collection('ping').doc('status').get().timeout(const Duration(seconds: 5));
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreService] Ping failed: $e');
+      return false;
+    }
+  }
+
   // BUG-1 fix: Cache mapping hashCode-based IDs → actual Firestore document IDs.
   // Populated during loads, maintained during inserts. Eliminates O(n) scans
   // and prevents hashCode collision data corruption.
@@ -129,6 +141,7 @@ class FirestoreService {
       sym: d['sym'] ?? '\$',
       members: List<String>.from(d['members'] ?? []),
       isArchived: d['isArchived'] ?? false,
+      isPremiumGroup: d['isPremiumGroup'] ?? false,
       inviteCode: d['inviteCode'],
       firestoreId: doc.id,
     );
@@ -200,6 +213,7 @@ class FirestoreService {
       expenses: expenses,
       settlements: settlements,
       isArchived: d['isArchived'] ?? false,
+      isPremiumGroup: d['isPremiumGroup'] ?? false,
       inviteCode: d['inviteCode'],
       firestoreId: groupDocId,
     );
@@ -208,6 +222,10 @@ class FirestoreService {
   /// Create a new group. Returns `{docId, inviteCode}`.
   Future<Map<String, String>> insertGroup(GroupData g) async {
     final inviteCode = _generateInviteCode();
+    // The creator's own member name = first non-'You' label if present,
+    // else their display name, else 'You'. We record an authoritative
+    // uid→name mapping in `memberMeta` to fix the legacy parallel-array bug.
+    final ownerName = g.members.isNotEmpty ? g.members.first : 'You';
     final doc = await _groupsCol.add({
       'name': g.name,
       'emoji': g.emoji,
@@ -215,6 +233,17 @@ class FirestoreService {
       'sym': g.sym,
       'members': g.members,
       'memberUids': [_uid],
+      // Authoritative uid → {name, isGuest, provider} mapping.
+      'memberMeta': {
+        _uid: {
+          'name': ownerName,
+          'isGuest': AuthService.instance.isGuest,
+          'provider': AuthService.instance.isGuest ? 'anonymous' : 'full',
+        },
+      },
+      // Guest-join gate. Flipped to true only when a PREMIUM owner enables
+      // guest access (enforced by security rules via the `premium` claim).
+      'isPremiumGroup': false,
       'isArchived': false,
       'createdBy': _uid,
       'inviteCode': inviteCode,
@@ -272,17 +301,48 @@ class FirestoreService {
     await _groupsCol.doc(docId).update({'isArchived': archived});
   }
 
-  Future<void> deleteGroup(int groupId) async {
-    final docId = await _groupDocId(groupId);
-    if (docId == null) return;
-    // Delete subcollections first
-    final batch = _db.batch();
-    final expenses = await _groupsCol.doc(docId).collection('expenses').get();
-    for (final d in expenses.docs) batch.delete(d.reference);
-    final settlements = await _groupsCol.doc(docId).collection('settlements').get();
-    for (final d in settlements.docs) batch.delete(d.reference);
-    batch.delete(_groupsCol.doc(docId));
-    await batch.commit();
+  Future<void> deleteGroup(GroupData g) async {
+    final docId = g.firestoreId ?? await _groupDocId(g.id);
+    if (docId == null) {
+      debugPrint('[Firestore] Could not find docId for group ${g.name}.');
+      return;
+    }
+
+    // ── Phase A: delete sub-collections (best-effort) ──────────────────────
+    // Each sub-doc is deleted independently so one failure doesn't block the rest.
+    try {
+      final expenses = await _groupsCol.doc(docId).collection('expenses').get();
+      for (final d in expenses.docs) {
+        try { await d.reference.delete(); } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[Firestore] deleteGroup: expense fetch failed: $e');
+    }
+    try {
+      final settlements = await _groupsCol.doc(docId).collection('settlements').get();
+      for (final d in settlements.docs) {
+        try { await d.reference.delete(); } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[Firestore] deleteGroup: settlement fetch failed: $e');
+    }
+
+    // ── Phase B: delete the group document itself ──────────────────────────
+    // Runs even if Phase A had partial failures.
+    try {
+      await _groupsCol.doc(docId).delete();
+      debugPrint('[Firestore] deleteGroup: deleted group $docId');
+    } catch (e) {
+      debugPrint('[Firestore] deleteGroup: delete denied, removing from memberUids: $e');
+      // Fallback: remove user from memberUids so the group won't reappear.
+      try {
+        await _groupsCol.doc(docId).update({
+          'memberUids': FieldValue.arrayRemove([_uid]),
+        });
+      } catch (e2) {
+        debugPrint('[Firestore] deleteGroup: memberUids fallback also failed: $e2');
+      }
+    }
   }
 
   // ─── Group Expenses ─────────────────────────────────────────────────────
@@ -466,6 +526,16 @@ class FirestoreService {
       final data = doc.data() as Map<String, dynamic>;
       final memberUids = List<String>.from(data['memberUids'] ?? []);
       final members = List<String>.from(data['members'] ?? []);
+      final isPremiumGroup = data['isPremiumGroup'] == true;
+      final isGuest = AuthService.instance.isGuest;
+
+      // GUEST GATE: anonymous users may only join groups whose owner has
+      // SplitSmart Premium. Full accounts may always join via invite (free).
+      // Security rules enforce the same condition server-side.
+      if (isGuest && !isPremiumGroup) {
+        debugPrint('[Firestore] Guest join blocked: group is not premium.');
+        return null;
+      }
 
       // SEC-H4: Enforce member cap locally (Rules will enforce it server-side)
       if (memberUids.length >= _maxGroupMembers) {
@@ -478,13 +548,27 @@ class FirestoreService {
         // Sanitize member name length
         final safeName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
         members.add(safeName);
-        
+
+        // Authoritative uid → name mapping (fixes parallel-array ambiguity).
+        final memberMeta =
+            Map<String, dynamic>.from(data['memberMeta'] as Map? ?? {});
+        memberMeta[_uid] = {
+          'name': safeName,
+          'isGuest': isGuest,
+          'provider': isGuest ? 'anonymous' : 'full',
+        };
+
         // SEC-C1: Pass the code to prove we know it, bypassing member-only lock
         await doc.reference.update({
           'memberUids': memberUids,
           'members': members,
-          'joinAttemptCode': cleanCode, 
+          'memberMeta': memberMeta,
+          'joinAttemptCode': cleanCode,
         });
+
+        // Refetch the document so it has the new member list
+        final updatedDoc = await _groupsCol.doc(groupId).get();
+        return await _groupFromDocFull(updatedDoc);
       }
 
       return await _groupFromDocFull(doc);
@@ -501,6 +585,99 @@ class FirestoreService {
     final doc = await _groupsCol.doc(docId).get();
     final data = doc.data() as Map<String, dynamic>?;
     return data?['inviteCode'] as String?;
+  }
+
+  /// Backfill mapping for legacy groups that have an invite code but no mapping doc
+  Future<void> ensureInviteCodeMapping(int groupId, String inviteCode) async {
+    final docId = await _groupDocId(groupId);
+    if (docId == null) return;
+    try {
+      await _db.collection('inviteCodes').doc(inviteCode).set({'groupId': docId});
+    } catch (e) {
+      debugPrint('[Firestore] Failed to ensure invite code mapping: $e');
+    }
+  }
+
+  // ─── Guest access (premium, owner-controlled) ───────────────────────────
+
+  /// Owner toggles guest-join for a group they own. Setting `true` requires
+  /// the caller to hold the `premium` custom claim — the security rule rejects
+  /// the write otherwise, so this is safe to call optimistically.
+  Future<void> setGroupGuestAccess(int groupId, bool enabled) async {
+    final docId = await _groupDocId(groupId);
+    if (docId == null) return;
+    await _groupsCol.doc(docId).update({
+      'isPremiumGroup': enabled,
+      if (enabled) 'premiumByUid': _uid,
+    });
+  }
+
+  /// Lightweight pre-join probe: does this invite code map to a group that
+  /// currently allows guests? Lets the Join screen decide whether to offer
+  /// "Join as guest" BEFORE creating an anonymous session.
+  ///
+  /// Returns `{groupId, isPremiumGroup, memberCount, name}` or null if invalid.
+  Future<Map<String, dynamic>?> probeInviteCode(String code) async {
+    try {
+      final cleanCode = code.toUpperCase().trim();
+      final mapping = await _db.collection('inviteCodes').doc(cleanCode).get();
+      if (!mapping.exists) return null;
+      final groupId = mapping.data()?['groupId'] as String? ?? '';
+      if (groupId.isEmpty) return null;
+      final doc = await _groupsCol.doc(groupId).get();
+      if (!doc.exists) return null;
+      final d = doc.data() as Map<String, dynamic>;
+      return {
+        'groupId': groupId,
+        'isPremiumGroup': d['isPremiumGroup'] == true,
+        'memberCount': (d['memberUids'] as List?)?.length ?? 0,
+        'name': d['name'] ?? '',
+      };
+    } catch (e) {
+      debugPrint('[Firestore] probeInviteCode error: $e');
+      return null;
+    }
+  }
+
+  // ─── Entitlement (server-verified, read-only mirror) ────────────────────
+
+  /// Read the server-written entitlement for the current user. The client
+  /// never WRITES this — the `verifyPurchase` Cloud Function does, after
+  /// validating the store receipt.
+  Future<Map<String, dynamic>?> loadEntitlement() async {
+    try {
+      final doc = await _userDoc.get();
+      final data = doc.data() as Map<String, dynamic>?;
+      return data?['entitlement'] as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('[Firestore] loadEntitlement error: $e');
+      return null;
+    }
+  }
+
+  /// Real-time stream of the current user's entitlement (for live unlock).
+  Stream<Map<String, dynamic>?> watchEntitlement() {
+    return _userDoc.snapshots().map((doc) {
+      final data = doc.data() as Map<String, dynamic>?;
+      return data?['entitlement'] as Map<String, dynamic>?;
+    });
+  }
+
+  /// Persist the device's FCM-style purchase token to a queue the
+  /// `verifyPurchase` callable reads. (Most flows call the callable directly;
+  /// this is a durable fallback if the callable is unreachable at purchase time.)
+  Future<void> queuePurchaseForVerification({
+    required String store,
+    required String productId,
+    required String token,
+  }) async {
+    await _userDoc.collection('purchaseQueue').add({
+      'store': store,
+      'productId': productId,
+      'token': token,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': 'pending',
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -862,36 +1039,87 @@ class FirestoreService {
     final personalBatch = _db.batch();
     for (final col in ['transactions', 'wallets', 'groupWallets', 'budgetLimits', 'savingGoals']) {
       final snap = await _userDoc.collection(col).get();
-      for (final d in snap.docs) personalBatch.delete(d.reference);
+      for (final d in snap.docs) {
+        personalBatch.delete(d.reference);
+      }
     }
     await personalBatch.commit();
 
     // ── 2. Groups (top-level collection) ──────────────────────────────────
-    // Each group is deleted in its own batch to stay under the 500-op limit.
+    // FIXED: Two-phase deletion so that a failed expense/settlement delete
+    // never prevents the group document itself from being removed.
+    // Phase A: delete sub-collections (best-effort, individual docs so one
+    //          failure doesn't roll back the rest).
+    // Phase B: delete the group document in a SEPARATE operation — always runs
+    //          even if phase A had partial failures.
+    // Fallback: if even the group-doc delete is denied (e.g. the user is only
+    //           a member but not the creator and rules block full delete), we
+    //           strip the user's UID from memberUids so the group never shows
+    //           up in future loadGroups() queries.
     try {
       final groupsSnap = await _groupsCol
           .where('memberUids', arrayContains: _uid)
           .get();
 
       for (final groupDoc in groupsSnap.docs) {
-        final groupBatch = _db.batch();
+        // ── Phase A: sub-collections (ignore per-doc failures) ─────────────
+        try {
+          final expenses = await groupDoc.reference.collection('expenses').get();
+          // Delete in chunks of 400 to stay under the 500-op batch limit
+          const chunkSize = 400;
+          for (var i = 0; i < expenses.docs.length; i += chunkSize) {
+            final chunk = expenses.docs.sublist(
+                i, (i + chunkSize).clamp(0, expenses.docs.length));
+            final b = _db.batch();
+            for (final d in chunk) {
+              b.delete(d.reference);
+            }
+            try { await b.commit(); } catch (e) {
+              debugPrint('[Firestore] clearAll: expense batch failed: $e');
+            }
+          }
+        } catch (e) {
+          debugPrint('[Firestore] clearAll: expense fetch failed: $e');
+        }
 
-        // Delete expenses sub-collection
-        final expenses = await groupDoc.reference.collection('expenses').get();
-        for (final d in expenses.docs) groupBatch.delete(d.reference);
+        try {
+          final settlements = await groupDoc.reference.collection('settlements').get();
+          const chunkSize = 400;
+          for (var i = 0; i < settlements.docs.length; i += chunkSize) {
+            final chunk = settlements.docs.sublist(
+                i, (i + chunkSize).clamp(0, settlements.docs.length));
+            final b = _db.batch();
+            for (final d in chunk) {
+              b.delete(d.reference);
+            }
+            try { await b.commit(); } catch (e) {
+              debugPrint('[Firestore] clearAll: settlement batch failed: $e');
+            }
+          }
+        } catch (e) {
+          debugPrint('[Firestore] clearAll: settlement fetch failed: $e');
+        }
 
-        // Delete settlements sub-collection
-        final settlements = await groupDoc.reference.collection('settlements').get();
-        for (final d in settlements.docs) groupBatch.delete(d.reference);
-
-        // Delete the group document itself
-        groupBatch.delete(groupDoc.reference);
-
-        await groupBatch.commit();
-        debugPrint('[Firestore] Deleted group ${groupDoc.id} and its sub-collections');
+        // ── Phase B: group document itself ─────────────────────────────────
+        try {
+          await groupDoc.reference.delete();
+          debugPrint('[Firestore] clearAll: deleted group ${groupDoc.id}');
+        } catch (e) {
+          debugPrint('[Firestore] clearAll: group delete denied, removing from memberUids: $e');
+          // Fallback: strip the user from memberUids so the group won't
+          // reappear in future loadGroups() arrayContains queries.
+          try {
+            await groupDoc.reference.update({
+              'memberUids': FieldValue.arrayRemove([_uid]),
+            });
+            debugPrint('[Firestore] clearAll: removed $_uid from memberUids of ${groupDoc.id}');
+          } catch (e2) {
+            debugPrint('[Firestore] clearAll: memberUids fallback also failed: $e2');
+          }
+        }
       }
     } catch (e) {
-      debugPrint('[Firestore] clearAll group deletion error (non-fatal): $e');
+      debugPrint('[Firestore] clearAll group fetch error: $e');
     }
 
     _docIdCache.clear();

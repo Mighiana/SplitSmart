@@ -44,7 +44,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
       } else if (state.transactions.isNotEmpty) {
         setState(() => _currency = state.transactions.first.currency);
       } else {
-        setState(() => _currency = state.currencies.isNotEmpty ? state.currencies.first.code : 'USD');
+        setState(() => _currency = AppState.currencies.isNotEmpty ? AppState.currencies.first.code : 'USD');
       }
     });
   }
@@ -90,7 +90,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
 
     final allTxns = state.allTransactionsWithGroupShares.where((t) {
       if (widget.isGroupFilter == true) return t.isGroupShare == true;
-      if (widget.isGroupFilter == false) return t.isGroupShare == false || t.isGroupShare == null;
+      if (widget.isGroupFilter == false) return t.isGroupShare == false;
       return true;
     }).toList();
     for (int i = 0; i < months.length; i++) {
@@ -958,16 +958,18 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                               HapticFeedback.lightImpact();
                               setBState(() {
                                 if (i == 'del') {
-                                  if (valStr.length > 1)
+                                  if (valStr.length > 1) {
                                     valStr = valStr.substring(
                                         0, valStr.length - 1);
-                                  else
+                                  } else {
                                     valStr = '0';
+                                  }
                                 } else {
-                                  if (valStr == '0')
+                                  if (valStr == '0') {
                                     valStr = i;
-                                  else
+                                  } else {
                                     valStr += i;
+                                  }
                                 }
                               });
                             },
@@ -992,7 +994,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                   GestureDetector(
                     onTap: () {
                       HapticFeedback.lightImpact();
-                      double v = double.tryParse(valStr) ?? 0;
+                      final double v = double.tryParse(valStr) ?? 0;
                       // If weekly, convert to monthly equivalent for storage (×4.33)
                       final monthlyVal = isWeekly ? v * 4.33 : v;
                       state.setBudgetLimit(budgetKey, currency, monthlyVal);
@@ -1192,8 +1194,9 @@ class _GradientAreaChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 42,
               getTitlesWidget: (val, meta) {
-                if (val == 0 || val > maxVal * 0.95)
+                if (val == 0 || val > maxVal * 0.95) {
                   return const SizedBox.shrink();
+                }
                 String str = val.toStringAsFixed(0);
                 if (val >= 1000) {
                   str = '${(val / 1000).toStringAsFixed(1)}k';
@@ -1214,9 +1217,10 @@ class _GradientAreaChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 28,
               getTitlesWidget: (val, meta) {
-                int idx = val.toInt();
-                if (idx < 0 || idx >= months.length)
+                final int idx = val.toInt();
+                if (idx < 0 || idx >= months.length) {
                   return const SizedBox.shrink();
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
@@ -1368,7 +1372,7 @@ class _TrendHistogram extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final int barCount = 6;
+    const int barCount = 6;
     final now = DateTime.now();
     final labels = <String>[];
     final incomeData = <double>[];
@@ -1390,8 +1394,11 @@ class _TrendHistogram extends StatelessWidget {
         final d = t.rawDate;
         if (d == null) continue;
         if (!d.isBefore(periodStart) && d.isBefore(periodEnd)) {
-          if (t.type == 'income') inc += t.amount;
-          else exp += t.amount;
+          if (t.type == 'income') {
+            inc += t.amount;
+          } else {
+            exp += t.amount;
+          }
         }
       }
       labels.add(label);

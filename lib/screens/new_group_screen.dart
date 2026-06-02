@@ -7,7 +7,6 @@ import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
 import 'group_detail_screen.dart';
 
-
 class NewGroupScreen extends StatefulWidget {
   const NewGroupScreen({super.key});
 
@@ -18,9 +17,40 @@ class NewGroupScreen extends StatefulWidget {
 class _NewGroupScreenState extends State<NewGroupScreen> {
   final _nameCtrl = TextEditingController();
   final _memberCtrl = TextEditingController();
-  String _emoji = '✈️';
+  String _groupEmoji = '✈️';
+
+  static const List<_IconOption> _iconOptions = [
+    _IconOption('✈️', 'Trip', Color(0xFF4F46E5)),
+    _IconOption('🏠', 'Home', Color(0xFF2563EB)),
+    _IconOption('🏢', 'Apartment', Color(0xFF475569)),
+    _IconOption('💚', 'Couple', Color(0xFF16A34A)),
+    _IconOption('👪', 'Family', Color(0xFFEA580C)),
+    _IconOption('👥', 'Friends', Color(0xFF0891B2)),
+    _IconOption('🛋️', 'Roommates', Color(0xFF7C3AED)),
+    _IconOption('💼', 'Work', Color(0xFF334155)),
+    _IconOption('🍽️', 'Food', Color(0xFFDC2626)),
+    _IconOption('🛒', 'Groceries', Color(0xFF65A30D)),
+    _IconOption('🧾', 'Bills', Color(0xFF0F766E)),
+    _IconOption('🎉', 'Event', Color(0xFFDB2777)),
+    _IconOption('🚐', 'Road Trip', Color(0xFF0284C7)),
+    _IconOption('🎁', 'Gifts', Color(0xFFEA580C)),
+    _IconOption('🌍', 'Other', Color(0xFF64748B), opensPicker: true),
+  ];
+
+  static const List<_IconOption> _moreIconOptions = [
+    _IconOption('🎂', 'Birthday', Color(0xFFE11D48)),
+    _IconOption('💍', 'Wedding', Color(0xFFBE185D)),
+    _IconOption('🏖️', 'Beach', Color(0xFFF59E0B)),
+    _IconOption('⛺', 'Camping', Color(0xFF15803D)),
+    _IconOption('🎓', 'Study', Color(0xFF2563EB)),
+    _IconOption('⚽', 'Sports', Color(0xFF059669)),
+    _IconOption('🛍️', 'Shopping', Color(0xFFC026D3)),
+    _IconOption('🍕', 'Dining Out', Color(0xFFDC2626)),
+    _IconOption('🎮', 'Games', Color(0xFF7C3AED)),
+    _IconOption('🌍', 'Other', Color(0xFF64748B)),
+  ];
   CurrencyData _currency = AppState.currencies.first;
-  List<String> _members = ['You'];
+  final List<String> _members = ['You'];
 
   @override
   void dispose() {
@@ -57,10 +87,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                     alignment: Alignment.center,
                     child: Text(
                       '←',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: TC.text(context),
-                      ),
+                      style: TextStyle(fontSize: 18, color: TC.text(context)),
                     ),
                   ),
                 ),
@@ -88,37 +115,68 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Emoji picker ────────────────────────────────────────────
-            _label('Pick Emoji'),
+            // ── Icon picker ─────────────────────────────────────────────
+            _label('Group Type'),
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 6,
+                crossAxisCount: 5,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
+                childAspectRatio: 0.9,
               ),
-              itemCount: AppState.emojis.length,
+              itemCount: _iconOptions.length,
               itemBuilder: (_, i) {
-                final e = AppState.emojis[i];
-                final active = e == _emoji;
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() => _emoji = e);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.greenDim : TC.card(context),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: active ? AppColors.green : TC.border(context),
-                        width: 1.5,
+                final opt = _iconOptions[i];
+                final active = opt.emoji == _groupEmoji;
+                return Tooltip(
+                  message: opt.label,
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      if (opt.opensPicker) {
+                        _showMoreGroupTypes();
+                      } else {
+                        setState(() => _groupEmoji = opt.emoji);
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 3,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? opt.color.withValues(alpha: 0.18)
+                            : TC.card(context),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: active ? opt.color : TC.border(context),
+                          width: active ? 1.7 : 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(opt.emoji, style: const TextStyle(fontSize: 19)),
+                          const SizedBox(height: 4),
+                          Text(
+                            opt.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 8.8,
+                              fontWeight: FontWeight.w700,
+                              color: active ? opt.color : TC.text2(context),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(e, style: const TextStyle(fontSize: 20)),
                   ),
                 );
               },
@@ -130,8 +188,10 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
             GestureDetector(
               onTap: () => _pickCurrency(context),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: TC.card(context),
                   borderRadius: BorderRadius.circular(20),
@@ -166,8 +226,9 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                   child: TextField(
                     controller: _memberCtrl,
                     style: TextStyle(fontSize: 15, color: TC.text(context)),
-                    decoration:
-                        const InputDecoration(hintText: 'Member name...'),
+                    decoration: const InputDecoration(
+                      hintText: 'Member name...',
+                    ),
                     onSubmitted: (_) => _addMember(),
                     textCapitalization: TextCapitalization.words,
                   ),
@@ -280,17 +341,17 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          text.toUpperCase(),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: TC.text3(context),
-            letterSpacing: 1.5,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: TC.text3(context),
+        letterSpacing: 1.5,
+      ),
+    ),
+  );
 
   void _addMember() {
     final name = _memberCtrl.text.trim();
@@ -306,7 +367,105 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
     });
   }
 
-  void _createGroup() {
+  void _showMoreGroupTypes() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: TC.border(context),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'More group types',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: TC.text(context),
+                ),
+              ),
+              const SizedBox(height: 14),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1.05,
+                ),
+                itemCount: _moreIconOptions.length,
+                itemBuilder: (_, i) {
+                  final opt = _moreIconOptions[i];
+                  final active = opt.emoji == _groupEmoji;
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _groupEmoji = opt.emoji);
+                      Navigator.pop(ctx);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? opt.color.withValues(alpha: 0.18)
+                            : TC.card(context),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: active ? opt.color : TC.border(context),
+                          width: active ? 1.7 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(opt.emoji, style: const TextStyle(fontSize: 20)),
+                          const SizedBox(height: 5),
+                          Text(
+                            opt.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: active ? opt.color : TC.text2(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createGroup() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       _showToast('Enter a group name!');
@@ -322,14 +481,24 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
     final g = GroupData(
       id: DateTime.now().microsecondsSinceEpoch,
       name: name,
-      emoji: _emoji,
+      emoji: _groupEmoji,
       currency: _currency.code,
       sym: _currency.sym,
       members: [..._members],
     );
-    state.addGroup(g);
-    AnalyticsService.logGroupCreated();
+    try {
+      await state.addGroup(g);
+      await AnalyticsService.logGroupCreated();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to create group: $e')));
+      }
+      return;
+    }
     state.currentGroup = g;
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const GroupDetailScreen()),
@@ -344,9 +513,8 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => _CurrencyPicker(
-        onSelect: (c) => setState(() => _currency = c),
-      ),
+      builder: (ctx) =>
+          _CurrencyPicker(onSelect: (c) => setState(() => _currency = c)),
     );
   }
 
@@ -374,12 +542,12 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
     final filtered = _search.isEmpty
         ? AppState.currencies
         : AppState.currencies
-            .where(
-              (c) =>
-                  c.code.toLowerCase().contains(_search.toLowerCase()) ||
-                  c.name.toLowerCase().contains(_search.toLowerCase()),
-            )
-            .toList();
+              .where(
+                (c) =>
+                    c.code.toLowerCase().contains(_search.toLowerCase()) ||
+                    c.name.toLowerCase().contains(_search.toLowerCase()),
+              )
+              .toList();
 
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.7,
@@ -480,4 +648,18 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
       ),
     );
   }
+}
+
+// ─── Icon option model ────────────────────────────────────────────────────────
+class _IconOption {
+  final String emoji;
+  final String label;
+  final Color color;
+  final bool opensPicker;
+  const _IconOption(
+    this.emoji,
+    this.label,
+    this.color, {
+    this.opensPicker = false,
+  });
 }

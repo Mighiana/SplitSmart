@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/common_widgets.dart';
 import '../../utils/app_utils.dart';
@@ -58,17 +59,27 @@ class _GroupExpensesTabState extends State<GroupExpensesTab> {
     }).toList();
     
     if (g.expenses.isEmpty) {
-      return const _AnimatedEmptyState(
-        icon: '🧾',
-        title: 'No expenses yet',
-        subtitle: 'Tap + Add to split your first bill',
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 100),
+        children: const [
+          _AnimatedEmptyState(
+            icon: '🧾',
+            title: 'No expenses yet',
+            subtitle: 'Tap + Add to split your first bill',
+          ),
+        ],
       );
     }
     if (expenses.isEmpty) {
-      return const EmptyState(
-        icon: '🔍',
-        title: 'No results',
-        subtitle: 'Try a different search term or category',
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 100),
+        children: const [
+          EmptyState(
+            icon: '🔍',
+            title: 'No results',
+            subtitle: 'Try a different search term or category',
+          ),
+        ],
       );
     }
 
@@ -78,10 +89,18 @@ class _GroupExpensesTabState extends State<GroupExpensesTab> {
       grouped.putIfAbsent(lbl, () => []).add(e);
     }
 
+    final recurring = g.expenses.where((e) => e.desc.toLowerCase().contains('rent') || e.desc.toLowerCase().contains('electric')).toList();
+
     return ListView.builder(
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 100),
-      itemCount: grouped.length,
+      padding: const EdgeInsets.only(left: 22, right: 22, top: 16, bottom: 122),
+      itemCount: grouped.length + (recurring.isNotEmpty ? 1 : 0) + 1,
       itemBuilder: (_, i) {
+        if (i == grouped.length && recurring.isNotEmpty) {
+          return _RecurringExpensesCard(g: g, expenses: recurring);
+        }
+        if (i >= grouped.length) {
+          return _BottomAddButton(g: g, state: state);
+        }
         final dateLabel = grouped.keys.elementAt(i);
         final list = grouped[dateLabel]!;
         
@@ -91,8 +110,13 @@ class _GroupExpensesTabState extends State<GroupExpensesTab> {
             Padding(
               padding: EdgeInsets.only(bottom: 12, top: i > 0 ? 12.0 : 0.0),
               child: Text(
-                dateLabel,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TC.text(context)),
+                dateLabel.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                  color: Color(0xFF9BB5B0),
+                ),
               ),
             ),
             ...list.map((e) {
@@ -109,7 +133,7 @@ class _GroupExpensesTabState extends State<GroupExpensesTab> {
                 state: state,
                 isArchived: isArchived,
               );
-            }).toList(),
+            }),
           ],
         );
       },
@@ -143,7 +167,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
     HapticFeedback.mediumImpact();
     final e = widget.e;
     final g = widget.g;
-    final isAuthor = e.createdBy == null || e.createdBy == 'You';
+    final isAuthor = e.createdBy == null || e.createdBy == 'You' || e.createdBy == widget.state.userName || (e.createdBy?.toLowerCase() == 'you');
     final memberAmounts = <String, double>{};
     for (final m in g.members) {
       memberAmounts[m] = (e.splits != null && e.splits!.containsKey(m))
@@ -170,7 +194,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
             const SizedBox(height: 16),
             // Header
             Row(children: [
-              Container(width: 52, height: 52, decoration: BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle), alignment: Alignment.center, child: Text(e.cat, style: const TextStyle(fontSize: 26))),
+              Container(width: 52, height: 52, decoration: const BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle), alignment: Alignment.center, child: Text(e.cat, style: const TextStyle(fontSize: 26))),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(e.desc, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
@@ -217,17 +241,12 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
                 ]),
               );
             }),
-            if (e.createdBy != null) ...[
-              const SizedBox(height: 6),
-              Text(e.updatedBy != null ? '✏️ Edited by ${e.updatedBy}' : '👤 Added by ${e.createdBy}',
-                  style: TextStyle(fontSize: 11, color: TC.text3(context))),
-            ],
             const SizedBox(height: 16),
             Divider(color: TC.border(context)),
             if (!isAuthor)
               Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text('Only the author (${e.createdBy}) can edit this expense.',
+                child: Text('Only the author can edit this expense.',
                     style: TextStyle(color: TC.text3(context), fontSize: 13), textAlign: TextAlign.center),
               )
             else ...[
@@ -257,35 +276,35 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
   void _confirmDelete(BuildContext context) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: TC.card(context),
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: TC.card(dialogCtx),
         title: Text(
           'Delete expense?',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: TC.text(context),
+            color: TC.text(dialogCtx),
           ),
         ),
         content: Text(
           'Delete "${widget.e.desc}"? This cannot be undone.',
-          style: TextStyle(color: TC.text2(context)),
+          style: TextStyle(color: TC.text2(dialogCtx)),
         ),
         actions: [
           TextButton(
             onPressed: () {
               HapticFeedback.lightImpact();
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
             },
             child: Text(
               'Cancel',
-              style: TextStyle(color: TC.text2(context)),
+              style: TextStyle(color: TC.text2(dialogCtx)),
             ),
           ),
           TextButton(
             onPressed: () {
               HapticFeedback.heavyImpact();
               widget.state.deleteExpense(widget.g, widget.e);
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
             },
             child: const Text(
               'Delete',
@@ -306,46 +325,58 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
       onLongPress: _onLongPress,
       onTap: _onLongPress,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(16, 16, 18, 16),
         decoration: BoxDecoration(
-          color: TC.card(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.green.withValues(alpha: 0.0)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 2))],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 14, offset: const Offset(0, 5))],
         ),
         child: Row(
           children: [
             Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle),
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE85A6A).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(17),
+              ),
               alignment: Alignment.center,
-              child: Text(widget.e.cat, style: const TextStyle(fontSize: 20)),
+              child: Text(widget.e.cat, style: const TextStyle(fontSize: 22)),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.e.desc,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context)),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF111918)),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${widget.e.paidBy} paid',
-                    style: TextStyle(fontSize: 12, color: TC.text2(context)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: const BoxDecoration(color: Color(0xFF0D7377), shape: BoxShape.circle),
+                        alignment: Alignment.center,
+                        child: Text(
+                          widget.e.paidBy.isNotEmpty ? widget.e.paidBy[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          '${widget.e.paidBy} paid',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF4E6560), fontWeight: FontWeight.w700),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  if (widget.e.createdBy != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.e.updatedBy != null
-                          ? '✏️ Edited by ${widget.e.updatedBy}'
-                          : '👤 Added by ${widget.e.createdBy}',
-                      style: TextStyle(fontSize: 10, color: TC.text3(context)),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -354,18 +385,112 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
               children: [
                 Text(
                   '${widget.g.sym}${widget.e.amount.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: TC.text(context)),
+                  style: GoogleFonts.gloock(fontSize: 18, color: const Color(0xFFE85A6A), letterSpacing: -0.4),
                 ),
                 const SizedBox(height: 4),
                 if (widget.net > 0)
-                  Text('Gets back ${widget.g.sym}${widget.net.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.green, fontWeight: FontWeight.w600))
+                  Text('Gets ${widget.g.sym}${widget.net.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, color: Color(0xFF009B73), fontWeight: FontWeight.w800))
                 else if (widget.net < 0)
-                  Text('You owe ${widget.g.sym}${widget.net.abs().toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.red, fontWeight: FontWeight.w600))
+                  Text('You owe ${widget.g.sym}${widget.net.abs().toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, color: Color(0xFFE85A6A), fontWeight: FontWeight.w800))
                 else
-                  const Text('Not involved', style: TextStyle(fontSize: 12, color: AppColors.text3)),
+                  const Text('Not involved', style: TextStyle(fontSize: 11, color: Color(0xFF9BB5B0), fontWeight: FontWeight.w800)),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecurringExpensesCard extends StatelessWidget {
+  final GroupData g;
+  final List<ExpenseData> expenses;
+
+  const _RecurringExpensesCard({
+    required this.g,
+    required this.expenses,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 18, bottom: 20),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE7F3F0),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF9FD1C9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🔄 RECURRING EXPENSES',
+            style: TextStyle(color: Color(0xFF0D7377), fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+          ),
+          const SizedBox(height: 14),
+          ...expenses.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Text(e.cat, style: const TextStyle(fontSize: 18)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        e.desc,
+                        style: const TextStyle(color: Color(0xFF111918), fontSize: 14, fontWeight: FontWeight.w900),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${g.sym}${e.amount.toStringAsFixed(0)}',
+                      style: const TextStyle(color: Color(0xFF9BB5B0), fontSize: 13, fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _BottomAddButton extends StatelessWidget {
+  final GroupData g;
+  final AppState state;
+
+  const _BottomAddButton({
+    required this.g,
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: GestureDetector(
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            state.currentGroup = g;
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const AddExpenseScreen()));
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 38, vertical: 17),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D7377),
+              borderRadius: BorderRadius.circular(34),
+              boxShadow: [
+                BoxShadow(color: const Color(0xFF0D7377).withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 8)),
+              ],
+            ),
+            child: const Text(
+              '+  Add Expense',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+          ),
         ),
       ),
     );

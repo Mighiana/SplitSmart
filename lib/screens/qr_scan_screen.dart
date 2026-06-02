@@ -8,6 +8,7 @@ import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
 import 'group_detail_screen.dart';
+import 'join_group_screen.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 
@@ -87,16 +88,31 @@ class _QRScanScreenState extends State<QRScanScreen> {
 
     GroupData? group;
     final inviteCode = json['inviteCode'] as String?;
-    
+
     if (inviteCode != null && AuthService.instance.isSignedIn) {
        // Automatic cloud join if invite code is present
-       group = await FirestoreService.instance.joinGroupByInviteCode(inviteCode, 'You');
+       final currentUser = AuthService.instance.currentUser;
+       final joinName = (currentUser?.displayName != null && currentUser!.displayName!.isNotEmpty)
+           ? currentUser.displayName!
+           : 'You';
+       group = await FirestoreService.instance.joinGroupByInviteCode(inviteCode, joinName);
        if (group != null) {
-         await state.loadInitialData();
+         await state.joinGroupLocally(group);
        } else {
          // Fallback if cloud join fails
          group = await state.importGroupFromQR(json);
        }
+    } else if (inviteCode != null && !AuthService.instance.isSignedIn) {
+       // Accountless user scanned a real (cloud) group → offer guest join.
+       // Premium gating + anonymous sign-in are handled inside JoinGroupScreen.
+       if (!mounted) return;
+       Navigator.pushReplacement(
+         context,
+         MaterialPageRoute(
+           builder: (_) => JoinGroupScreen(initialCode: inviteCode),
+         ),
+       );
+       return;
     } else {
        group = await state.importGroupFromQR(json);
     }
@@ -506,7 +522,9 @@ class _ImportPreviewSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'This will create a new group with these members. No expenses from the sender are imported.',
+                    json.containsKey('inviteCode')
+                        ? 'Expenses and members will be automatically synced from the cloud.'
+                        : 'This will create a new group with these members. No expenses from the sender are imported.',
                     style: TextStyle(
                       fontSize: 12,
                       color: TC.text(context),

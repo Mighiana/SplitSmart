@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
@@ -47,7 +46,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     // Calculate global spent per currency
     final Map<String, double> curSpent = {};
     final now = DateTime.now();
-    DateTime start = _period == 'weekly' 
+    final DateTime start = _period == 'weekly' 
         ? now.subtract(Duration(days: now.weekday - 1)) 
         : DateTime(now.year, now.month, 1);
         
@@ -60,7 +59,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final activeCurs = <String>{};
     activeCurs.addAll(curSpent.keys);
     activeCurs.addAll(state.wallets.keys);
-    for (final g in state.activeGroups) activeCurs.add(g.currency);
+    for (final g in state.activeGroups) {
+      activeCurs.add(g.currency);
+    }
     for (final c in AppState.currencies) {
       if (state.getBudgetLimit('all', c.code) > 0) activeCurs.add(c.code);
     }
@@ -68,7 +69,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (activeCurs.isEmpty && state.transactions.isNotEmpty) {
       activeCurs.add(state.transactions.first.currency);
     } else if (activeCurs.isEmpty) {
-      activeCurs.add(state.currencies.isNotEmpty ? state.currencies.first.code : 'USD');
+      activeCurs.add(AppState.currencies.isNotEmpty ? AppState.currencies.first.code : 'USD');
     }
 
     int totalBudgeted = 0;
@@ -79,11 +80,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     for (final code in activeCurs) {
       final cData = AppState.currencies.firstWhere((c) => c.code == code, orElse: () => CurrencyData(code, '', '🌐', '\$'));
-      double spent = curSpent[code] ?? 0;
-      double monthlyLimit = state.getBudgetLimit('all', code);
-      double limit = _period == 'weekly' && monthlyLimit > 0 ? monthlyLimit / 4.0 : monthlyLimit;
+      final double spent = curSpent[code] ?? 0;
+      final double monthlyLimit = state.getBudgetLimit('all', code);
+      final double limit = _period == 'weekly' && monthlyLimit > 0 ? monthlyLimit / 4.0 : monthlyLimit;
       
-      bool hasLimit = limit > 0;
+      final bool hasLimit = limit > 0;
       if (hasLimit) totalBudgeted++;
 
       if (!hasLimit) {
@@ -95,35 +96,42 @@ class _BudgetScreenState extends State<BudgetScreen> {
                padding: const EdgeInsets.all(16),
                decoration: BoxDecoration(
                  color: TC.card(context),
-                 borderRadius: BorderRadius.circular(14),
+                 borderRadius: BorderRadius.circular(16),
                  border: Border.all(color: TC.border(context)),
+                 boxShadow: [
+                   BoxShadow(color: TC.shadow(context), blurRadius: 6, offset: const Offset(0, 2)),
+                 ],
                ),
                child: Row(
                  children: [
                     Text(cData.flag, style: const TextStyle(fontSize: 22)),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(code, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                          Text('No budget set · ${cData.sym}${AppCurrencyUtils.formatAmount(spent, 0)} spent', style: TextStyle(fontSize: 11, color: TC.text2(context))),
+                          Text(code, style: TC.geist(context, fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
+                          const SizedBox(height: 2),
+                          Text('No budget set · ${cData.sym}${AppCurrencyUtils.formatAmount(spent, 0)} spent', style: TC.geist(context, fontSize: 11, color: TC.text2(context))),
                         ],
                       ),
                     ),
-                    Text('+ Set limit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.green)),
+                    Text('+ Set limit', style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w700, color: TC.primary(context))),
                  ],
                ),
              ),
           ),
         );
       } else {
-        double pct = spent / limit * 100;
-        if (pct > 100) overBudget++;
-        else onTrack++;
+        final double pct = spent / limit * 100;
+        if (pct > 100) {
+          overBudget++;
+        } else {
+          onTrack++;
+        }
         
-        Color barColor = pct >= 100 ? AppColors.red : (pct >= 80 ? Colors.orange : AppColors.green);
-        String status = pct >= 100 ? '⚠️ Over budget' : (pct >= 80 ? '⚡ Almost there' : '✓ On track');
+        final Color barColor = pct >= 100 ? TC.er(context) : (pct >= 80 ? TC.wn(context) : TC.ok(context));
+        final String status = pct >= 100 ? '⚠️ Over budget' : (pct >= 80 ? '⚡ Almost there' : '✓ On track');
         
         curItems.add(
           GestureDetector(
@@ -133,8 +141,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: TC.card(context),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: TC.border(context)),
+                  boxShadow: [
+                    BoxShadow(color: TC.shadow(context), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,45 +153,51 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     Row(
                       children: [
                         Text(cData.flag, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(code, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
-                              Text(status, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: barColor)),
+                              Text(code, style: TC.geist(context, fontSize: 14, fontWeight: FontWeight.w700, color: TC.text(context))),
+                              const SizedBox(height: 2),
+                              Text(status, style: TC.geist(context, fontSize: 11, fontWeight: FontWeight.w700, color: barColor)),
                             ],
                           ),
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                             Text('${cData.sym}${AppCurrencyUtils.formatAmount(spent, 0)}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: TC.text(context))),
-                             Text('of ${cData.sym}${AppCurrencyUtils.formatAmount(limit, 0)}', style: TextStyle(fontSize: 10, color: TC.text2(context))),
+                             Text('${cData.sym}${AppCurrencyUtils.formatAmount(spent, 0)}', style: TC.gloock(context, fontSize: 14, fontWeight: FontWeight.w800, color: TC.text(context))),
+                             const SizedBox(height: 2),
+                             Text('of ${cData.sym}${AppCurrencyUtils.formatAmount(limit, 0)}', style: TC.geist(context, fontSize: 10, color: TC.text2(context))),
                           ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     Container(
                       height: 8, width: double.infinity,
-                      decoration: BoxDecoration(color: TC.card2(context), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: TC.border(context), borderRadius: BorderRadius.circular(4)),
                       alignment: Alignment.centerLeft,
                       child: LayoutBuilder(builder: (ctx, constraints) {
-                        double w = (pct / 100) * constraints.maxWidth;
-                        if (w > constraints.maxWidth) w = constraints.maxWidth;
-                        return Container(
-                          height: 8, width: w,
-                          decoration: BoxDecoration(color: barColor, borderRadius: BorderRadius.circular(4)),
+                        final targetWidth = ((pct / 100) * constraints.maxWidth).clamp(0.0, constraints.maxWidth);
+                        return TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: targetWidth),
+                          duration: const Duration(milliseconds: 900),
+                          curve: Curves.easeOutCubic,
+                          builder: (_, w, __) => Container(
+                            height: 8, width: w,
+                            decoration: BoxDecoration(color: barColor, borderRadius: BorderRadius.circular(4)),
+                          ),
                         );
                       }),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('${pct.toStringAsFixed(0)}% used', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                        Text('Tap to edit', style: TextStyle(fontSize: 10, color: TC.text3(context))),
+                        Text('${pct.toStringAsFixed(0)}% used', style: TC.geist(context, fontSize: 10, color: TC.text3(context))),
+                        Text('Tap to edit', style: TC.geist(context, fontSize: 10, color: TC.text3(context))),
                       ],
                     ),
                   ],
@@ -198,16 +215,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: TC.text(context)),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: TC.text(context), size: 16),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Budget Settings', style: TextStyle(color: TC.text(context), fontSize: 18, fontWeight: FontWeight.w700)),
+        title: Text('Budget Settings', style: TC.gloock(context, color: TC.text(context), fontSize: 18, fontWeight: FontWeight.w700)),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           children: [
-             Text('Budget resets every', style: TextStyle(fontSize: 12, color: TC.text2(context))),
+             Text('Budget resets every', style: TC.geist(context, fontSize: 11, fontWeight: FontWeight.w600, color: TC.text2(context))),
              const SizedBox(height: 8),
              Container(
                padding: const EdgeInsets.all(4),
@@ -219,9 +236,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                        onTap: () => _setPeriod('weekly'),
                        child: Container(
                          padding: const EdgeInsets.symmetric(vertical: 10),
-                         decoration: BoxDecoration(color: _period == 'weekly' ? TC.card2(context) : Colors.transparent, borderRadius: BorderRadius.circular(20)),
+                         decoration: BoxDecoration(color: _period == 'weekly' ? TC.primaryPale(context) : Colors.transparent, borderRadius: BorderRadius.circular(20)),
                          alignment: Alignment.center,
-                         child: Text('📅 Weekly', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _period == 'weekly' ? AppColors.green : TC.text2(context))),
+                         child: Text('📅 Weekly', style: TC.geist(context, fontSize: 13, fontWeight: FontWeight.w700, color: _period == 'weekly' ? TC.primary(context) : TC.text2(context))),
                        ),
                      ),
                    ),
@@ -230,9 +247,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                        onTap: () => _setPeriod('monthly'),
                        child: Container(
                          padding: const EdgeInsets.symmetric(vertical: 10),
-                         decoration: BoxDecoration(color: _period == 'monthly' ? TC.card2(context) : Colors.transparent, borderRadius: BorderRadius.circular(20)),
+                         decoration: BoxDecoration(color: _period == 'monthly' ? TC.primaryPale(context) : Colors.transparent, borderRadius: BorderRadius.circular(20)),
                          alignment: Alignment.center,
-                         child: Text('🗓 Monthly', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _period == 'monthly' ? AppColors.green : TC.text2(context))),
+                         child: Text('🗓 Monthly', style: TC.geist(context, fontSize: 13, fontWeight: FontWeight.w700, color: _period == 'monthly' ? TC.primary(context) : TC.text2(context))),
                        ),
                      ),
                    ),
@@ -242,7 +259,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
              const SizedBox(height: 8),
              Text(
                _period == 'weekly' ? 'Resets every Monday at midnight' : 'Resets on the 1st of every month',
-               style: TextStyle(fontSize: 11, color: TC.text3(context)),
+               style: TC.geist(context, fontSize: 11, color: TC.text3(context)),
              ),
              const SizedBox(height: 24),
              
@@ -251,12 +268,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
                  Expanded(
                    child: Container(
                      padding: const EdgeInsets.all(12),
-                     decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(16), border: Border.all(color: TC.border(context))),
+                     decoration: BoxDecoration(
+                       color: TC.card(context),
+                       borderRadius: BorderRadius.circular(16),
+                       border: Border.all(color: TC.border(context)),
+                     ),
                      child: Column(
                        crossAxisAlignment: CrossAxisAlignment.start,
                        children: [
-                         Text('With budget', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                         Text('$totalBudgeted of ${activeCurs.length}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: TC.text(context))),
+                         Text('With budget', style: TC.geist(context, fontSize: 9, fontWeight: FontWeight.w600, color: TC.text3(context))),
+                         const SizedBox(height: 4),
+                         Text('$totalBudgeted of ${activeCurs.length}', style: TC.gloock(context, fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
                        ],
                      ),
                    ),
@@ -265,12 +287,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
                  Expanded(
                    child: Container(
                      padding: const EdgeInsets.all(12),
-                     decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(16), border: Border.all(color: TC.border(context))),
+                     decoration: BoxDecoration(
+                       color: TC.card(context),
+                       borderRadius: BorderRadius.circular(16),
+                       border: Border.all(color: TC.border(context)),
+                     ),
                      child: Column(
                        crossAxisAlignment: CrossAxisAlignment.start,
                        children: [
-                         Text('On track', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                         Text('$onTrack', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.green)),
+                         Text('On track', style: TC.geist(context, fontSize: 9, fontWeight: FontWeight.w600, color: TC.text3(context))),
+                         const SizedBox(height: 4),
+                         Text('$onTrack', style: TC.gloock(context, fontSize: 18, fontWeight: FontWeight.w800, color: TC.ok(context))),
                        ],
                      ),
                    ),
@@ -279,12 +306,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
                  Expanded(
                    child: Container(
                      padding: const EdgeInsets.all(12),
-                     decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(16), border: Border.all(color: TC.border(context))),
+                     decoration: BoxDecoration(
+                       color: TC.card(context),
+                       borderRadius: BorderRadius.circular(16),
+                       border: Border.all(color: TC.border(context)),
+                     ),
                      child: Column(
                        crossAxisAlignment: CrossAxisAlignment.start,
                        children: [
-                         Text('Over budget', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                         Text('$overBudget', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.red)),
+                         Text('Over budget', style: TC.geist(context, fontSize: 9, fontWeight: FontWeight.w600, color: TC.text3(context))),
+                         const SizedBox(height: 4),
+                         Text('$overBudget', style: TC.gloock(context, fontSize: 18, fontWeight: FontWeight.w800, color: TC.er(context))),
                        ],
                      ),
                    ),
@@ -344,16 +376,21 @@ class _NumpadSheetState extends State<_NumpadSheet> {
     HapticFeedback.lightImpact();
     setState(() {
       if (k == 'del') {
-        if (_valStr.length > 1) _valStr = _valStr.substring(0, _valStr.length - 1);
-        else _valStr = '0';
+        if (_valStr.length > 1) {
+          _valStr = _valStr.substring(0, _valStr.length - 1);
+        } else {
+          _valStr = '0';
+        }
       } else if (k == '.') {
-        // Only allow one decimal point
         if (!_valStr.contains('.')) {
           _valStr += '.';
         }
       } else {
-        if (_valStr == '0') _valStr = k;
-        else _valStr += k;
+        if (_valStr == '0') {
+          _valStr = k;
+        } else {
+          _valStr += k;
+        }
       }
     });
   }
@@ -380,8 +417,9 @@ class _NumpadSheetState extends State<_NumpadSheet> {
                  Column(
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
-                     Text('Set ${widget.currency} budget', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
-                     Text(widget.period == 'weekly' ? 'Weekly limit' : 'Monthly limit', style: TextStyle(fontSize: 12, color: TC.text2(context))),
+                     Text('Set ${widget.currency} budget', style: TC.geist(context, fontSize: 16, fontWeight: FontWeight.w800, color: TC.text(context))),
+                     const SizedBox(height: 2),
+                     Text(widget.period == 'weekly' ? 'Weekly limit' : 'Monthly limit', style: TC.geist(context, fontSize: 12, color: TC.text2(context))),
                    ],
                  ),
                  GestureDetector(
@@ -392,21 +430,23 @@ class _NumpadSheetState extends State<_NumpadSheet> {
                    },
                    child: Container(
                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                     decoration: BoxDecoration(color: AppColors.redDim, borderRadius: BorderRadius.circular(20)),
-                     child: const Text('Remove limit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.red)),
+                     decoration: BoxDecoration(color: TC.erPale(context), borderRadius: BorderRadius.circular(20)),
+                     child: Text('Remove limit', style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w700, color: TC.er(context))),
                    ),
                  ),
                ],
              ),
              Container(
-               padding: const EdgeInsets.symmetric(vertical: 32),
+               padding: const EdgeInsets.symmetric(vertical: 24),
                alignment: Alignment.center,
                child: Row(
                  mainAxisSize: MainAxisSize.min,
+                 crossAxisAlignment: CrossAxisAlignment.baseline,
+                 textBaseline: TextBaseline.alphabetic,
                  children: [
-                   Text(widget.sym, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: TC.text2(context))),
+                   Text(widget.sym, style: TC.gloock(context, fontSize: 24, color: TC.text2(context))),
                    const SizedBox(width: 4),
-                   Text(_valStr, style: TextStyle(fontSize: 48, fontWeight: FontWeight.w800, color: TC.text(context))),
+                   Text(_valStr, style: TC.gloock(context, fontSize: 48, color: TC.text(context))),
                  ],
                ),
              ),
@@ -425,7 +465,7 @@ class _NumpadSheetState extends State<_NumpadSheet> {
                          decoration: BoxDecoration(color: TC.card2(context), borderRadius: BorderRadius.circular(16)),
                          alignment: Alignment.center,
                          child: i == 'del' ? Icon(Icons.backspace, color: TC.text(context)) 
-                                           : Text(i, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: TC.text(context))),
+                                           : Text(i, style: TC.geist(context, fontSize: 24, fontWeight: FontWeight.w600, color: TC.text(context))),
                        ),
                     ),
                ],
@@ -434,9 +474,9 @@ class _NumpadSheetState extends State<_NumpadSheet> {
              GestureDetector(
                onTap: () {
                  HapticFeedback.lightImpact();
-                 double v = double.tryParse(_valStr) ?? 0;
+                 final double v = double.tryParse(_valStr) ?? 0;
                  if (v > 0) {
-                    double monthlyLimit = widget.period == 'weekly' ? v * 4 : v;
+                    final double monthlyLimit = widget.period == 'weekly' ? v * 4 : v;
                     state.setBudgetLimit('all', widget.currency, monthlyLimit);
                     AnalyticsService.logBudgetSet(widget.period);
                  }
@@ -445,15 +485,15 @@ class _NumpadSheetState extends State<_NumpadSheet> {
                child: Container(
                  width: double.infinity,
                  padding: const EdgeInsets.symmetric(vertical: 16),
-                 decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(16)),
+                 decoration: BoxDecoration(color: TC.primary(context), borderRadius: BorderRadius.circular(16)),
                  alignment: Alignment.center,
-                 child: const Text('Save Budget →', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                 child: Text('Save Budget →', style: TC.geist(context, fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
                ),
              ),
-             const SizedBox(height: 16),
+             const SizedBox(height: 8),
            ],
          ),
        ),
-    );
+     );
   }
 }

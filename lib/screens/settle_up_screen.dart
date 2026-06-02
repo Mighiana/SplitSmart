@@ -126,7 +126,7 @@ class _SettleUpScreenState extends State<SettleUpScreen>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    gradient: const LinearGradient(
                       colors: [AppColors.blueDim, Colors.transparent],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -213,8 +213,13 @@ class _SettleUpScreenState extends State<SettleUpScreen>
     final method = _methods[idx] ?? 'Cash';
     final today = AppDateUtils.todayStr();
 
+    // Capture context-dependent refs BEFORE any await
+    final messenger = ScaffoldMessenger.of(context);
+    final appState  = context.read<AppState>();
+    final nav       = Navigator.of(context);
+
     try {
-      await context.read<AppState>().recordSettlement(
+      await appState.recordSettlement(
             g,
             SettlementData(
               from: from,
@@ -228,7 +233,8 @@ class _SettleUpScreenState extends State<SettleUpScreen>
       if (!mounted) return;
       await AnalyticsService.logSettledUp();
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger.showSnackBar(
         SnackBar(
           content: const Text(
             '✓ Payment recorded!',
@@ -245,17 +251,16 @@ class _SettleUpScreenState extends State<SettleUpScreen>
       );
 
       if (!mounted) return;
-      final state = context.read<AppState>();
-      final remaining = state.buildSettlePlan(g);
+      final remaining = appState.buildSettlePlan(g);
       if (remaining.isEmpty) {
         // Defer pop to avoid '!_debugLocked' assertion during SnackBar transition
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.pop(context);
+          if (mounted) nav.pop();
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Settlement failed: $e')),
         );
       }

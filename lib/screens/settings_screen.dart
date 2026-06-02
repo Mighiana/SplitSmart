@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -8,21 +7,34 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:app_settings/app_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:in_app_review/in_app_review.dart';
 
-
-import '../main.dart';
 import '../providers/app_state.dart';
 import '../services/backup_service.dart';
 import '../utils/app_utils.dart';
 import '../l10n/app_localizations.dart';
-import 'package:app_settings/app_settings.dart';
-import 'archived_groups_screen.dart';
 import '../services/export_service.dart';
 import '../services/security_service.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
-// ─── Settings Screen ──────────────────────────────────────────────────────────
+import 'contact_us_screen.dart';
+import '../services/firestore_service.dart';
+
+const Color _cGreen = Color(0xFF2DCE98);
+const Color _cGreenL = Color(0xFFEAFAF4);
+const Color _cRed = Color(0xFFF5365C);
+const Color _cRedL = Color(0xFFFFF0F3);
+const Color _cBlue = Color(0xFF5B8DEF);
+const Color _cBlueL = Color(0xFFEFF6FF);
+const Color _cPurple = Color(0xFF7C5CBF);
+const Color _cPurpleL = Color(0xFFF3F0FF);
+const Color _cOrange = Color(0xFFFF9F43);
+const Color _cOrangeL = Color(0xFFFFF7ED);
+const Color _cYellowL = Color(0xFFFFFBEB);
+const Color _cGrey = Color(0xFF9CA3AF);
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,295 +45,523 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '1.0.0';
+  bool _autoBackupEnabled = false;
+  bool _loadingPrefs = true;
+  bool _isWorking = false;
+  bool _appLockEnabled = false;
+  int _notifyBeforeDays = 1; // days before due date
 
   @override
   void initState() {
     super.initState();
-    _loadVersion();
+    _loadAllPrefs();
   }
 
-  Future<void> _loadVersion() async {
+  Future<void> _loadAllPrefs() async {
+    final autoE = await BackupService.isAutoBackupEnabled();
+    final appLockE = await SecurityService.isAppLockEnabled();
+    final prefs = await SharedPreferences.getInstance();
+    final notifyDays = prefs.getInt('notify_before_days') ?? 1;
+
+    if (!mounted) return;
+
     try {
       final info = await PackageInfo.fromPlatform();
+      _appVersion = info.version;
+    } catch (_) {}
+
+    setState(() {
+      _autoBackupEnabled = autoE;
+      _appLockEnabled = appLockE;
+      _notifyBeforeDays = notifyDays;
+      _loadingPrefs = false;
+    });
+  }
+
+  void _snack(
+    String msg, {
+    Color? color,
+    SnackBarAction? action,
+    IconData? icon,
+    Color? iconColor,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: iconColor ?? _cGreen, size: 20),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Text(
+                msg,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: TC.text(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: color ?? TC.card(context),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        action: action,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _toggleAppLock(bool value) async {
+    HapticFeedback.lightImpact();
+    if (value) {
+      final success = await SecurityService.authenticate();
+      if (!success) return;
+    }
+    await SecurityService.setAppLockEnabled(value);
+    if (value) AnalyticsService.logAppLockEnabled();
+    setState(() {
+      _appLockEnabled = value;
+    });
+  }
+
+  Future<void> _toggleAuto(bool value) async {
+    HapticFeedback.lightImpact();
+    await BackupService.setAutoBackupEnabled(value);
+    if (!mounted) return;
+    setState(() => _autoBackupEnabled = value);
+    _snack(
+      value ? 'Auto-backup ON — runs every 7 days' : 'Auto-backup disabled',
+      icon: value
+          ? Icons.check_circle_rounded
+          : Icons.notifications_off_rounded,
+      iconColor: value ? _cGreen : _cRed,
+    );
+  }
+
+  Future<void> _backupNow() async {
+    if (_isWorking) return;
+    HapticFeedback.lightImpact();
+    setState(() => _isWorking = true);
+    try {
+      final file = await BackupService.createBackup();
       if (!mounted) return;
-      setState(() => _appVersion = info.version);
-    } catch (_) {
-      // Keep fallback version if package info is unavailable.
+      _snack(
+        'Backup saved successfully!',
+        icon: Icons.check_circle_rounded,
+        iconColor: _cGreen,
+        action: SnackBarAction(
+          label: 'Share',
+          textColor: _cGreen,
+          onPressed: () => BackupService.shareBackup(file, context),
+        ),
+      );
+      AnalyticsService.logBackupCreated();
+    } catch (e) {
+      _snack('Backup failed: $e', icon: Icons.error_outline, iconColor: _cRed);
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.select<AppState, bool>((s) => s.isDark);
-    final locale = context.select<AppState, Locale>((s) => s.locale);
-    final state = context.read<AppState>();
-    final l = AppLocalizations.of(context);
+  Future<void> _shareBackup() async {
+    if (_isWorking) return;
+    HapticFeedback.lightImpact();
+    setState(() => _isWorking = true);
+    try {
+      final file = await BackupService.createBackup();
+      if (!mounted) return;
+      await BackupService.shareBackup(file, context);
+      AnalyticsService.logBackupShared();
+    } catch (e) {
+      _snack('Share failed: $e', icon: Icons.error_outline, iconColor: _cRed);
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            Navigator.pop(context);
-          },
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: TC.card(context),
-              shape: BoxShape.circle,
-              border: Border.all(color: TC.border(context)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '←',
-              style: TextStyle(fontSize: 16, color: TC.text(context)),
-            ),
-          ),
-        ),
+  Future<void> _restore() async {
+    if (_isWorking) return;
+    HapticFeedback.lightImpact();
+
+    final file = await BackupService.pickBackupFile();
+    if (file == null || !mounted) return;
+
+    final preview = await BackupService.previewFile(file);
+    if (!mounted) return;
+    if (preview == null) {
+      _snack('❌  Invalid or corrupted backup file.');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TC.card(context),
         title: Text(
-          l.settings,
+          'Restore Backup?',
           style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
             color: TC.text(context),
           ),
         ),
-      ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-        child: Column(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l.settingsHeader,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                color: AppColors.green,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l.preferences,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: TC.text(context),
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l.customizeWorkspace,
-              style: TextStyle(fontSize: 13, color: TC.text2(context), fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 28),
-
-            // ── Account ───────────────────────────────────────────────────
-            _SectionTitle(l.account),
-            _AccountCard(),
-
-            // ── Appearance ─────────────────────────────────────────────────
-            _SectionTitle(l.appearance),
-            _SettingCard(
-              icon: isDark ? '🌙' : '☀️',
-              title: isDark ? l.darkMode : l.lightMode,
-              subtitle: l.switchTheme,
-              trailing: Switch(
-                value: isDark,
-                activeThumbColor: AppColors.green,
-                activeTrackColor: AppColors.greenDim,
-                onChanged: (_) {
-                  HapticFeedback.lightImpact();
-                  state.toggleTheme();
-                  AnalyticsService.logThemeToggled(!isDark);
-                },
-              ),
-            ),
-
-            // ── Language ───────────────────────────────────────────────────
-            _SectionTitle(l.language),
-            _TappableSettingCard(
-              icon: _languageFlag(locale.languageCode),
-              title: _languageName(locale.languageCode),
-              subtitle: l.chooseLanguage,
-              onTap: () => _showLanguagePicker(context, state),
-            ),
-
-            // ── Data Backup ────────────────────────────────────────────────
-            _SectionTitle(l.dataBackup),
-            const _BackupSection(),
-
-            // ── Notifications ──────────────────────────────────────────────
-            _SectionTitle(l.notifications),
-            _TappableSettingCard(
-              icon: '🔔',
-              title: l.notificationSettings,
-              subtitle: l.manageReminders,
-              onTap: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                HapticFeedback.lightImpact();
-                AppSettings.openAppSettings(type: AppSettingsType.notification);
-              },
-            ),
-
-            // ── Storage ────────────────────────────────────────────────────
-            _SectionTitle(l.storage),
-            _SettingCard(
-              icon: AuthService.instance.isSignedIn ? '☁️' : '💿',
-              title: AuthService.instance.isSignedIn ? l.cloudSync : l.database,
-              subtitle: AuthService.instance.isSignedIn
-                  ? l.cloudSyncSub
-                  : l.databaseSub,
-            ),
-
-            // ── About ──────────────────────────────────────────────────────
-            _SectionTitle(l.about),
-            _SettingCard(
-              icon: '💚',
-              title: l.appName,
-              subtitle: l.version,
-            ),
-            _SettingCard(
-              icon: '📵',
-              title: l.offline,
-              subtitle: l.offlineSub,
-            ),
-            const _PrivacyLockCard(),
-
-            // ── Features ───────────────────────────────────────────────────
-            _SectionTitle(l.features),
-            _SettingCard(
-              icon: '👥',
-              title: l.groupSplitting,
-              subtitle: l.groupSplittingSub,
-            ),
-            _SettingCard(
-              icon: '💰',
-              title: l.moneyManager,
-              subtitle: l.moneyManagerSub,
-            ),
-            _SettingCard(
-              icon: '🌍',
-              title: l.currencies,
-              subtitle: l.currenciesSub,
-            ),
-            _SettingCard(
-              icon: '📤',
-              title: l.exportShare,
-              subtitle: l.exportShareSub,
-            ),
-            _TappableSettingCard(
-              icon: '📦',
-              title: l.archiveGroups,
-              subtitle: l.archiveGroupsSub,
-              onTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchivedGroupsScreen()));
-              },
-            ),
-            _SettingCard(
-              icon: '✏️',
-              title: l.editExpenses,
-              subtitle: l.editExpensesSub,
-            ),
-
-            // ── Support ───────────────────────────────────────────────────
-            _SectionTitle(l.support),
-            _TappableSettingCard(
-              icon: '🐞',
-              title: l.reportIssue,
-              subtitle: l.reportIssueSub,
-              onTap: _shareSupportLogs,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 20),
-                    onPressed: _clearLogs,
-                    tooltip: 'Clear Logs',
+                  const Text('💾', style: TextStyle(fontSize: 15)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Database Size',
+                      style: TextStyle(fontSize: 13, color: TC.text2(context)),
+                    ),
                   ),
-                  const Icon(Icons.chevron_right, color: AppColors.text3, size: 18),
+                  Text(
+                    '${preview.dbSizeKb} KB',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: TC.text(context),
+                    ),
+                  ),
                 ],
               ),
             ),
-
-            // ── Developer ──────────────────────────────────────────────────
-            _SectionTitle(l.developer),
-            _TappableSettingCard(
-              icon: '🗑',
-              title: l.resetData,
-              subtitle: l.resetDataSub,
-              danger: true,
-              onTap: () => _confirmReset(context, state, l),
-            ),
-
-            // ── Legal ──────────────────────────────────────────────────
-            _SectionTitle(l.legal),
-            _TappableSettingCard(
-              icon: '🔒',
-              title: l.privacyPolicy,
-              subtitle: l.privacyPolicySub,
-              onTap: () async {
-                HapticFeedback.lightImpact();
-                // BLOCK-2 FIX: Open local dialog instead of 404 URL until a real policy is hosted.
-                if (!context.mounted) return;
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: TC.bg(context),
-                    title: Text(l.privacyPolicy, style: TextStyle(color: TC.text(context), fontWeight: FontWeight.bold)),
-                    content: Text('Your data is securely stored locally on your device and synced via Firebase. We do not sell or share your personal data with third parties.', style: TextStyle(color: TC.text2(context))),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Close', style: TextStyle(color: AppColors.green, fontWeight: FontWeight.bold)),
-                      )
-                    ],
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Text('📦', style: TextStyle(fontSize: 15)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Total Files',
+                      style: TextStyle(fontSize: 13, color: TC.text2(context)),
+                    ),
                   ),
+                  Text(
+                    '${preview.fileCount}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: TC.text(context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _cRedDim(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _cRed.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Text('⚠️', style: TextStyle(fontSize: 18)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Current data will be permanently replaced.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _cRed,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: TC.text2(context))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Restore',
+              style: TextStyle(color: _cGreen, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isWorking = true);
+    try {
+      final appState = context.read<AppState>();
+      final ok = await BackupService.restoreFromFile(file, appState);
+      if (!mounted) return;
+      if (ok) {
+        _snack(
+          'Restore complete! All data recovered.',
+          icon: Icons.check_circle_rounded,
+        );
+        AnalyticsService.logBackupRestored();
+      } else {
+        _snack(
+          'Restore failed. File may be corrupted.',
+          icon: Icons.error_outline,
+          iconColor: _cRed,
+        );
+      }
+    } catch (e) {
+      _snack('Restore error: $e', icon: Icons.error_outline, iconColor: _cRed);
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
+
+  void _showBackupBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            0,
+            8,
+            0,
+            MediaQuery.viewInsetsOf(ctx).bottom + 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: TC.border(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Backup & Restore',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: TC.text(context),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(
+                  Icons.save_outlined,
+                  color: _cGreen,
+                  size: 24,
+                ),
+                title: const Text(
+                  'Backup Now',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Create a manual backup immediately.'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _backupNow();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.restore_outlined,
+                  color: _cBlue,
+                  size: 24,
+                ),
+                title: const Text(
+                  'Restore Backup',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Restore your data from a backup file.'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _restore();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.share_outlined,
+                  color: _cPurple,
+                  size: 24,
+                ),
+                title: const Text(
+                  'Share Backup',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Export and share a backup file.'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareBackup();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportToPdf() async {
+    if (_isWorking) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    HapticFeedback.lightImpact();
+
+    final appState = context.read<AppState>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            0,
+            8,
+            0,
+            MediaQuery.viewInsetsOf(ctx).bottom + 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: TC.border(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Export PDF',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Text('🌍', style: TextStyle(fontSize: 24)),
+                title: const Text(
+                  'All App Data',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Export all combined groups, wallets, and transactions.',
+                ),
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  Navigator.pop(context);
+                  setState(() => _isWorking = true);
+                  try {
+                    await ExportService.exportAndSharePdf(appState, context);
+                  } catch (e) {
+                    _snack('❌  Export failed: $e');
+                  } finally {
+                    if (mounted) setState(() => _isWorking = false);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Text('👥', style: TextStyle(fontSize: 24)),
+                title: const Text(
+                  'Specific Group',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Export only expenses and members of one group.',
+                ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.pop(context);
+                  _showGroupSelectionForPdf(appState);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGroupSelectionForPdf(AppState appState) {
+    if (appState.groups.isEmpty) {
+      _snack('No groups available to export.');
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: TC.card(context),
+          title: Text(
+            'Select Group',
+            style: TextStyle(
+              color: TC.text(context),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: appState.groups.length,
+              itemBuilder: (context, index) {
+                final g = appState.groups[index];
+                return ListTile(
+                  leading: EmojiBox(emoji: g.emoji, size: 36),
+                  title: Text(
+                    g.name,
+                    style: TextStyle(color: TC.text(context)),
+                  ),
+                  subtitle: Text(
+                    g.isArchived ? 'Archived' : 'Active',
+                    style: TextStyle(color: TC.text2(context), fontSize: 12),
+                  ),
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(ctx);
+                    setState(() => _isWorking = true);
+                    try {
+                      await ExportService.exportGroupPdf(g, appState, context);
+                    } catch (e) {
+                      _snack('❌  Export failed: $e');
+                    } finally {
+                      if (mounted) setState(() => _isWorking = false);
+                    }
+                  },
                 );
               },
             ),
-            _TappableSettingCard(
-              icon: 'ℹ️',
-              title: l.appVersion,
-              subtitle: 'SplitSmart v$_appVersion',
-              onTap: () {
-                HapticFeedback.lightImpact();
-              },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-
-            const SizedBox(height: 24),
-            Center(
-              child: Column(
-                children: [
-                  const Text('💚', style: TextStyle(fontSize: 32)),
-                  const SizedBox(height: 8),
-                  Text(
-                    l.madeWithLove,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.text2,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'SplitSmart v$_appVersion',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.text3,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fade(delay: 600.ms).scale(begin: const Offset(0.8, 0.8)),
-          ].animate(interval: 50.ms).fade(duration: 300.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOut),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -333,31 +573,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final file = File(path);
 
       if (!await file.exists() || (await file.length()) == 0) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(child: Text('No error logs found — your app is running cleanly.')),
-              ],
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
+        _snack(
+          'No error logs found — your app is running cleanly.',
+          icon: Icons.check_circle_rounded,
         );
         return;
       }
 
       final logContent = await file.readAsString();
-      final deviceInfo = '--- Support Info ---\n'
+      final deviceInfo =
+          '--- Support Info ---\n'
           'App Version: $_appVersion\n'
           'Date: ${DateTime.now()}\n'
           'Platform: Android\n'
           '--------------------\n\n';
-      
+
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, 'SplitSmart_Support_Logs.txt'));
+      final tempFile = File(
+        p.join(tempDir.path, 'SplitSmart_Support_Logs.txt'),
+      );
       await tempFile.writeAsString(deviceInfo + logContent);
 
       await SharePlus.instance.share(
@@ -368,22 +602,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       AnalyticsService.logSupportLogsShared();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing logs: $e')),
-      );
+      _snack('Error sharing logs: $e');
     }
   }
 
   Future<void> _clearLogs() async {
     HapticFeedback.mediumImpact();
-    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: TC.card(context),
-        title: Text('Clear Logs?', style: TextStyle(color: TC.text(context), fontWeight: FontWeight.w700)),
-        content: Text('This will permanently delete all error logs from this device.', style: TextStyle(color: TC.text2(context))),
+        title: Text(
+          'Clear Logs?',
+          style: TextStyle(
+            color: TC.text(context),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete all error logs from this device.',
+          style: TextStyle(color: TC.text2(context)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -391,7 +630,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear', style: TextStyle(color: AppColors.red, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Clear',
+              style: TextStyle(color: _cRed, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -404,22 +646,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final file = File(path);
         if (await file.exists()) await file.delete();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(child: Text('Logs cleared successfully.')),
-              ],
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _snack('Logs cleared successfully.', icon: Icons.check_circle_rounded);
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error clearing logs: $e'), behavior: SnackBarBehavior.floating),
+        _snack(
+          'Error clearing logs: $e',
+          icon: Icons.error_outline,
+          iconColor: _cRed,
         );
       }
     }
@@ -438,20 +671,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: TC.text(context),
           ),
         ),
-        content: Text(
-          l.resetBody,
-          style: TextStyle(color: TC.text2(context)),
-        ),
+        content: Text(l.resetBody, style: TextStyle(color: TC.text2(context))),
         actions: [
           TextButton(
             onPressed: () {
               HapticFeedback.lightImpact();
               Navigator.pop(context);
             },
-            child: Text(
-              l.cancel,
-              style: TextStyle(color: TC.text2(context)),
-            ),
+            child: Text(l.cancel, style: TextStyle(color: TC.text2(context))),
           ),
           TextButton(
             onPressed: () async {
@@ -459,12 +686,328 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pop(context);
               await state.resetAllData();
             },
-            child: Text(
-              l.reset,
-              style: const TextStyle(color: AppColors.red),
+            child: Text(l.reset, style: const TextStyle(color: _cRed)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context) {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TC.card(context),
+        title: Text(
+          'Sign Out?',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: TC.text(context),
+          ),
+        ),
+        content: Text(
+          'Your cloud data will remain safe. You can sign back in anytime.',
+          style: TextStyle(color: TC.text2(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: TC.text2(context))),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await AuthService.instance.signOut();
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(color: _cRed, fontWeight: FontWeight.w700),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPrivacyPolicy(BuildContext context) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, ctrl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: TC.border(context),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Privacy Policy',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: TC.text(context),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Last updated: May 2025',
+                    style: TextStyle(fontSize: 12, color: TC.text3(context)),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: ctrl,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                children: [
+                  _privacySection(
+                    'Data Collection',
+                    'SplitSmart collects only the information you provide directly, such as your name, profile picture, and financial transaction data you enter into the app.',
+                  ),
+                  _privacySection(
+                    'Data Storage',
+                    'Your personal data is stored securely on your device using encrypted local storage. Optional cloud sync is powered by Firebase, which stores your data in compliance with Google\'s privacy standards.',
+                  ),
+                  _privacySection(
+                    'Data Sharing',
+                    'We do not sell, trade, or share your personal data with any third parties for marketing purposes. Data is only shared when you explicitly choose to export or share a backup.',
+                  ),
+                  _privacySection(
+                    'Analytics',
+                    'We use anonymous usage analytics to improve app performance and identify common issues. No personally identifiable information is included in analytics data.',
+                  ),
+                  _privacySection(
+                    'Your Rights',
+                    'You may delete all your data at any time using the "Reset All Data" option in Settings. For any privacy concerns, please contact us through the Contact Us screen.',
+                  ),
+                  _privacySection(
+                    'Security',
+                    'We implement industry-standard security measures including optional biometric authentication and encrypted backups to protect your data.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _privacySection(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: TC.text(context),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 13,
+              color: TC.text2(context),
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Notify Before helpers ────────────────────────────────────────────────
+
+  String _notifyBeforeLabel(int days) {
+    if (days == 1) return '1 day before';
+    if (days == 2) return '2 days before';
+    if (days == 3) return '3 days before';
+    if (days == 7) return '1 week before';
+    if (days == 14) return '2 weeks before';
+    if (days == 30) return '1 month before';
+    return '$days days before';
+  }
+
+  void _showNotifyBeforePicker() {
+    HapticFeedback.lightImpact();
+    final options = [
+      {'days': 1, 'label': '1 Day', 'sub': 'Notified the day before due'},
+      {'days': 2, 'label': '2 Days', 'sub': 'Two days advance warning'},
+      {'days': 3, 'label': '3 Days', 'sub': 'Three days advance warning'},
+      {'days': 7, 'label': '1 Week', 'sub': 'A week before the due date'},
+      {'days': 14, 'label': '2 Weeks', 'sub': 'Two weeks before the due date'},
+      {'days': 30, 'label': '1 Month', 'sub': 'A full month in advance'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: TC.border(context),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Notify Before',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: TC.text(context),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'How far in advance to send payment reminders',
+                      style: TextStyle(fontSize: 12, color: TC.text3(context)),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                ),
+              ),
+              ...options.map((opt) {
+                final days = opt['days'] as int;
+                final isSelected = _notifyBeforeDays == days;
+                return InkWell(
+                  onTap: () async {
+                    HapticFeedback.selectionClick();
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('notify_before_days', days);
+                    if (!mounted) return;
+                    setState(() => _notifyBeforeDays = days);
+                    Navigator.pop(context);
+                    _snack(
+                      'Reminders set to ${_notifyBeforeLabel(days)}',
+                      icon: Icons.check_circle_rounded,
+                      iconColor: _cGreen,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: isSelected ? _cGreen : _cRedL,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? _cGreen
+                                  : _cRed.withValues(alpha: 0.25),
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.alarm_rounded,
+                            color: isSelected ? Colors.white : _cRed,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                opt['label'] as String,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? _cGreen
+                                      : TC.text(context),
+                                ),
+                              ),
+                              Text(
+                                opt['sub'] as String,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: TC.text3(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: _cGreen,
+                            size: 22,
+                          )
+                        else
+                          Icon(
+                            Icons.radio_button_unchecked_rounded,
+                            color: TC.text3(context),
+                            size: 22,
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -479,11 +1022,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'code': 'tr', 'name': 'Turkish', 'flag': '🇹🇷', 'native': 'Türkçe'},
     {'code': 'hi', 'name': 'Hindi', 'flag': '🇮🇳', 'native': 'हिन्दी'},
   ];
-
-  String _languageFlag(String code) => _languages.firstWhere(
-        (l) => l['code'] == code,
-        orElse: () => _languages.first,
-      )['flag']!;
 
   String _languageName(String code) {
     final l = _languages.firstWhere(
@@ -567,13 +1105,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.greenDim
+                            ? _cGreenDim(context)
                             : TC.card(context),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isSelected
-                              ? AppColors.green
-                              : TC.border(context),
+                          color: isSelected ? _cGreen : TC.border(context),
                           width: isSelected ? 1.5 : 1,
                         ),
                       ),
@@ -594,7 +1130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14,
                                     color: isSelected
-                                        ? AppColors.green
+                                        ? _cGreen
                                         : TC.text(context),
                                   ),
                                 ),
@@ -611,7 +1147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (isSelected)
                             const Icon(
                               Icons.check_circle_rounded,
-                              color: AppColors.green,
+                              color: _cGreen,
                               size: 20,
                             ),
                         ],
@@ -626,1086 +1162,1251 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-}
 
-// ─── Data Backup Section ──────────────────────────────────────────────────────
+  Color _cGreenDim(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFF143026)
+      : const Color(0xFFEAFAF4);
+  Color _cRedDim(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFF33171D)
+      : const Color(0xFFFFF0F3);
 
-class _BackupSection extends StatefulWidget {
-  const _BackupSection();
+  Future<void> _seedDemoData(AppState state) async {
+    HapticFeedback.lightImpact();
+    setState(() => _isWorking = true);
 
-  @override
-  State<_BackupSection> createState() => _BackupSectionState();
-}
-
-class _BackupSectionState extends State<_BackupSection> {
-  bool _autoEnabled = false;
-  bool _loadingPrefs = true;
-  bool _isWorking = false;
-  DateTime? _lastBackup;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPrefs();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  Future<void> _loadPrefs() async {
-    final enabled = await BackupService.isAutoBackupEnabled();
-    final last = await BackupService.lastAutoBackupDate();
-    if (!mounted) return;
-    setState(() {
-      _autoEnabled = enabled;
-      _lastBackup = last;
-      _loadingPrefs = false;
-    });
-  }
-
-  String _fmtDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  void _snack(String msg, {Color? color, SnackBarAction? action, IconData? icon, Color? iconColor}) {
-    if (!mounted) return;
+    // Show "Seeding..." snack
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Row(
           children: [
-            if (icon != null) ...[
-              Icon(icon, color: iconColor ?? AppColors.green, size: 20),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: Text(
-                msg,
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 16),
+            Text('Seeding demo data...'),
+          ],
+        ),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      // 1. Create some wallets
+      await state.createWallet('USD', 5000.0);
+      await state.createWallet('EUR', 200.0);
+      await state.createWallet('PKR', 15000.0);
+
+      // 2. Create dummy transactions
+      final now = DateTime.now();
+      await state.addTransaction(
+        TransactionData(
+          id: now.microsecondsSinceEpoch,
+          type: 'expense',
+          desc: 'Morning Coffee',
+          amount: 5.50,
+          cat: '☕',
+          currency: 'USD',
+          sym: '\$',
+          date: now.toIso8601String(),
+        ),
+      );
+
+      await state.addTransaction(
+        TransactionData(
+          id: now.microsecondsSinceEpoch + 1,
+          type: 'income',
+          desc: 'Freelance Payment',
+          amount: 850.0,
+          cat: '💻',
+          currency: 'USD',
+          sym: '\$',
+          date: now.subtract(const Duration(days: 1)).toIso8601String(),
+        ),
+      );
+
+      await state.addTransaction(
+        TransactionData(
+          id: now.microsecondsSinceEpoch + 2,
+          type: 'expense',
+          desc: 'Grocery Store',
+          amount: 42.75,
+          cat: '🛒',
+          currency: 'USD',
+          sym: '\$',
+          date: now.subtract(const Duration(days: 2)).toIso8601String(),
+        ),
+      );
+
+      // 3. Create a dummy group
+      final groupId = now.microsecondsSinceEpoch + 3;
+      final g = GroupData(
+        id: groupId,
+        name: 'Weekend Roadtrip',
+        emoji: '🚗',
+        currency: 'USD',
+        sym: '\$',
+        members: ['You', 'Alice', 'Bob', 'Charlie'],
+        expenses: [],
+        settlements: [],
+      );
+
+      await state.addGroup(g);
+
+      // Wait a bit for the state to settle if needed, or find the group from local list
+      // actually state.addGroup usually adds to the local list immediately.
+      final addedGroup = state.groups.firstWhere(
+        (grp) => grp.id == groupId,
+        orElse: () => g,
+      );
+
+      // 4. Add some group expenses
+      final e1 = ExpenseData(
+        id: now.microsecondsSinceEpoch + 4,
+        desc: 'Fuel & Gas',
+        amount: 60.0,
+        cat: '🚗',
+        paidBy: 'You',
+        date: now.toIso8601String(),
+        splits: {'You': 15.0, 'Alice': 15.0, 'Bob': 15.0, 'Charlie': 15.0},
+        createdBy: AuthService.instance.uid,
+        updatedBy: AuthService.instance.uid,
+      );
+      await state.addExpenseToGroup(addedGroup, e1);
+
+      final e2 = ExpenseData(
+        id: now.microsecondsSinceEpoch + 5,
+        desc: 'Cabin Rental',
+        amount: 200.0,
+        cat: '🏠',
+        paidBy: 'Alice',
+        date: now.subtract(const Duration(days: 1)).toIso8601String(),
+        splits: {'You': 50.0, 'Alice': 50.0, 'Bob': 50.0, 'Charlie': 50.0},
+        createdBy: AuthService.instance.uid,
+        updatedBy: AuthService.instance.uid,
+      );
+      await state.addExpenseToGroup(addedGroup, e2);
+
+      _snack(
+        'Demo data seeded successfully!',
+        icon: Icons.check_circle_rounded,
+        iconColor: _cGreen,
+      );
+    } catch (e) {
+      debugPrint('[Settings] Seed error: $e');
+      _snack(
+        'Error seeding demo data: $e',
+        icon: Icons.error_outline,
+        iconColor: _cRed,
+      );
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
+
+  Widget _buildTestRow({
+    required IconData icon,
+    required String title,
+    required String status,
+    required Color color,
+    String? detail,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                   color: TC.text(context),
                 ),
               ),
-            ),
-          ],
-        ),
-        backgroundColor: color ?? TC.card(context),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        action: action,
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  Future<void> _backupNow() async {
-    if (_isWorking) return;
-    HapticFeedback.lightImpact();
-    setState(() => _isWorking = true);
-    try {
-      final file = await BackupService.createBackup();
-      if (!mounted) return;
-      _snack(
-        'Backup saved!\n${file.path}',
-        icon: Icons.check_circle_rounded,
-        action: SnackBarAction(
-          label: 'Share',
-          textColor: AppColors.green,
-          onPressed: () => BackupService.shareBackup(file, context),
-        ),
-      );
-      AnalyticsService.logBackupCreated();
-    } catch (e) {
-      _snack('Backup failed: $e', icon: Icons.error_outline, iconColor: AppColors.red);
-    } finally {
-      if (mounted) setState(() => _isWorking = false);
-    }
-  }
-
-  Future<void> _shareBackup() async {
-    if (_isWorking) return;
-    HapticFeedback.lightImpact();
-    setState(() => _isWorking = true);
-    try {
-      final file = await BackupService.createBackup();
-      if (!mounted) return;
-      await BackupService.shareBackup(file, context);
-      AnalyticsService.logBackupShared();
-    } catch (e) {
-      _snack('Share failed: $e', icon: Icons.error_outline, iconColor: AppColors.red);
-    } finally {
-      if (mounted) setState(() => _isWorking = false);
-    }
-  }
-
-  Future<void> _restore() async {
-    if (_isWorking) return;
-    HapticFeedback.lightImpact();
-
-    final file = await BackupService.pickBackupFile();
-    if (file == null || !mounted) return;
-
-    final preview = await BackupService.previewFile(file);
-    if (!mounted) return;
-    if (preview == null) {
-      _snack('❌  Invalid or corrupted backup file.');
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: TC.card(context),
-        title: Text(
-          'Restore Backup?',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            color: TC.text(context),
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PreviewRow('💾', 'Database Size', '${preview.dbSizeKb} KB'),
-            _PreviewRow('📦', 'Total Files', '${preview.fileCount} (including receipts)'),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.redDim,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.red.withValues(alpha: 0.3),
+              if (detail != null)
+                Text(
+                  detail,
+                  style: TextStyle(fontSize: 12, color: TC.text3(context)),
                 ),
-              ),
-              child: Row(
-                children: [
-                  const Text('⚠️', style: TextStyle(fontSize: 18)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Current data will be permanently replaced.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.red,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: TC.text2(context)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            status,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: color,
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Restore',
-              style: TextStyle(
-                color: AppColors.green,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isWorking = true);
-    try {
-      final appState = context.read<AppState>();
-      final ok = await BackupService.restoreFromFile(file, appState);
-      if (!mounted) return;
-      if (ok) {
-        _snack('Restore complete! All data recovered.', icon: Icons.check_circle_rounded);
-        AnalyticsService.logBackupRestored();
-      } else {
-        _snack('Restore failed. File may be corrupted.', icon: Icons.error_outline, iconColor: AppColors.red);
-      }
-    } catch (e) {
-      _snack('Restore error: $e', icon: Icons.error_outline, iconColor: AppColors.red);
-    } finally {
-      if (mounted) setState(() => _isWorking = false);
-    }
   }
 
-  Future<void> _exportToPdf() async {
-    if (_isWorking) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  void _showFirebaseTestPanel() {
     HapticFeedback.lightImpact();
-
-    final appState = context.read<AppState>();
+    bool isPinging = false;
+    bool? pingResult;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: TC.surface(context),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: TC.border(context),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Export PDF',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Text('🌍', style: TextStyle(fontSize: 24)),
-              title: const Text('All App Data', style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Export all combined groups, wallets, and transactions.'),
-              onTap: () async {
-                HapticFeedback.lightImpact();
-                Navigator.pop(context);
-                
-                setState(() => _isWorking = true);
-                try {
-                  await ExportService.exportAndSharePdf(appState, context);
-                } catch (e) {
-                  _snack('❌  Export failed: $e');
-                } finally {
-                  if (mounted) setState(() => _isWorking = false);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Text('👥', style: TextStyle(fontSize: 24)),
-              title: const Text('Specific Group', style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Export only expenses and members of one group.'),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.pop(context);
-                _showGroupSelectionForPdf(appState);
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showGroupSelectionForPdf(AppState appState) {
-    if (appState.groups.isEmpty) {
-      _snack('No groups available to export.');
-      return;
-    }
-    showDialog(
-      context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: TC.card(context),
-          title: Text('Select Group', style: TextStyle(color: TC.text(context), fontWeight: FontWeight.w700)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: appState.groups.length,
-              itemBuilder: (context, index) {
-                final g = appState.groups[index];
-                return ListTile(
-                  leading: EmojiBox(emoji: g.emoji, size: 36),
-                  title: Text(g.name, style: TextStyle(color: TC.text(context))),
-                  subtitle: Text(g.isArchived ? 'Archived' : 'Active', style: TextStyle(color: TC.text2(context), fontSize: 12)),
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(ctx);
-                    
-                    setState(() => _isWorking = true);
-                    try {
-                      await ExportService.exportGroupPdf(g, appState, context);
-                    } catch (e) {
-                      _snack('❌  Export failed: $e');
-                    } finally {
-                      if (mounted) setState(() => _isWorking = false);
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final uid = AuthService.instance.uid;
+            final isSignedIn = AuthService.instance.isSignedIn;
+            final useCloud = ctx.read<AppState>().useCloud;
+            final bottomInset = MediaQuery.viewInsetsOf(ctx).bottom;
+
+            return SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: TC.border(context),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Firebase Test Tools',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: TC.text(context),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildTestRow(
+                      icon: Icons.person_rounded,
+                      title: 'Auth Status',
+                      status: isSignedIn ? 'Signed In' : 'Logged Out',
+                      color: isSignedIn ? _cGreen : _cRed,
+                      detail: uid ?? 'No UID',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTestRow(
+                      icon: Icons.cloud_done_rounded,
+                      title: 'Firestore Sync',
+                      status: useCloud ? 'Enabled' : 'Disabled',
+                      color: useCloud ? _cGreen : _cOrange,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTestRow(
+                      icon: Icons.network_check_rounded,
+                      title: 'Connectivity',
+                      status: isPinging
+                          ? 'Testing...'
+                          : (pingResult == null
+                                ? 'Not Tested'
+                                : (pingResult! ? 'Success' : 'Failed')),
+                      color: isPinging
+                          ? _cBlue
+                          : (pingResult == null
+                                ? _cGrey
+                                : (pingResult! ? _cGreen : _cRed)),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isPinging
+                            ? null
+                            : () async {
+                                setSheetState(() => isPinging = true);
+                                final result = await FirestoreService.instance
+                                    .ping();
+                                if (ctx.mounted) {
+                                  setSheetState(() {
+                                    isPinging = false;
+                                    pingResult = result;
+                                  });
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _cBlueL,
+                          foregroundColor: _cBlue,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: isPinging
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _cBlue,
+                                ),
+                              )
+                            : const Text(
+                                'Run Ping Test',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _toggleAuto(bool value) async {
-    HapticFeedback.lightImpact();
-    await BackupService.setAutoBackupEnabled(value);
-    if (!mounted) return;
-    setState(() => _autoEnabled = value);
-    _snack(
-      value
-          ? 'Auto-backup ON — runs every 7 days'
-          : 'Auto-backup disabled',
-      icon: value ? Icons.check_circle_rounded : Icons.notifications_off_rounded,
-      iconColor: value ? AppColors.green : AppColors.red,
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 52, 18, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.pop(context);
+            },
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: TC.card(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: TC.border(context), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                '←',
+                style: TextStyle(
+                  color: _cGreen,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PREFERENCES',
+                  style: TC.geist(context,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: TC.primaryMd(context),
+                      letterSpacing: 1.5),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Settings',
+                  style: TC.gloock(context,
+                      fontSize: 28, letterSpacing: -0.8, height: 1),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Manage your app preferences',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: TC.text3(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _snack('Search coming soon');
+            },
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: TC.card(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: TC.border(context), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.search, size: 18, color: TC.text2(context)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loadingPrefs) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.green,
-            strokeWidth: 2,
-          ),
+      return Scaffold(
+        backgroundColor: TC.bg(context),
+        body: const Center(
+          child: CircularProgressIndicator(color: _cGreen, strokeWidth: 2),
         ),
       );
     }
 
-    final l = AppLocalizations.of(context);
-    return Column(
-      children: [
-        _BackupActionCard(
-          icon: '💾',
-          title: l.backupNow,
-          subtitle: l.backupNowSub,
-          color: AppColors.green,
-          isWorking: _isWorking,
-          onTap: _backupNow,
+    final state = context.read<AppState>();
+    final isDark = context.select<AppState, bool>((s) => s.isDark);
+    final locale = context.select<AppState, Locale>((s) => s.locale);
+
+    return Scaffold(
+      backgroundColor: TC.bg(context),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // HEADER
+            _buildHeader(context)
+                .animate()
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // ACCOUNT CARD
+            _AccountCard(onSignOut: () => _confirmSignOut(context))
+                .animate(delay: 50.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // GENERAL
+            const _SecTitle('General')
+                .animate(delay: 80.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Text('☀️', style: TextStyle(fontSize: 18)),
+                      iconBg: _cYellowL,
+                      title: 'Appearance',
+                      subtitle: isDark ? 'Dark mode' : 'Light mode',
+                      trailing: _CustomToggle(
+                        value: isDark,
+                        onChanged: (v) {
+                          state.toggleTheme();
+                          AnalyticsService.logThemeToggled(v);
+                        },
+                      ),
+                    ),
+                    _Tile(
+                      icon: const Text('🌐', style: TextStyle(fontSize: 18)),
+                      iconBg: _cBlueL,
+                      title: 'Language',
+                      subtitle: _languageName(locale.languageCode),
+                      onTap: () => _showLanguagePicker(context, state),
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 80.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // DATA & BACKUP
+            const _SecTitle('Data & Backup')
+                .animate(delay: 110.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Icon(
+                        Icons.cloud_upload_outlined,
+                        color: _cGreen,
+                        size: 20,
+                      ),
+                      iconBg: _cGreenL,
+                      title: 'Backup & Restore',
+                      subtitle: 'Backup, restore and share your data',
+                      onTap: _showBackupBottomSheet,
+                    ),
+                    _Tile(
+                      icon: const Icon(
+                        Icons.upload_file_outlined,
+                        color: _cBlue,
+                        size: 20,
+                      ),
+                      iconBg: _cBlueL,
+                      title: 'Export Data',
+                      subtitle: 'Export your data as PDF or CSV',
+                      onTap: _exportToPdf,
+                    ),
+                    _Tile(
+                      icon: const Icon(
+                        Icons.autorenew_rounded,
+                        color: _cOrange,
+                        size: 20,
+                      ),
+                      iconBg: _cOrangeL,
+                      title: 'Auto Backup',
+                      subtitle: 'Every 7 days · Keeps last 3 backups',
+                      trailing: _CustomToggle(
+                        value: _autoBackupEnabled,
+                        onChanged: _toggleAuto,
+                      ),
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 110.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // SECURITY
+            const _SecTitle('Security')
+                .animate(delay: 140.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Icon(
+                        Icons.fingerprint_rounded,
+                        color: _cPurple,
+                        size: 20,
+                      ),
+                      iconBg: _cPurpleL,
+                      title: 'Biometric Lock',
+                      subtitle: 'Use fingerprint to unlock the app',
+                      trailing: _CustomToggle(
+                        value: _appLockEnabled,
+                        onChanged: (v) => _toggleAppLock(v),
+                      ),
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 140.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // REMINDERS
+            const _SecTitle('Reminders')
+                .animate(delay: 170.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Icon(
+                        Icons.notifications_active_outlined,
+                        color: _cRed,
+                        size: 20,
+                      ),
+                      iconBg: _cRedL,
+                      title: 'Reminder Alerts',
+                      subtitle: 'Get notified for upcoming payments',
+                      trailing: _CustomToggle(
+                        value: true,
+                        onChanged: (v) {
+                          AppSettings.openAppSettings(
+                            type: AppSettingsType.notification,
+                          );
+                        },
+                      ),
+                    ),
+                    _Tile(
+                      icon: const Icon(
+                        Icons.timer_outlined,
+                        color: _cRed,
+                        size: 20,
+                      ),
+                      iconBg: _cRedL,
+                      title: 'Notify Before',
+                      subtitle: _notifyBeforeLabel(_notifyBeforeDays),
+                      onTap: _showNotifyBeforePicker,
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 170.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // SUPPORT
+            const _SecTitle('Support')
+                .animate(delay: 200.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Icon(
+                        Icons.support_agent_rounded,
+                        color: _cGreen,
+                        size: 20,
+                      ),
+                      iconBg: _cGreenL,
+                      title: 'Contact Us',
+                      subtitle: 'Questions, issues, or feature ideas',
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ContactUsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _Tile(
+                      icon: const Text('⭐', style: TextStyle(fontSize: 18)),
+                      iconBg: _cYellowL,
+                      title: 'Rate App',
+                      subtitle: 'Leave a review on the Play Store',
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        final inAppReview = InAppReview.instance;
+                        if (await inAppReview.isAvailable()) {
+                          await inAppReview.requestReview();
+                        } else {
+                          // Fallback: open Play Store listing directly
+                          await inAppReview.openStoreListing(
+                            appStoreId:
+                                '6744811929', // iOS App Store ID (update if needed)
+                          );
+                        }
+                      },
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 200.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // DEVELOPER SECTION
+            const _SecTitle('Developer', color: _cRed)
+                .animate(delay: 230.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Text('🗑️', style: TextStyle(fontSize: 18)),
+                      iconBg: _cRedL,
+                      title: 'Reset All Data',
+                      subtitle:
+                          'Wipe all groups, wallets, reminders, and transactions',
+                      titleColor: _cRed,
+                      onTap: () => _confirmReset(
+                        context,
+                        state,
+                        AppLocalizations.of(context),
+                      ),
+                    ),
+                    _Tile(
+                      icon: const Text('🧹', style: TextStyle(fontSize: 18)),
+                      iconBg: _cOrangeL,
+                      title: 'Clear Local Cache',
+                      subtitle: 'Remove temporary app data',
+                      onTap: _clearLogs,
+                    ),
+                    _Tile(
+                      icon: const Text('📋', style: TextStyle(fontSize: 18)),
+                      iconBg: _cBlueL,
+                      title: 'Export Debug Logs',
+                      subtitle: 'Share logs for troubleshooting',
+                      onTap: _shareSupportLogs,
+                    ),
+                    _Tile(
+                      icon: const Text('🔥', style: TextStyle(fontSize: 18)),
+                      iconBg: _cYellowL,
+                      title: 'Firebase Test Tools',
+                      subtitle: 'Check sync, auth, and Firestore status',
+                      onTap: _showFirebaseTestPanel,
+                    ),
+                    _Tile(
+                      icon: const Text('🌱', style: TextStyle(fontSize: 18)),
+                      iconBg: _cGreenL,
+                      title: 'Seed Demo Data',
+                      subtitle:
+                          'Create sample groups, expenses, reminders, and wallets',
+                      onTap: () => _seedDemoData(state),
+                    ),
+                    _Tile(
+                      icon: const Text('🚀', style: TextStyle(fontSize: 18)),
+                      iconBg: _cBlueL,
+                      title: 'Reset Onboarding',
+                      subtitle: 'Show onboarding screens on next app launch',
+                      showDivider: false,
+                      onTap: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.remove('onboarding_done');
+                        await prefs.remove('onboarding_seen');
+                        if (context.mounted) {
+                          _snack(
+                            'Onboarding reset — restart the app to see it',
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                )
+                .animate(delay: 230.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // ABOUT
+            const _SecTitle('About')
+                .animate(delay: 260.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+            _CardBox(
+                  children: [
+                    _Tile(
+                      icon: const Icon(
+                        Icons.privacy_tip_outlined,
+                        color: _cGreen,
+                        size: 20,
+                      ),
+                      iconBg: _cGreenL,
+                      title: 'Privacy Policy',
+                      subtitle: 'How we handle your data',
+                      onTap: () => _showPrivacyPolicy(context),
+                    ),
+                    _Tile(
+                      icon: Icon(
+                        Icons.info_outline_rounded,
+                        color: TC.text3(context),
+                        size: 20,
+                      ),
+                      iconBg: TC.bg(context),
+                      title: 'App Version',
+                      subtitle: 'SplitSmart v$_appVersion',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _cGreenL,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Up to date',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: _cGreen,
+                          ),
+                        ),
+                      ),
+                      showDivider: false,
+                    ),
+                  ],
+                )
+                .animate(delay: 260.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+
+            // FOOTER
+            Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 24, 18, 40),
+                  child: Center(
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: TC.text3(context),
+                          fontFamily: 'Nunito',
+                        ),
+                        children: const [
+                          TextSpan(
+                            text: '♥ ',
+                            style: TextStyle(color: _cRed),
+                          ),
+                          TextSpan(text: 'Made with love by SplitSmart'),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+                .animate(delay: 290.ms)
+                .fade(duration: 300.ms)
+                .slideY(begin: 0.1, curve: Curves.easeOut),
+          ],
         ),
-        const SizedBox(height: 8),
-        _BackupActionCard(
-          icon: '♻️',
-          title: l.restoreBackup,
-          subtitle: l.restoreBackupSub,
-          color: AppColors.blue,
-          isWorking: _isWorking,
-          onTap: _restore,
-        ),
-        const SizedBox(height: 8),
-        _BackupActionCard(
-          icon: '📤',
-          title: l.shareBackup,
-          subtitle: l.shareBackupSub,
-          color: AppColors.purple,
-          isWorking: _isWorking,
-          onTap: _shareBackup,
-        ),
-        const SizedBox(height: 8),
-        _BackupActionCard(
-          icon: '📄',
-          title: l.exportPdf,
-          subtitle: l.exportPdfSub,
-          color: AppColors.blue,
-          isWorking: _isWorking,
-          onTap: _exportToPdf,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          decoration: BoxDecoration(
-            color: TC.card(context),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: TC.border(context)),
+      ),
+    );
+  }
+}
+
+class _AccountCard extends StatelessWidget {
+  final VoidCallback onSignOut;
+  const _AccountCard({required this.onSignOut});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = AuthService.instance;
+    final isSignedIn = auth.isSignedIn;
+    final name = auth.currentUser?.displayName ?? 'Guest User';
+    final email = auth.email ?? 'Not signed in';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
-          child: Column(
-            children: [
-              Row(
+        ],
+        border: Border.all(color: TC.border(context)),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () {},
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Row(
                 children: [
-                  const Text('🔁', style: TextStyle(fontSize: 22)),
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: isSignedIn
+                          ? const LinearGradient(
+                              colors: [_cGreen, Color(0xFF1AAB7A)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
+                      color: !isSignedIn ? TC.card2(context) : null,
+                      border: Border.all(color: _cGreenL, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: auth.photoUrl != null
+                        ? ClipOval(
+                            child: Image.network(
+                              auth.photoUrl!,
+                              fit: BoxFit.cover,
+                              width: 58,
+                              height: 58,
+                            ),
+                          )
+                        : Text(
+                            initials,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          l.autoBackup,
+                          name,
                           style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
                             color: TC.text(context),
+                            letterSpacing: -0.3,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          l.autoBackupSub,
+                          email,
                           style: TextStyle(
                             fontSize: 12,
+                            fontWeight: FontWeight.w600,
                             color: TC.text2(context),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (isSignedIn)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _cGreenL,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: _cGreen,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                const Text(
+                                  'Synced',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: _cGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: TC.card2(context),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: TC.text3(context),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Local Only',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: TC.text3(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: TC.text3(context), size: 18),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: TC.border(context),
+            indent: 16,
+            endIndent: 16,
+          ),
+          if (isSignedIn)
+            InkWell(
+              onTap: onSignOut,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _cRedL,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('🚪', style: TextStyle(fontSize: 18)),
+                    ),
+                    const SizedBox(width: 13),
+                    const Expanded(
+                      child: Text(
+                        'Sign Out',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: _cRed,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: TC.text3(context),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardBox extends StatelessWidget {
+  final List<Widget> children;
+  const _CardBox({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(color: TC.border(context)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(children: children),
+      ),
+    );
+  }
+}
+
+class _SecTitle extends StatelessWidget {
+  final String text;
+  final Color? color;
+  const _SecTitle(this.text, {this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 20, 18, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: color ?? TC.text3(context),
+          letterSpacing: 2,
+        ),
+      ),
+    );
+  }
+}
+
+class _Tile extends StatelessWidget {
+  final Widget icon;
+  final Color iconBg;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool showDivider;
+  final Color? titleColor;
+
+  const _Tile({
+    required this.icon,
+    required this.iconBg,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.showDivider = true,
+    this.titleColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    alignment: Alignment.center,
+                    child: icon,
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: titleColor ?? TC.text(context),
+                            letterSpacing: -0.2,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: TC.text3(context),
+                            height: 1.3,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Switch(
-                    value: _autoEnabled,
-                    activeThumbColor: AppColors.green,
-                    activeTrackColor: AppColors.greenDim,
-                    onChanged: _toggleAuto,
-                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    trailing!,
+                  ] else ...[
+                    Icon(
+                      Icons.chevron_right,
+                      color: TC.text3(context),
+                      size: 18,
+                    ),
+                  ],
                 ],
               ),
-              if (_lastBackup != null || _autoEnabled) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const SizedBox(width: 36),
-                    const SizedBox(width: 14),
-                    Text(
-                      _lastBackup != null
-                          ? 'Last backup: ${_fmtDate(_lastBackup!)}'
-                          : 'No auto-backup yet',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _lastBackup != null
-                            ? AppColors.green
-                            : TC.text3(context),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 14),
+              if (showDivider)
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: TC.border(context),
+                  indent: 51,
                 ),
-              ],
             ],
           ),
         ),
-        const SizedBox(height: 4),
-      ],
+      ),
     );
   }
 }
 
-// ─── Backup Action Card ───────────────────────────────────────────────────────
+class _CustomToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
-class _BackupActionCard extends StatefulWidget {
-  final String icon, title, subtitle;
-  final Color color;
-  final bool isWorking;
-  final VoidCallback onTap;
-
-  const _BackupActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.isWorking,
-    required this.onTap,
-  });
-
-  @override
-  State<_BackupActionCard> createState() => _BackupActionCardState();
-}
-
-class _BackupActionCardState extends State<_BackupActionCard> {
-  double _scale = 1.0;
+  const _CustomToggle({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.97),
-      onTapUp: (_) => setState(() => _scale = 1.0),
-      onTapCancel: () => setState(() => _scale = 1.0),
-      onTap: widget.isWorking ? null : widget.onTap,
-      child: AnimatedScale(
-        scale: _scale,
-        duration: const Duration(milliseconds: 120),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: widget.color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: widget.color.withValues(alpha: 0.25),
-            ),
-          ),
-          child: Row(
-            children: [
-              Text(widget.icon, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: widget.color,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: TC.text2(context),
-                      ),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onChanged(!value);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 46,
+        height: 26,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          color: value ? _cGreen : const Color(0xFFD1D5DB),
+        ),
+        child: Stack(
+          children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              top: 3,
+              left: value ? 23 : 3,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
                   ],
                 ),
               ),
-              if (widget.isWorking)
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    color: widget.color,
-                    strokeWidth: 2,
-                  ),
-                )
-              else
-                Icon(
-                  Icons.chevron_right,
-                  color: widget.color,
-                  size: 20,
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-// ─── Restore Preview Row ──────────────────────────────────────────────────────
-
-class _PreviewRow extends StatelessWidget {
-  final String icon, label, value;
-  const _PreviewRow(this.icon, this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 15)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 13, color: TC.text2(context)),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: TC.text(context),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Shared widget helpers ────────────────────────────────────────────────────
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, top: 28),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-          color: AppColors.green,
-          letterSpacing: 1.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingCard extends StatelessWidget {
-  final String icon, title, subtitle;
-  final Widget? trailing;
-
-  const _SettingCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: TC.card(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TC.border(context)),
-      ),
-      child: Row(
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: TC.text(context),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: TC.text2(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (trailing != null) trailing!,
-        ],
-      ),
-    );
-  }
-}
-
-class _TappableSettingCard extends StatefulWidget {
-  final String icon, title, subtitle;
-  final bool danger;
-  final VoidCallback onTap;
-  final Widget? trailing;
-
-  const _TappableSettingCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.danger = false,
-    this.trailing,
-  });
-
-  @override
-  State<_TappableSettingCard> createState() => _TappableSettingCardState();
-}
-
-class _TappableSettingCardState extends State<_TappableSettingCard> {
-  double _scale = 1.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.97),
-      onTapUp: (_) => setState(() => _scale = 1.0),
-      onTapCancel: () => setState(() => _scale = 1.0),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _scale,
-        duration: const Duration(milliseconds: 120),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: widget.danger ? AppColors.redDim : TC.card(context),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: widget.danger
-                  ? AppColors.red.withValues(alpha: 0.3)
-                  : TC.border(context),
-            ),
-          ),
-          child: Row(
-            children: [
-              Text(widget.icon, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: widget.danger
-                            ? AppColors.red
-                            : TC.text(context),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: TC.text2(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              widget.trailing ??
-                  Icon(
-                    Icons.chevron_right,
-                    color: widget.danger ? AppColors.red : TC.text3(context),
-                    size: 18,
-                  ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Privacy Lock Card ───────────────────────────────────────────────────────
-
-class _PrivacyLockCard extends StatefulWidget {
-  const _PrivacyLockCard();
-
-  @override
-  State<_PrivacyLockCard> createState() => _PrivacyLockCardState();
-}
-
-class _PrivacyLockCardState extends State<_PrivacyLockCard> {
-  bool _enabled = false;
-  bool _supported = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final s = await SecurityService.canAuthenticate();
-    final e = await SecurityService.isAppLockEnabled();
-    if (mounted) {
-      setState(() {
-        _supported = s;
-        _enabled = e;
-      });
-    }
-  }
-
-  Future<void> _toggle(bool value) async {
-    HapticFeedback.lightImpact();
-    if (value) {
-      // Must authenticate to enable it
-      final success = await SecurityService.authenticate();
-      if (!success) return; 
-    }
-    await SecurityService.setAppLockEnabled(value);
-    if (value) AnalyticsService.logAppLockEnabled();
-    setState(() => _enabled = value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_supported) return const SizedBox();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: TC.card(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TC.border(context)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.purpleDim,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Text('🔒', style: TextStyle(fontSize: 20)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Biometric Lock',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: TC.text(context),
-                  ),
-                ),
-                Text(
-                  'Require face/fingerprint to open app',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: TC.text2(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: _enabled,
-            onChanged: _toggle,
-            activeThumbColor: AppColors.bg,
-            activeTrackColor: AppColors.purple,
-            inactiveThumbColor: TC.text2(context),
-            inactiveTrackColor: Theme.of(context).scaffoldBackgroundColor,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Account Card ─────────────────────────────────────────────────────────────
-
-class _AccountCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final auth = AuthService.instance;
-    final isSignedIn = auth.isSignedIn;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: TC.card(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TC.border(context)),
-      ),
-      child: isSignedIn
-          ? Column(
-              children: [
-                Row(
-                  children: [
-                    // Avatar
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppColors.greenDim,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.green.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: auth.photoUrl != null
-                          ? ClipOval(
-                              child: Image.network(
-                                auth.photoUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Center(
-                                  child: Text(
-                                    (auth.currentUser?.displayName ?? 'U')[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: AppColors.green,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Center(
-                              child: Text(
-                                (auth.currentUser?.displayName ?? 'U')[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: AppColors.green,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 20,
-                                ),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            auth.currentUser?.displayName ?? 'User',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: TC.text(context),
-                            ),
-                          ),
-                          if (auth.email != null)
-                            Text(
-                              auth.email!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: TC.text2(context),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.greenDim,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        '● Synced',
-                        style: TextStyle(
-                          color: AppColors.green,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // Sign Out button
-                GestureDetector(
-                  onTap: () => _confirmSignOut(context),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.redDim,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppColors.red.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: AppColors.red,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: TC.card2(context),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.person_outline_rounded,
-                      color: TC.text3(context), size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Guest Mode',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: TC.text(context),
-                        ),
-                      ),
-                      Text(
-                        'Data stored locally only',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: TC.text2(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  void _confirmSignOut(BuildContext context) {
-    HapticFeedback.heavyImpact();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: TC.card(context),
-        title: Text(
-          'Sign Out?',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: TC.text(context),
-          ),
-        ),
-        content: Text(
-          'Your cloud data will remain safe. You can sign back in anytime.',
-          style: TextStyle(color: TC.text2(context)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: TextStyle(color: TC.text2(context))),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await AuthService.instance.signOut();
-              if (context.mounted) {
-                // Navigate back to root to trigger auth gate
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }
-            },
-            child: const Text('Sign Out',
-                style: TextStyle(
-                    color: AppColors.red, fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
     );
   }

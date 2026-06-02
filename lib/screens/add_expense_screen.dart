@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
@@ -91,7 +90,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     for (int i = 0; i < members.length; i++) {
       final m = members[i];
       if (!_percentControllers.containsKey(m)) {
-        // Last member gets the remainder so it sums to exactly 100
         final pct = (i == members.length - 1)
             ? (100 - equal * (members.length - 1))
             : equal;
@@ -107,9 +105,38 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void dispose() {
     _descCtrl.dispose();
-    for (final c in _customControllers.values) c.dispose();
-    for (final c in _percentControllers.values) c.dispose();
+    for (final c in _customControllers.values) {
+      c.dispose();
+    }
+    for (final c in _percentControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  Widget _receiptPreviewImage(String path) {
+    final isRemote = path.startsWith('http://') || path.startsWith('https://');
+    if (isRemote) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _receiptPreviewError(),
+      );
+    }
+
+    return Image.file(
+      File(path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _receiptPreviewError(),
+    );
+  }
+
+  Widget _receiptPreviewError() {
+    return Container(
+      color: TC.erPale(context),
+      alignment: Alignment.center,
+      child: Icon(Icons.broken_image_outlined, color: TC.er(context)),
+    );
   }
 
   void _onKey(String k) {
@@ -138,36 +165,38 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: TC.border(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Attach Receipt',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Text('📷', style: TextStyle(fontSize: 22)),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Text('🖼️', style: TextStyle(fontSize: 22)),
-              title: const Text('Choose from gallery'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Attach Receipt',
+                style: TC.geist(context, fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Text('📷', style: TextStyle(fontSize: 22)),
+                title: Text('Take a photo', style: TC.geist(context)),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Text('🖼️', style: TextStyle(fontSize: 22)),
+                title: Text('Choose from gallery', style: TC.geist(context)),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -194,7 +223,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to attach receipt: $e'),
+            content: Text('Failed to attach receipt: $e', style: TC.geist(context)),
           ),
         );
       }
@@ -206,12 +235,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final state = context.read<AppState>();
     final g = state.currentGroup;
     if (g == null) {
-      // Guard: currentGroup must be set before opening this screen.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No group selected')),
+            SnackBar(content: Text('No group selected', style: TC.geist(context))),
           );
         }
       });
@@ -219,9 +247,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 56, 20, 40),
+      backgroundColor: TC.bg(context),
+      body: SafeArea(
+        child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -242,21 +271,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       border: Border.all(color: TC.border(context)),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      '←',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: TC.text(context),
-                      ),
-                    ),
+                    child: Icon(Icons.arrow_back_ios_new_rounded, color: TC.text(context), size: 14),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     _isEdit ? 'Edit Expense' : 'Add Expense',
-                    style: TextStyle(
-                      fontSize: 17,
+                    style: TC.gloock(
+                      context,
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: TC.text(context),
                     ),
@@ -264,7 +288,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ),
                 Text(
                   '${g.emoji} ${g.name}',
-                  style: TextStyle(fontSize: 12, color: TC.text3(context)),
+                  style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w600, color: TC.text3(context)),
                 ),
               ],
             ),
@@ -280,7 +304,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       icon: '🎤',
                       label: _isListening ? 'Listening...' : 'Voice (English only)',
                       isLoading: _isListening,
-                      color: AppColors.amber,
+                      color: TC.wn(context),
                       onTap: () => _toggleVoice(g),
                     ),
                   ],
@@ -294,25 +318,25 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.amber.withValues(alpha: 0.1),
+                  color: TC.wnPale(context),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.amber.withValues(alpha: 0.3)),
+                  border: Border.all(color: TC.wn(context).withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
                     _isListening
                         ? const Text('🔴', style: TextStyle(fontSize: 16))
-                        : const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 16),
+                        : Icon(Icons.check_circle_rounded, color: TC.ok(context), size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _isListening
                             ? (_voiceText.isEmpty ? 'Speak now...' : _voiceText)
                             : '"$_voiceText"',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 13, fontWeight: FontWeight.w600,
                           color: TC.text(context),
-                          fontStyle: _isListening ? FontStyle.italic : FontStyle.normal,
                         ),
                       ),
                     ),
@@ -337,9 +361,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             _label('Description'),
             TextField(
               controller: _descCtrl,
-              style: const TextStyle(fontSize: 15),
-              decoration: const InputDecoration(
+              style: TC.geist(context, fontSize: 15, color: TC.text(context)),
+              decoration: InputDecoration(
                 hintText: 'Dinner, Uber, Groceries...',
+                hintStyle: TC.geist(context, color: TC.text3(context)),
               ),
               onChanged: (_) => setState(() {}), // trigger suggestions rebuild
             ),
@@ -349,7 +374,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               final suggestions = SmartSuggestionsService.instance
                   .getMatchingSuggestions(state, _descCtrl.text);
               if (suggestions.isEmpty && _descCtrl.text.length < 2) {
-                // Show top frequent suggestions when field is empty
                 final top = SmartSuggestionsService.instance.getSuggestions(state);
                 if (top.isNotEmpty && !_isEdit) {
                   return Padding(
@@ -380,7 +404,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                               ),
                               child: Text(
                                 '${s.category} ${s.description}',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text2(context)),
+                                style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w600, color: TC.text2(context)),
                               ),
                             ),
                           );
@@ -409,13 +433,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: AppColors.greenDim,
+                            color: TC.primaryPale(context),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+                            border: Border.all(color: TC.primary(context).withValues(alpha: 0.3)),
                           ),
                           child: Text(
                             '${s.category} ${s.description} · ${g.sym}${s.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.green),
+                            style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w600, color: TC.primary(context)),
                           ),
                         ),
                       );
@@ -434,14 +458,60 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               runSpacing: 8,
               children: AppState.expenseCategories
                   .map(
-                    (c) => SSChip(
-                      label: '${c.icon} ${c.label}',
-                      active: c.icon == _cat,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _cat = c.icon);
-                      },
-                    ),
+                    (c) {
+                      final isActive = c.icon == _cat;
+                      final catColor = Color(
+                        int.tryParse(c.color.replaceAll('#', '0xFF')) ?? 0xFF1E7D4F,
+                      );
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _cat = c.icon);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? catColor.withValues(alpha: 0.15)
+                                : TC.card(context),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isActive ? catColor : TC.border(context),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  color: catColor.withValues(alpha: isActive ? 0.25 : 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  c.materialIcon ?? Icons.category_rounded,
+                                  size: 14,
+                                  color: catColor,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                c.label,
+                                style: TC.geist(
+                                  context,
+                                  fontSize: 13,
+                                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                                  color: isActive ? catColor : TC.text2(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   )
                   .toList(),
             ),
@@ -467,19 +537,20 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: active ? AppColors.greenDim : AppColors.card,
+                        color: active ? TC.primaryPale(context) : TC.card(context),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: active ? AppColors.green : AppColors.border,
+                          color: active ? TC.primary(context) : TC.border(context),
                           width: 1.5,
                         ),
                       ),
                       child: Text(
                         m,
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: active ? AppColors.green : AppColors.text2,
+                          color: active ? TC.primary(context) : TC.text2(context),
                         ),
                       ),
                     ),
@@ -491,7 +562,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
             // ── Split mode selector ────────────────────────────────────
             _label('Split'),
-            // 4-chip pill row: Equal | % | Shares | Custom
             Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
@@ -508,8 +578,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ],
               ),
             ),
-
-            // ── Equal: nothing extra needed ────────────────────────────
 
             // ── Percentage split fields ────────────────────────────────
             if (_split == 'percent')
@@ -530,19 +598,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     Row(
                       children: [
                         Text('PERCENTAGE PER PERSON',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(ctx), letterSpacing: 1.5)),
+                            style: TC.geist(ctx, fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(ctx), letterSpacing: 1.5)),
                         const Spacer(),
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: pctOk ? AppColors.greenDim : AppColors.redDim,
+                            color: pctOk ? TC.okPale(ctx) : TC.erPale(ctx),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             pctOk ? '✓ 100%' : '${totalPct.toStringAsFixed(1)}%',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                                color: pctOk ? AppColors.green : AppColors.red),
+                            style: TC.geist(ctx, fontSize: 10, fontWeight: FontWeight.w700,
+                                color: pctOk ? TC.ok(ctx) : TC.er(ctx)),
                           ),
                         ),
                       ],
@@ -558,13 +626,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Row(
                           children: [
-                            AvatarCircle(label: m, size: 32),
+                            AvatarCircle(label: m, size: 32, bg: TC.primaryPale(ctx), fg: TC.primary(ctx)),
                             const SizedBox(width: 10),
                             Expanded(child: Text(m,
-                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(ctx)))),
-                            // computed $ preview
+                                style: TC.geist(ctx, fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(ctx)))),
                             Text('${g.sym}${computed.toStringAsFixed(2)}',
-                                style: TextStyle(fontSize: 12, color: TC.text2(ctx))),
+                                style: TC.gloock(ctx, fontSize: 12, color: TC.text2(ctx))),
                             const SizedBox(width: 10),
                             SizedBox(
                               width: 80,
@@ -572,7 +639,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                 controller: _percentControllers[m],
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 textAlign: TextAlign.end,
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(ctx)),
+                                style: TC.geist(ctx, fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(ctx)),
                                 decoration: const InputDecoration(
                                   suffixText: '%',
                                   contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -593,7 +660,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               Builder(builder: (ctx) {
                 final g = ctx.read<AppState>().currentGroup;
                 if (g == null) return const SizedBox.shrink();
-                for (final m in g.members) _sharesMap.putIfAbsent(m, () => 1);
+                for (final m in g.members) {
+                  _sharesMap.putIfAbsent(m, () => 1);
+                }
                 final totalShares = g.members.fold<int>(0, (s, m) => s + (_sharesMap[m] ?? 1));
                 final amt = double.tryParse(_amount) ?? 0;
                 return Column(
@@ -603,16 +672,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     Row(
                       children: [
                         Text('SHARES PER PERSON',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(ctx), letterSpacing: 1.5)),
+                            style: TC.geist(ctx, fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(ctx), letterSpacing: 1.5)),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: AppColors.greenDim,
+                            color: TC.primaryPale(ctx),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text('$totalShares total shares',
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.green)),
+                              style: TC.geist(ctx, fontSize: 10, fontWeight: FontWeight.w700, color: TC.primary(ctx))),
                         ),
                       ],
                     ),
@@ -624,15 +693,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Row(
                           children: [
-                            AvatarCircle(label: m, size: 32),
+                            AvatarCircle(label: m, size: 32, bg: TC.primaryPale(ctx), fg: TC.primary(ctx)),
                             const SizedBox(width: 10),
                             Expanded(child: Text(m,
-                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(ctx)))),
-                            // computed $
+                                style: TC.geist(ctx, fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(ctx)))),
                             Text('${g.sym}${myAmt.toStringAsFixed(2)}',
-                                style: TextStyle(fontSize: 12, color: TC.text2(ctx))),
+                                style: TC.gloock(ctx, fontSize: 12, color: TC.text2(ctx))),
                             const SizedBox(width: 12),
-                            // minus button
                             GestureDetector(
                               onTap: () {
                                 if (myShares > 1) {
@@ -653,9 +720,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text('${myShares}x',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: TC.text(ctx))),
+                                style: TC.geist(ctx, fontSize: 15, fontWeight: FontWeight.w800, color: TC.text(ctx))),
                             const SizedBox(width: 8),
-                            // plus button
                             GestureDetector(
                               onTap: () {
                                 HapticFeedback.selectionClick();
@@ -664,12 +730,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                               child: Container(
                                 width: 32, height: 32,
                                 decoration: BoxDecoration(
-                                  color: AppColors.greenDim,
+                                  color: TC.primaryPale(ctx),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppColors.green.withValues(alpha: 0.4)),
+                                  border: Border.all(color: TC.primary(ctx).withValues(alpha: 0.4)),
                                 ),
                                 alignment: Alignment.center,
-                                child: const Text('+', style: TextStyle(fontSize: 18, color: AppColors.green)),
+                                child: Text('+', style: TextStyle(fontSize: 18, color: TC.primary(ctx))),
                               ),
                             ),
                           ],
@@ -700,19 +766,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       Row(
                         children: [
                           Text('AMOUNTS PER PERSON',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5)),
+                              style: TC.geist(context, fontSize: 11, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1.5)),
                           const Spacer(),
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: isValid ? AppColors.greenDim : AppColors.redDim,
+                              color: isValid ? TC.okPale(context) : TC.erPale(context),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               isValid ? '✓ Balanced' : 'Δ ${g.sym}${diff.toStringAsFixed(2)}',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                                  color: isValid ? AppColors.green : AppColors.red),
+                              style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w700,
+                                  color: isValid ? TC.ok(context) : TC.er(context)),
                             ),
                           ),
                         ],
@@ -724,17 +790,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Row(
                             children: [
-                              AvatarCircle(label: m, size: 32),
+                              AvatarCircle(label: m, size: 32, bg: TC.primaryPale(context), fg: TC.primary(context)),
                               const SizedBox(width: 10),
                               Expanded(child: Text(m,
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(context)))),
+                                  style: TC.geist(context, fontWeight: FontWeight.w600, fontSize: 14, color: TC.text(context)))),
                               SizedBox(
                                 width: 100,
                                 child: TextField(
                                   controller: _customControllers[m],
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                   textAlign: TextAlign.end,
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context)),
+                                  style: TC.geist(context, fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context)),
                                   decoration: InputDecoration(
                                     prefixText: '${g.sym} ',
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -774,14 +840,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Tap to attach receipt photo',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 13,
                           color: TC.text2(context),
                         ),
                       ),
                       Text(
                         'Camera or gallery',
-                        style: TextStyle(
+                        style: TC.geist(
+                          context,
                           fontSize: 11,
                           color: TC.text3(context),
                         ),
@@ -801,10 +869,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   decoration: BoxDecoration(
                     color: _receiptPath != null
                         ? Colors.transparent
-                        : AppColors.greenDim,
+                        : TC.okPale(context),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppColors.green.withValues(alpha: 0.3),
+                      color: TC.ok(context).withValues(alpha: 0.3),
                     ),
                   ),
                   child: _receiptPath != null
@@ -813,10 +881,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(13),
-                              child: Image.file(
-                                  File(_receiptPath!),
-                                  fit: BoxFit.cover,
-                                ),
+                              child: _receiptPreviewImage(_receiptPath!),
                             ),
                             Positioned(
                               top: 8,
@@ -832,13 +897,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: AppColors.card.withValues(alpha: 0.9),
+                                    color: TC.card(context).withValues(alpha: 0.9),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.close,
                                     size: 16,
-                                    color: AppColors.red,
+                                    color: TC.er(context),
                                   ),
                                 ),
                               ),
@@ -852,15 +917,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.green,
+                                  color: TC.ok(context),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '📎 Receipt attached',
-                                  style: TextStyle(
+                                  style: TC.geist(
+                                    context,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.black,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
@@ -871,13 +937,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           children: [
                             const Text('📎', style: TextStyle(fontSize: 18)),
                             const SizedBox(width: 8),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'Receipt attached',
-                                style: TextStyle(
+                                style: TC.geist(
+                                  context,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.green,
+                                  color: TC.ok(context),
                                 ),
                               ),
                             ),
@@ -889,11 +956,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                   _receiptPath = null;
                                 });
                               },
-                              child: const Text(
+                              child: Text(
                                 'Remove',
-                                style: TextStyle(
+                                style: TC.geist(
+                                  context,
                                   fontSize: 13,
-                                  color: AppColors.red,
+                                  color: TC.er(context),
                                 ),
                               ),
                             ),
@@ -910,7 +978,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: AppColors.green,
+                  color: TC.primary(context),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
@@ -919,14 +987,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
-                          color: Colors.black,
+                          color: Colors.white,
                           strokeWidth: 2,
                         ),
                       )
                     : Text(
                         _isEdit ? 'Save Changes →' : 'Save Expense →',
-                        style: const TextStyle(
-                          color: Colors.black,
+                        style: TC.geist(
+                          context,
+                          color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -943,17 +1012,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.redDim,
+                    color: TC.erPale(context),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppColors.red.withValues(alpha: 0.3),
+                      color: TC.er(context).withValues(alpha: 0.3),
                     ),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
+                  child: Text(
                     '🗑  Delete Expense',
-                    style: TextStyle(
-                      color: AppColors.red,
+                    style: TC.geist(
+                      context,
+                      color: TC.er(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
@@ -964,6 +1034,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -971,7 +1042,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
           text.toUpperCase(),
-          style: TextStyle(
+          style: TC.geist(
+            context,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: TC.text3(context),
@@ -990,7 +1062,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           if (g == null) return;
           if (mode == 'custom') _initCustomSplits(g.members);
           if (mode == 'percent') _initPercentSplits(g.members);
-          if (mode == 'shares') _initPercentSplits(g.members); // also seeds _sharesMap
+          if (mode == 'shares') _initPercentSplits(g.members);
           setState(() => _split = mode);
         },
         child: AnimatedContainer(
@@ -998,16 +1070,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           margin: const EdgeInsets.all(1),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: active ? AppColors.green : Colors.transparent,
+            color: active ? TC.primary(ctx) : Colors.transparent,
             borderRadius: BorderRadius.circular(11),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
-            style: TextStyle(
+            style: TC.geist(
+              ctx,
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: active ? Colors.black : TC.text2(ctx),
+              color: active ? Colors.white : TC.text2(ctx),
             ),
           ),
         ),
@@ -1016,7 +1089,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   void _save() async {
-
     if (_isSaving) return;
     final amt = double.tryParse(_amount) ?? 0;
     final desc = _descCtrl.text.trim();
@@ -1027,7 +1099,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    // SEC-H2: Prevent extreme values that could break balance calculations
     if (amt > 999999999) {
       AmountDisplay.shake(_amtKey);
       _showToast('Amount is too large!');
@@ -1039,7 +1110,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    // SEC-M2: Enforce description length limit
     if (desc.length > 200) {
       _showToast('Description is too long (max 200 characters)');
       return;
@@ -1127,7 +1197,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        _showToast('Failed to save expense: $e');
+        final errStr = e.toString();
+        final String msg;
+        if (errStr.contains('permission-denied')) {
+          msg = 'Only the person who added this expense can edit it.';
+        } else if (errStr.contains('not-found')) {
+          msg = 'Expense not found. It may have been deleted.';
+        } else {
+          msg = 'Could not save expense. Please try again.';
+        }
+        _showToast(msg, icon: Icons.lock_outline_rounded, iconColor: Colors.orange);
         setState(() => _isSaving = false);
       }
     }
@@ -1135,46 +1214,49 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   void _delete() {
     HapticFeedback.heavyImpact();
-    // SEC-L5: Capture state before dialog to avoid stale context
     final state = context.read<AppState>();
     final g = state.currentGroup;
     final existing = widget.existing;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text(
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: TC.card(dialogCtx),
+        title: Text(
           'Delete expense?',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TC.geist(dialogCtx, fontWeight: FontWeight.w700),
         ),
-        content: const Text(
+        content: Text(
           'This action cannot be undone.',
-          style: TextStyle(color: AppColors.text2),
+          style: TC.geist(dialogCtx, color: TC.text2(dialogCtx)),
         ),
         actions: [
           TextButton(
             onPressed: () {
               HapticFeedback.lightImpact();
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
             },
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: AppColors.text2),
+              style: TC.geist(dialogCtx, color: TC.text2(dialogCtx)),
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               HapticFeedback.heavyImpact();
+              Navigator.pop(dialogCtx);
               if (g != null && existing != null) {
-                state.deleteExpense(g, existing);
+                final ok = await state.deleteExpense(g, existing);
                 AnalyticsService.logExpenseDeleted();
+                if (ok && mounted) {
+                  Navigator.pop(context);
+                } else if (!ok && mounted) {
+                  _showToast('Failed to delete expense. Please try again.');
+                }
               }
-              Navigator.pop(context);
-              Navigator.pop(context);
             },
-            child: const Text(
+            child: Text(
               'Delete',
-              style: TextStyle(color: AppColors.red),
+              style: TC.geist(dialogCtx, color: TC.er(dialogCtx), fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -1190,18 +1272,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         content: Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, color: iconColor ?? AppColors.green, size: 20),
+              Icon(icon, color: iconColor ?? TC.ok(context), size: 20),
               const SizedBox(width: 8),
             ],
-            Expanded(child: Text(msg)),
+            Expanded(child: Text(msg, style: TC.geist(context))),
           ],
         ),
         duration: const Duration(seconds: 2),
       ),
     );
   }
-
-
 
   // ─── Voice Input ────────────────────────────────────────────────────
   Future<void> _toggleVoice(GroupData g) async {
@@ -1210,7 +1290,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     if (_isListening) {
       await voice.stopListening();
       setState(() => _isListening = false);
-      // Parse final text
       if (_voiceText.isNotEmpty) {
         _applyVoiceResult(g);
       }
@@ -1261,7 +1340,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     });
 
     if (result.hasData) {
-      _showToast('Got it!${result.amount != null ? " ${g.sym}${result.amount!.toStringAsFixed(2)}" : ""}${result.description != null ? " — ${result.description}" : ""}', icon: Icons.check_circle_rounded, iconColor: AppColors.green);
+      _showToast(
+        'Got it!${result.amount != null ? " ${g.sym}${result.amount!.toStringAsFixed(2)}" : ""}${result.description != null ? " — ${result.description}" : ""}',
+        icon: Icons.check_circle_rounded,
+        iconColor: TC.ok(context),
+      );
     }
   }
 }
@@ -1315,7 +1398,8 @@ class _SmartActionButton extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: TextStyle(
+                style: TC.geist(
+                  context,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: isLoading ? color : TC.text(context),

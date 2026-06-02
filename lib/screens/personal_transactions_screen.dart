@@ -251,7 +251,7 @@ class _MoneyTransactionsScreenState extends State<MoneyTransactionsScreen> {
                                Row(
                                  mainAxisSize: MainAxisSize.min,
                                  children: [
-                                   Icon(Icons.monetization_on_outlined,
+                                   const Icon(Icons.monetization_on_outlined,
                                        color: AppColors.green, size: 14),
                                    const SizedBox(width: 4),
                                    Text(_activeCurrencyFilter == 'ALL' ? 'All Currencies' : _activeCurrencyFilter ?? 'All Currencies',
@@ -647,7 +647,7 @@ class _MoneyTransactionsScreenState extends State<MoneyTransactionsScreen> {
 
   void _showCurrencyFilterSheet(BuildContext context) {
     HapticFeedback.lightImpact();
-    final currencies = AppState.currencies;
+    const currencies = AppState.currencies;
     showModalBottomSheet(
       context: context,
       backgroundColor: TC.surface(context),
@@ -745,19 +745,25 @@ class _TxnCard extends StatelessWidget {
           child: Row(
             children: [
               // Category icon with colored background
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: (isInc
-                          ? const Color(0xFF4CAF50)
-                          : const Color(0xFFE57373))
-                      .withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(t.cat, style: const TextStyle(fontSize: 20)),
-              ),
+              Builder(builder: (context) {
+                final catColor = Color(
+                  int.tryParse(catData.color.replaceAll('#', '0xFF')) ?? 0xFF1E7D4F,
+                );
+                return Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: catColor.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    catData.materialIcon ?? Icons.category_rounded,
+                    size: 22,
+                    color: catColor,
+                  ),
+                );
+              }),
               const SizedBox(width: 12),
               // Info
               Expanded(
@@ -887,16 +893,25 @@ class _TxnCard extends StatelessWidget {
               // Transaction Header - Icon, Title, Amount
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: (t.type == 'income' ? const Color(0xFF4CAF50) : const Color(0xFFE57373)).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(t.cat, style: const TextStyle(fontSize: 24)),
-                  ),
+                  Builder(builder: (context) {
+                    final catColor = Color(
+                      int.tryParse(catData.color.replaceAll('#', '0xFF')) ?? 0xFF1E7D4F,
+                    );
+                    return Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: catColor.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        catData.materialIcon ?? Icons.category_rounded,
+                        size: 26,
+                        color: catColor,
+                      ),
+                    );
+                  }),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -918,7 +933,35 @@ class _TxnCard extends StatelessWidget {
                 children: [
                   Icon(Icons.calendar_today_outlined, color: TC.text3(context), size: 18),
                   const SizedBox(width: 12),
-                  Text(t.date, style: TextStyle(color: TC.text(context), fontSize: 14)),
+                  Text('Date', style: TextStyle(color: TC.text2(context), fontSize: 13)),
+                  const Spacer(),
+                  Text(t.date, style: TextStyle(color: TC.text(context), fontSize: 13, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Currency
+              Row(
+                children: [
+                  Icon(Icons.attach_money_rounded, color: TC.text3(context), size: 18),
+                  const SizedBox(width: 12),
+                  Text('Currency', style: TextStyle(color: TC.text2(context), fontSize: 13)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: const Color(0xFF2DCE98).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                    child: Text('${t.currency}  (${t.sym})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF2DCE98))),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Source
+              Row(
+                children: [
+                  Icon(t.isGroupShare == true ? Icons.group_outlined : Icons.person_outline_rounded, color: TC.text3(context), size: 18),
+                  const SizedBox(width: 12),
+                  Text('Source', style: TextStyle(color: TC.text2(context), fontSize: 13)),
+                  const Spacer(),
+                  Text(t.isGroupShare == true ? 'Group Expense' : 'Personal', style: TextStyle(color: TC.text(context), fontSize: 13, fontWeight: FontWeight.w700)),
                 ],
               ),
               
@@ -973,7 +1016,7 @@ class _PeriodPickerDialog extends StatefulWidget {
 class _PeriodPickerDialogState extends State<_PeriodPickerDialog> {
   DateTime? _start;
   DateTime? _end;
-  DateTime _viewMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  final DateTime _viewMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   bool _allTime = false;
 
   @override
@@ -1039,7 +1082,18 @@ class _PeriodPickerDialogState extends State<_PeriodPickerDialog> {
                 ),
                 const SizedBox(width: 8),
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    // BUG FIX: Actually apply the selected range to state
+                    if (_allTime) {
+                      context.read<AppState>().setOverviewDateRange(
+                        DateTime(2000),
+                        DateTime(2099, 12, 31),
+                      );
+                    } else if (_start != null && _end != null) {
+                      context.read<AppState>().setOverviewDateRange(_start!, _end!);
+                    }
+                    Navigator.pop(context);
+                  },
                   child: const Text('OK',
                       style: TextStyle(color: Color(0xFF4CAF50))),
                 ),
