@@ -24,7 +24,7 @@ class _GroupSettlementsTabState extends State<GroupSettlementsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('✨', style: TextStyle(fontSize: 48)),
+              const Icon(Icons.auto_awesome_rounded, size: 48, color: Color(0xFF0D7377)),
               const SizedBox(height: 16),
               Text('All settled up!',
                   style: TC.gloock(context, fontSize: 20, color: TC.text(context))),

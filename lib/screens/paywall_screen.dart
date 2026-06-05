@@ -103,7 +103,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
-                    child: Text('✨', style: TextStyle(fontSize: 34)),
+                    child: Icon(Icons.auto_awesome_rounded, size: 34, color: Colors.white),
                   ),
                 ),
               ),

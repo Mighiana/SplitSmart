@@ -52,3 +52,14 @@ ios/Flutter/flutter_export_environment.sh
 *.jks
 *.keystore
 key.properties
+
+# Node (Cloud Functions + Firestore rules tests)
+node_modules/
+
+# Firebase CLI / emulator artifacts
+*-debug.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+.runtimeconfig.json

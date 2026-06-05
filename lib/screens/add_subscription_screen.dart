@@ -6,6 +6,7 @@ import '../providers/app_state.dart';
 import '../services/notification_service.dart';
 
 import '../utils/app_utils.dart';
+import '../utils/icon_map.dart';
 import '../services/analytics_service.dart';
 
 /// Preset color palette for subscriptions.
@@ -274,8 +275,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                             border: Border.all(color: TC.border(context)),
                           ),
                           alignment: Alignment.center,
-                          child: Text('←', style: TextStyle(
-                              fontSize: 18, color: TC.text(context))),
+                          child: Icon(Icons.arrow_back_rounded,
+                              size: 18, color: TC.text(context)),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -317,7 +318,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(_emoji, style: const TextStyle(fontSize: 28)),
+                                    Icon(iconForEmoji(_emoji), size: 26, color: _accent),
                                     Text('tap',
                                         style: TextStyle(fontSize: 9,
                                             color: TC.text3(context))),
@@ -663,8 +664,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text('🔔',
-                                style: TextStyle(fontSize: 12)),
+                            Icon(iconForEmoji('🔔'), size: 13, color: _accent),
                             const SizedBox(width: 4),
                             Text(
                               'You\'ll get reminders 3 days before & on billing day',
@@ -741,8 +741,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
                       ),
                     ),
                     alignment: Alignment.center,
-                    child: Text(em,
-                        style: const TextStyle(fontSize: 22)),
+                    child: Icon(iconForEmoji(em), size: 22,
+                        color: em == _emoji ? _accent : TC.text2(context)),
                   ),
                 );
               },

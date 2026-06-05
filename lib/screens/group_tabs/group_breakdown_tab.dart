@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/common_widgets.dart';
 import '../../utils/app_utils.dart';
+import '../../utils/icon_map.dart';
 import '../../main.dart';
 import '../settle_up_screen.dart';
 
@@ -469,7 +470,7 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
             const SizedBox(height: 16),
             Row(
               children: [
-                Text(g.emoji, style: const TextStyle(fontSize: 28)),
+                Icon(iconForEmoji(g.emoji), size: 26, color: AppColors.green),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

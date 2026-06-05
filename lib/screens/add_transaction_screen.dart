@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
@@ -27,6 +28,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   String _amount = '0';
   String _type = 'expense';
   String _cat = '🍽️';
+  String? _subcat;
   String? _receiptPath;
   bool _isEdit = false;
   bool _isSaving = false;
@@ -43,6 +45,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           e.amount.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
       _descCtrl.text = e.desc;
       _cat = e.cat;
+      _subcat = e.subcat;
       _receiptPath = e.receiptPath;
       _currency = AppState.currencies.firstWhere(
         (c) => c.code == e.currency,
@@ -61,7 +64,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           orElse: () => AppState.currencies.first,
         );
       }
+      _loadLastCategory();
     }
+  }
+
+  /// Pre-select the category the user most recently used for this type, so
+  /// the common case is one tap fewer.
+  Future<void> _loadLastCategory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('last_cat_$_type');
+    if (saved == null || saved.isEmpty || !mounted) return;
+    final list = _type == 'income'
+        ? AppState.incomeCategories
+        : AppState.expenseCategories;
+    if (list.any((c) => c.icon == saved)) setState(() => _cat = saved);
   }
 
   @override
@@ -248,6 +264,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       setState(() {
                         _type = 'expense';
                         _cat = AppState.expenseCategories.first.icon;
+                        _subcat = null;
                       });
                     },
                   ),
@@ -262,6 +279,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       setState(() {
                         _type = 'income';
                         _cat = AppState.incomeCategories.first.icon;
+                        _subcat = null;
                       });
                     },
                   ),
@@ -311,7 +329,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       return GestureDetector(
                         onTap: () {
                           HapticFeedback.selectionClick();
-                          setState(() => _cat = c.icon);
+                          setState(() { _cat = c.icon; _subcat = null; });
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
@@ -360,6 +378,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   )
                   .toList(),
             ),
+            _subcategorySection(),
             const SizedBox(height: 20),
 
             // Currency
@@ -548,6 +567,75 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  /// Optional sub-category chips for the currently selected expense category.
+  /// Hidden for income or categories without sub-categories.
+  Widget _subcategorySection() {
+    if (_type == 'income') return const SizedBox.shrink();
+    final subs = AppState.subsFor(_cat);
+    if (subs.isEmpty) return const SizedBox.shrink();
+    final parentColor = Color(int.tryParse(
+            _cats
+                .firstWhere((c) => c.icon == _cat,
+                    orElse: () => AppState.expenseCategories.last)
+                .color
+                .replaceAll('#', '0xFF')) ??
+        0xFF1E7D4F);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Row(children: [
+          _label('Subcategory'),
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('· optional',
+                style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
+          ),
+        ]),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: subs.map((s) {
+            final active = _subcat == s.icon;
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _subcat = active ? null : s.icon);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                decoration: BoxDecoration(
+                  color: active
+                      ? parentColor.withValues(alpha: 0.15)
+                      : TC.card(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: active ? parentColor : TC.border(context),
+                      width: 1.5),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(s.materialIcon ?? Icons.category_rounded,
+                      size: 13,
+                      color: active ? parentColor : TC.text3(context)),
+                  const SizedBox(width: 6),
+                  Text(s.label,
+                      style: TC.geist(context,
+                          fontSize: 12.5,
+                          fontWeight:
+                              active ? FontWeight.w700 : FontWeight.w500,
+                          color: active ? parentColor : TC.text2(context))),
+                ]),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
@@ -586,6 +674,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       desc: desc,
       amount: amt,
       cat: _cat,
+      subcat: _subcat,
       currency: _currency.code,
       sym: _currency.sym,
       date: widget.existing?.date ?? AppDateUtils.todayStr(),
@@ -600,6 +689,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         await state.addTransaction(updated);
         await AnalyticsService.logTransactionAdded(_type);
       }
+      // Remember this category as the default for next time (per type).
+      SharedPreferences.getInstance()
+          .then((p) => p.setString('last_cat_$_type', _cat));
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {

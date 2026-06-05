@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui' show ImageFilter;
 import '../utils/app_utils.dart';
 import '../utils/theme_utils.dart';
+import '../utils/icon_map.dart';
 import '../services/analytics_service.dart';
 import 'overview_tab.dart';
 import 'groups_screen.dart';
@@ -88,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       alignment: Alignment.center,
-                      child: const Text('💚', style: TextStyle(fontSize: 34)),
+                      child: const Icon(Icons.account_balance_wallet_rounded, size: 34, color: Colors.white),
                     ),
                     const SizedBox(height: 18),
                     const Text(
@@ -444,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(item.emoji, style: const TextStyle(fontSize: 16)),
+            Icon(iconForEmoji(item.emoji), size: 18, color: TC.primary(context)),
             const SizedBox(width: 10),
             Text(
               item.label,

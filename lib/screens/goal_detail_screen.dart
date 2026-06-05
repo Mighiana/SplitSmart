@@ -249,7 +249,7 @@ class GoalDetailScreen extends StatelessWidget {
                   Container(
                     width: 38, height: 38,
                     decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(10)),
-                    child: const Center(child: Text('🎯', style: TextStyle(fontSize: 18))),
+                    child: const Center(child: Icon(Icons.track_changes_rounded, size: 18, color: AppColors.green)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Column(

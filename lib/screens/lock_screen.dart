@@ -103,8 +103,8 @@ class _LockScreenState extends State<LockScreen>
                   ],
                 ),
                 alignment: Alignment.center,
-                child: const Text('💚',
-                    style: TextStyle(fontSize: 44)),
+                child: const Icon(Icons.account_balance_wallet_rounded,
+                    size: 44, color: Colors.white),
               ),
               const SizedBox(height: 24),
               RichText(

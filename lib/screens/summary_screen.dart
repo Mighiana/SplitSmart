@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
+import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../widgets/common_widgets.dart';
 
@@ -119,8 +120,8 @@ class _SummaryScreenState extends State<SummaryScreen>
                             border: Border.all(color: TC.border(context)),
                           ),
                           alignment: Alignment.center,
-                          child: Text('←',
-                              style: TextStyle(fontSize: 18, color: TC.text(context))),
+                          child: Icon(Icons.arrow_back_rounded,
+                              size: 18, color: TC.text(context)),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -319,7 +320,7 @@ class _SummaryScreenState extends State<SummaryScreen>
                                   child: Column(
                                     children: [
                                       Row(children: [
-                                        Text(cat.key, style: const TextStyle(fontSize: 22)),
+                                        Icon(iconForEmoji(cat.key), size: 20, color: colorForEmoji(cat.key, fallback: TC.primary(context))),
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Text(label,

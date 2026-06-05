@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:confetti/confetti.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
+import '../services/auth_service.dart';
+import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../services/export_service.dart';
@@ -179,7 +181,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                                       boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 24, offset: const Offset(0, 4))],
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text(g.emoji, style: const TextStyle(fontSize: 52)),
+                                    child: Icon(iconForEmoji(g.emoji), size: 46, color: AppColors.green),
                                   ),
                               )
                                   .animate(delay: 120.ms)
@@ -445,7 +447,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: Text(g.emoji, style: const TextStyle(fontSize: 34)),
+                    child: Icon(iconForEmoji(g.emoji), size: 30, color: AppColors.green),
                   ),
                 ),
               )
@@ -541,8 +543,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
 
   Widget _buildOweCard(double bal, AppLocalizations l, GroupData g) {
     final total = g.expenses.fold<double>(0, (sum, e) => sum + e.amount);
+    // "Paid by you" = expenses whose payer matches the current user's identity
+    // in this group (the 'You' convention or their actual display name).
+    final myName = context.read<AppState>().userName.trim().toLowerCase();
     final paidByYou = g.expenses
-        .where((e) => e.paidBy.toLowerCase() == 'you' || e.paidBy.toLowerCase().contains('usman'))
+        .where((e) {
+          final payer = e.paidBy.trim().toLowerCase();
+          return payer == 'you' || (myName.isNotEmpty && payer == myName);
+        })
         .fold<double>(0, (sum, e) => sum + e.amount);
     final balanceLabel = bal < 0 ? l.youOweLabel.toUpperCase() : 'YOU OWE';
     final balanceColor = bal < 0 ? const Color(0xFFE85A6A) : const Color(0xFF009B73);
@@ -898,8 +906,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     final l = AppLocalizations.of(context);
     final nameCtrl = TextEditingController(text: g.name);
     String selectedEmoji = g.emoji;
-    final List<String> members = List.from(g.members);
-    final memberCtrl = TextEditingController();
+    // Only the creator may edit the group; everyone else gets a read-only view
+    // plus the ability to leave. Legacy groups (no createdBy) fall back to the
+    // first-member convention so their owner can still manage them.
+    final bool isCreator =
+        g.isCreatedBy(AuthService.instance.uid, displayName: state.userName);
     final emojis = ['🏠','🍽️','✈️','🎉','💼','🛒','🎮','⚽','🏖️','🎓','💪','🎬','🎵','🏕️','🚗','❤️','🐾','🎁','🧳','💰'];
 
     showModalBottomSheet(
@@ -922,213 +933,231 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                   Text(l.groupSettings, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: TC.text(context))),
                   const SizedBox(height: 20),
   
-                  // Group Name
-                  TextField(
-                    controller: nameCtrl,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: TC.text(context)),
-                    decoration: InputDecoration(
-                      labelText: l.groupName,
-                      labelStyle: TextStyle(color: TC.text3(context)),
-                      filled: true,
-                      fillColor: TC.card2(context),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(selectedEmoji, style: const TextStyle(fontSize: 20)),
+                  // Group Name — editable for the creator, read-only otherwise.
+                  if (isCreator)
+                    TextField(
+                      controller: nameCtrl,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: TC.text(context)),
+                      decoration: InputDecoration(
+                        labelText: l.groupName,
+                        labelStyle: TextStyle(color: TC.text3(context)),
+                        filled: true,
+                        fillColor: TC.card2(context),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                        prefixIcon: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Icon(iconForEmoji(selectedEmoji), size: 20, color: AppColors.green),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: TC.card2(context), borderRadius: BorderRadius.circular(14)),
+                      child: Row(children: [
+                        Icon(iconForEmoji(selectedEmoji), size: 20, color: AppColors.green),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(g.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TC.text(context)))),
+                      ]),
+                    ),
+                  const SizedBox(height: 16),
+
+                  // Emoji Picker — creator only.
+                  if (isCreator) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(l.groupIcon, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1)),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 48,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: emojis.map((e) {
+                          final isActive = e == selectedEmoji;
+                          return GestureDetector(
+                            onTap: () => setSheetState(() => selectedEmoji = e),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 44, height: 44,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: isActive ? AppColors.greenDim : TC.card(context),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: isActive ? AppColors.green : TC.border(context), width: isActive ? 2 : 1),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(iconForEmoji(e), size: 22, color: isActive ? AppColors.green : TC.text2(context)),
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 20),
+                  ],
   
-                  // Emoji Picker
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(l.groupIcon, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1)),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 48,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: emojis.map((e) {
-                        final isActive = e == selectedEmoji;
-                        return GestureDetector(
-                          onTap: () => setSheetState(() => selectedEmoji = e),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 44, height: 44,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: isActive ? AppColors.greenDim : TC.card(context),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: isActive ? AppColors.green : TC.border(context), width: isActive ? 2 : 1),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(e, style: const TextStyle(fontSize: 22)),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-  
-                  // Members
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('MEMBERS (${members.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1)),
-                  ),
-                  const SizedBox(height: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 160),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: members.length,
-                      itemBuilder: (_, i) {
-                        final m = members[i];
-                        final isYou = m == 'You';
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: TC.card(context),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: TC.border(context)),
-                          ),
-                          child: Row(
-                            children: [
-                              AvatarCircle(label: m, size: 28),
-                              const SizedBox(width: 10),
-                              Expanded(child: Text(m, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: TC.text(context)))),
-                              if (isYou)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(color: AppColors.greenDim, borderRadius: BorderRadius.circular(8)),
-                                  child: const Text('You', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.green)),
-                                )
-                              else
-                                GestureDetector(
-                                  onTap: () {
-                                    HapticFeedback.lightImpact();
-                                    setSheetState(() => members.removeAt(i));
-                                  },
-                                  child: Container(
-                                    width: 28, height: 28,
-                                    decoration: const BoxDecoration(color: AppColors.redDim, shape: BoxShape.circle),
-                                    child: const Icon(Icons.close, size: 14, color: AppColors.red),
-                                  ),
+                  // Members — real account-holders. Only the creator can remove.
+                  Builder(builder: (mctx) {
+                    final roster = g.roster;
+                    final names = roster.isNotEmpty
+                        ? roster.map((m) => m.name).toList()
+                        : g.members;
+                    final myUid = AuthService.instance.uid;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('MEMBERS (${names.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TC.text3(context), letterSpacing: 1)),
+                        ),
+                        const SizedBox(height: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: names.length,
+                            itemBuilder: (_, i) {
+                              final name = names[i];
+                              final GroupMember? rm = roster.isNotEmpty ? roster[i] : null;
+                              final isMe = rm != null
+                                  ? (rm.uid != null && rm.uid == myUid)
+                                  : (name == 'You');
+                              final canKick = isCreator && !isMe && rm != null;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: TC.card(context),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: TC.border(context)),
                                 ),
+                                child: Row(
+                                  children: [
+                                    AvatarCircle(label: name, size: 28),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Text(name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: TC.text(context)))),
+                                    if (isMe)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(color: AppColors.greenDim, borderRadius: BorderRadius.circular(8)),
+                                        child: const Text('You', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.green)),
+                                      )
+                                    else if (canKick)
+                                      GestureDetector(
+                                        onTap: () async {
+                                          HapticFeedback.lightImpact();
+                                          await state.removeMember(g, rm);
+                                          setSheetState(() {});
+                                        },
+                                        child: Container(
+                                          width: 28, height: 28,
+                                          decoration: const BoxDecoration(color: AppColors.redDim, shape: BoxShape.circle),
+                                          child: const Icon(Icons.close, size: 14, color: AppColors.red),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 24),
+
+                  // Creator → Save name/emoji. Non-creator → Leave the group.
+                  if (isCreator)
+                    GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.mediumImpact();
+                        final newName = nameCtrl.text.trim();
+                        if (newName.isEmpty) return;
+                        await state.editGroup(g, name: newName, emoji: selectedEmoji);
+                        if (!context.mounted) return;
+                        try {
+                          Navigator.pop(context);
+                        } catch (e) {
+                          debugPrint('[GroupDetail] pop failed: $e');
+                        }
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) setState(() {});
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(16)),
+                        alignment: Alignment.center,
+                        child: Text(l.saveChanges, style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w800)),
+                      ),
+                    )
+                  else
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.heavyImpact();
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            backgroundColor: TC.card(context),
+                            title: Text('Leave group?', style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(context))),
+                            content: Text('You\'ll be removed from "${g.name}" and stop seeing its expenses. The group stays for everyone else.', style: TextStyle(color: TC.text2(context))),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(context), child: Text(l.cancel, style: TextStyle(color: TC.text3(context)))),
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(context); // dialog
+                                  Navigator.pop(context); // sheet
+                                  await state.leaveGroup(g);
+                                  if (context.mounted) Navigator.pop(context); // leave group screen
+                                },
+                                child: const Text('Leave', style: TextStyle(color: AppColors.red, fontWeight: FontWeight.w700)),
+                              ),
                             ],
                           ),
                         );
                       },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(color: AppColors.redDim, borderRadius: BorderRadius.circular(16)),
+                        alignment: Alignment.center,
+                        child: const Text('Leave Group', style: TextStyle(color: AppColors.red, fontSize: 15, fontWeight: FontWeight.w800)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: memberCtrl,
-                          style: TextStyle(fontSize: 14, color: TC.text(context)),
-                          decoration: InputDecoration(
-                            hintText: l.addMemberName,
-                            hintStyle: TextStyle(color: TC.text3(context)),
-                            filled: true,
-                            fillColor: TC.card2(context),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+
+                  // Creator: delete the group (only once all balances are settled).
+                  if (isCreator)
+                    Builder(builder: (context) {
+                      final balances = state.getBalancesById(g);
+                      final isSettled = balances.values.every((b) => b.abs() < 0.01);
+                      if (!isSettled) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: TC.bg2(context),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: TC.border(context)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.lock_outline_rounded, size: 16, color: TC.text3(context)),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text('Settle all balances before deleting this group',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: TC.text3(context), fontSize: 12, fontWeight: FontWeight.w600)),
+                                ),
+                              ],
+                            ),
                           ),
-                          onSubmitted: (v) {
-                            final name = v.trim();
-                            if (name.isNotEmpty && !members.contains(name)) {
-                              setSheetState(() { members.add(name); memberCtrl.clear(); });
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {
-                          final name = memberCtrl.text.trim();
-                          if (name.isNotEmpty && !members.contains(name)) {
-                            HapticFeedback.lightImpact();
-                            setSheetState(() { members.add(name); memberCtrl.clear(); });
-                          }
-                        },
-                        child: Container(
-                          width: 44, height: 44,
-                          decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.add, color: Colors.black, size: 22),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-  
-                  // Save Button
-                  GestureDetector(
-                    onTap: () async {
-                      HapticFeedback.mediumImpact();
-                      final newName = nameCtrl.text.trim();
-                      if (newName.isEmpty) return;
-                      await state.editGroup(g, name: newName, emoji: selectedEmoji, members: members);
-                      if (!context.mounted) return;
-                      // Use the outer context to pop the bottom sheet, and
-                      // defer setState to avoid !_debugLocked assertion.
-                      try {
-                        Navigator.pop(context);
-                      } catch (e) {
-                        debugPrint('[GroupDetail] pop failed: $e');
+                        );
                       }
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() {}); // refresh parent
-                      });
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(16)),
-                      alignment: Alignment.center,
-                      child: Text(l.saveChanges, style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                  Builder(builder: (context) {
-                    final balances = state.getAllBalances(g);
-                    final isSettled = balances.values.every((b) => b.abs() < 0.01);
-                    final isCreator = members.isNotEmpty && (members.first == 'You' || members.first == state.userName);
-
-                    // Show a disabled control with the reason when delete isn't allowed.
-                    if (!isCreator || !isSettled) {
-                      final reason = !isCreator
-                          ? 'Only the group creator can delete this group'
-                          : 'Settle all balances before deleting this group';
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: TC.bg2(context),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: TC.border(context)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.lock_outline_rounded, size: 16, color: TC.text3(context)),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(reason,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: TC.text3(context), fontSize: 12, fontWeight: FontWeight.w600)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    {
                       return Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: GestureDetector(
@@ -1173,8 +1202,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                           ),
                         ),
                       );
-                    }
-                  }),
+                    }),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -1245,7 +1273,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     HapticFeedback.mediumImpact();
     final plan = state.buildSettlePlan(g);
     final total = g.expenses.fold(0.0, (s, e) => s + e.amount);
-    final allBal = state.getAllBalances(g);
+    final allBal = state.getBalancesById(g);
 
     final sb = StringBuffer();
     sb.writeln('📊 ${g.name} — Summary');
@@ -1255,14 +1283,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     );
     sb.writeln('');
     sb.writeln('👥 Balances:');
-    for (final m in g.members) {
-      final b = allBal[m] ?? 0;
+    final balKeys = g.roster.isNotEmpty
+        ? g.roster.map((m) => m.id)
+        : g.members.map((n) => 'name:$n');
+    for (final key in balKeys) {
+      final b = allBal[key] ?? 0;
+      final name = g.displayNameForKey(key);
       final label = b > 0
           ? 'gets back ${g.sym}${b.toStringAsFixed(2)}'
           : b < 0
               ? 'owes ${g.sym}${b.abs().toStringAsFixed(2)}'
               : 'settled ✓';
-      sb.writeln('  • $m: $label');
+      sb.writeln('  • $name: $label');
     }
     if (plan.isNotEmpty) {
       sb.writeln('');

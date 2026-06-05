@@ -43,6 +43,32 @@ android {
         versionName = flutter.versionName
     }
 
+    // ── Dev / Prod environments ──────────────────────────────────────────────
+    // Each flavor maps to its OWN Firebase project via a flavor-specific
+    // google-services.json under src/<flavor>/. The `dev` flavor uses a
+    // separate package id (…​.dev) so it can be installed alongside prod and
+    // points at a sandbox Firebase project — testing never touches real data.
+    //
+    // IMPORTANT: builds now REQUIRE a flavor. Use:
+    //   flutter run    --flavor prod -d <device>
+    //   flutter build  apk --release --flavor prod
+    // Dev needs android/app/src/dev/google-services.json from the dev project.
+    flavorDimensions += "env"
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            // production applicationId stays com.splitsmart.splitsmart
+            manifestPlaceholders["appName"] = "SplitSmart"
+        }
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            // Distinct launcher label so the sandbox app is obvious on-device.
+            manifestPlaceholders["appName"] = "SplitSmart Dev"
+        }
+    }
+
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
             create("release") {
@@ -56,11 +82,36 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
+            // SEC: never silently ship a release signed with the debug key.
+            // For local testing only you may opt in explicitly with
+            //   flutter build apk --release -PallowDebugSigningForRelease=true
+            // Any real release MUST provide android/app/key.properties.
+            val allowDebugSigning =
+                (project.findProperty("allowDebugSigningForRelease") as String?)
+                    ?.toBoolean() == true
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else if (allowDebugSigning) {
+                signingConfig = signingConfigs.getByName("debug")
             } else {
-                // Fallback to debug signing for local development only
-                signingConfigs.getByName("debug")
+                // No keystore and no explicit opt-in: leave the release unsigned
+                // and fail HARD only if a release artifact is actually assembled,
+                // so normal debug `flutter run` is unaffected.
+                gradle.taskGraph.whenReady {
+                    val assemblingRelease = allTasks.any { t ->
+                        t.name.contains("Release") &&
+                            (t.name.startsWith("assemble") ||
+                                t.name.startsWith("bundle") ||
+                                t.name.startsWith("package"))
+                    }
+                    if (assemblingRelease) {
+                        throw GradleException(
+                            "Release build requires android/app/key.properties (release keystore). " +
+                            "Refusing to sign a release with the debug key. " +
+                            "For local testing only, pass -PallowDebugSigningForRelease=true."
+                        )
+                    }
+                }
             }
             isMinifyEnabled = true
             isShrinkResources = true

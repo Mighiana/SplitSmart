@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/common_widgets.dart';
 import '../../utils/app_utils.dart';
+import '../../utils/icon_map.dart';
 import '../../main.dart';
 import '../add_expense_screen.dart';
 
@@ -194,7 +195,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
             const SizedBox(height: 16),
             // Header
             Row(children: [
-              Container(width: 52, height: 52, decoration: const BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle), alignment: Alignment.center, child: Text(e.cat, style: const TextStyle(fontSize: 26))),
+              Container(width: 52, height: 52, decoration: const BoxDecoration(color: AppColors.greenDim, shape: BoxShape.circle), alignment: Alignment.center, child: Icon(iconForEmoji(e.cat), size: 24, color: colorForEmoji(e.cat, fallback: AppColors.green))),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(e.desc, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TC.text(context))),
@@ -434,7 +435,7 @@ class _RecurringExpensesCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   children: [
-                    Text(e.cat, style: const TextStyle(fontSize: 18)),
+                    Icon(iconForEmoji(e.cat), size: 18, color: colorForEmoji(e.cat, fallback: AppColors.green)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

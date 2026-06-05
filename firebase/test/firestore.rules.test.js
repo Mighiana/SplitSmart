@@ -27,15 +27,15 @@ const RULES = fs.readFileSync(
 );
 
 // Helper: seed a group document directly (bypassing rules).
-async function seedGroup(id, data) {
+async function seedGroup(id, data, options = {}) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await ctx.firestore().collection("groups").doc(id).set(data);
-    if (data.inviteCode) {
-      await ctx
-        .firestore()
-        .collection("inviteCodes")
-        .doc(data.inviteCode)
-        .set({ groupId: id });
+    // Call ctx.firestore() ONCE and reuse it. rules-unit-testing re-applies
+    // emulator settings on every .firestore() call, so a second call throws
+    // "Firestore has already been started ... settings can no longer be changed".
+    const db = ctx.firestore();
+    await db.collection("groups").doc(id).set(data);
+    if (data.inviteCode && options.mapInvite !== false) {
+      await db.collection("inviteCodes").doc(data.inviteCode).set({ groupId: id });
     }
   });
 }
@@ -80,6 +80,46 @@ describe("group creation", () => {
         name: "Spam",
         memberUids: ["guest"],
         createdBy: "guest",
+      })
+    );
+  });
+});
+
+describe("invite code mappings", () => {
+  it("allows the group owner to create the mapping for their own invite code", async () => {
+    await seedGroup("owned", {
+      name: "Trip",
+      memberUids: ["owner"],
+      members: ["Owner"],
+      createdBy: "owner",
+      isPremiumGroup: false,
+      inviteCode: "OWNR1234",
+    }, { mapInvite: false });
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx.firestore().collection("inviteCodes").doc("OWNR1234").set({
+        groupId: "owned",
+      })
+    );
+  });
+
+  it("blocks a non-owner from creating or poisoning an invite mapping", async () => {
+    await seedGroup("owned", {
+      name: "Trip",
+      memberUids: ["owner"],
+      members: ["Owner"],
+      createdBy: "owner",
+      isPremiumGroup: false,
+      inviteCode: "OWNR9999",
+    }, { mapInvite: false });
+    const ctx = testEnv.authenticatedContext("attacker", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx.firestore().collection("inviteCodes").doc("OWNR9999").set({
+        groupId: "owned",
       })
     );
   });
@@ -136,6 +176,109 @@ describe("guest join gate", () => {
       })
     );
   });
+
+  it("blocks an existing member from using the join path to add someone else", async () => {
+    await seedGroup(groupId, {
+      ...base,
+      memberUids: ["owner", "member"],
+      members: ["Owner", "Mem"],
+      isPremiumGroup: true,
+    });
+    const ctx = testEnv.authenticatedContext("member", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        memberUids: ["owner", "member", "victim"],
+        members: ["Owner", "Mem", "Victim"],
+        joinAttemptCode: "CODE1234",
+      })
+    );
+  });
+
+  it("blocks invite join from rewriting group profile fields", async () => {
+    await seedGroup(groupId, { ...base, isPremiumGroup: false });
+    const ctx = testEnv.authenticatedContext("friend", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        name: "Pwned",
+        memberUids: ["owner", "friend"],
+        members: ["Owner", "Alex"],
+        joinAttemptCode: "CODE1234",
+      })
+    );
+  });
+});
+
+describe("group update hardening", () => {
+  const groupId = "g-update";
+  const base = {
+    name: "Trip",
+    memberUids: ["owner", "member"],
+    members: ["Owner", "Mem"],
+    createdBy: "owner",
+    inviteCode: "UPDT1234",
+    isPremiumGroup: false,
+  };
+
+  it("allows a member to leave by removing only their own uid", async () => {
+    await seedGroup(groupId, base);
+    const ctx = testEnv.authenticatedContext("member", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        memberUids: ["owner"],
+        members: ["Owner"],
+      })
+    );
+  });
+
+  it("blocks self-leave from renaming the group at the same time", async () => {
+    await seedGroup(groupId, base);
+    const ctx = testEnv.authenticatedContext("member", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        name: "Renamed",
+        memberUids: ["owner"],
+        members: ["Owner"],
+      })
+    );
+  });
+
+  it("allows the owner to remove a member", async () => {
+    await seedGroup(groupId, base);
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        memberUids: ["owner"],
+        members: ["Owner"],
+      })
+    );
+  });
+
+  it("blocks the owner from adding arbitrary user ids without invite join", async () => {
+    await seedGroup(groupId, {
+      ...base,
+      memberUids: ["owner"],
+      members: ["Owner"],
+    });
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx.firestore().collection("groups").doc(groupId).update({
+        memberUids: ["owner", "victim"],
+        members: ["Owner", "Victim"],
+      })
+    );
+  });
 });
 
 describe("premium flag protection", () => {
@@ -179,7 +322,7 @@ describe("premium flag protection", () => {
     );
   });
 
-  it("lets a non-owner member edit a legacy group with no isPremiumGroup field", async () => {
+  it("blocks a non-owner member from editing group profile fields", async () => {
     await seedGroup(groupId, {
       name: "Legacy",
       memberUids: ["owner", "member"],
@@ -191,10 +334,150 @@ describe("premium flag protection", () => {
     const ctx = testEnv.authenticatedContext("member", {
       firebase: { sign_in_provider: "google.com" },
     });
-    await assertSucceeds(
+    await assertFails(
       ctx.firestore().collection("groups").doc(groupId).update({
         name: "Legacy Renamed",
       })
+    );
+  });
+});
+
+describe("group child document authorship", () => {
+  const groupId = "g-child";
+  const group = {
+    name: "Trip",
+    memberUids: ["owner", "member"],
+    members: ["Owner", "Mem"],
+    createdBy: "owner",
+    inviteCode: "CHLD1234",
+    isPremiumGroup: false,
+  };
+
+  beforeEach(async () => {
+    await seedGroup(groupId, group);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .doc("e1")
+        .set({
+          amount: 12,
+          desc: "Dinner",
+          paidBy: "Owner",
+          addedBy: "owner",
+        });
+      await db
+        .collection("groups")
+        .doc(groupId)
+        .collection("settlements")
+        .doc("s1")
+        .set({
+          amount: 5,
+          from: "Mem",
+          to: "Owner",
+          addedBy: "member",
+        });
+    });
+  });
+
+  it("allows an expense author to edit normal fields", async () => {
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx
+        .firestore()
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .doc("e1")
+        .update({ desc: "Dinner updated" })
+    );
+  });
+
+  it("blocks rewriting expense addedBy on update", async () => {
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx
+        .firestore()
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .doc("e1")
+        .update({ addedBy: "member" })
+    );
+  });
+
+  it("blocks rewriting settlement addedBy on update", async () => {
+    const ctx = testEnv.authenticatedContext("member", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx
+        .firestore()
+        .collection("groups")
+        .doc(groupId)
+        .collection("settlements")
+        .doc("s1")
+        .update({ addedBy: "owner" })
+    );
+  });
+});
+
+describe("user subcollection hardening", () => {
+  it("blocks arbitrary user-owned backend namespaces", async () => {
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertFails(
+      ctx
+        .firestore()
+        .collection("users")
+        .doc("owner")
+        .collection("adminFlags")
+        .doc("x")
+        .set({ enabled: true })
+    );
+  });
+
+  it("allows a well-formed purchase verification queue entry", async () => {
+    const ctx = testEnv.authenticatedContext("owner", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx
+        .firestore()
+        .collection("users")
+        .doc("owner")
+        .collection("purchaseQueue")
+        .add({
+          store: "play",
+          productId: "splitsmart_premium_monthly",
+          token: "token-123",
+          status: "pending",
+        })
+    );
+  });
+});
+
+describe("connectivity ping", () => {
+  it("allows a signed-in user to read the ping doc", async () => {
+    const ctx = testEnv.authenticatedContext("anyuser", {
+      firebase: { sign_in_provider: "google.com" },
+    });
+    await assertSucceeds(
+      ctx.firestore().collection("ping").doc("status").get()
+    );
+  });
+
+  it("blocks an unauthenticated client from reading the ping doc", async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      ctx.firestore().collection("ping").doc("status").get()
     );
   });
 });

@@ -25,7 +25,7 @@ A cross-platform **Flutter** mobile app (Android + iOS) that is two things in on
 |---|---|
 | Framework | Flutter (Dart SDK `>=3.0.0 <4.0.0`) |
 | State management | **Provider** — `AppState extends ChangeNotifier` (`lib/providers/app_state.dart`) |
-| Local DB (offline source of truth) | **SQLite** via `sqflite` — file `splitsmart_v3.db`, **schema version 13** |
+| Local DB (offline source of truth) | **SQLite** via `sqflite` — file `splitsmart_v3.db`, **schema version 18** |
 | Cloud backend | **Firebase**: Auth, Cloud Firestore, Storage, Cloud Functions, Messaging, Analytics, Crashlytics |
 | Auth | Firebase Auth + Google Sign-In |
 | Fonts | `google_fonts` — **Gloock** (serif display) + **Geist** (sans body). Loaded at runtime, not bundled. |
@@ -163,6 +163,100 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 ---
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
+
+### 2026-06-03 — Competitive gaps: smart insights, faster entry, CSV import
+- **Smart Insight** rewritten to be genuinely useful (priority: overdue bills → month-over-month spend trend → top-category share → onboarding nudge) instead of echoing the donut. (`personal_finance_tab.dart`)
+- **Faster Add-Expense**: remembers last-used category per type (expense/income) and pre-selects it. (`add_transaction_screen.dart`)
+- **Free CSV import** (Phase 0 of bank plan): new `import_csv_screen.dart` — pick CSV → auto-guess + map Date/Description/Amount columns + currency → preview → bulk import as transactions (sign → income/expense). Entry point in **Settings → Import from CSV**. No DB change; dedupe not yet implemented (future).
+
+### 2026-06-02 — Empty states + two Home bugfixes
+- **Bug:** Home recent-transaction rows overflowed (87px) because the date was a raw ISO timestamp — now formatted short ("Jun 1") + flex-safe. Currency badge → brand teal. (`personal_finance_tab.dart`)
+- **Bug:** Home donut legend showed the category emoji twice for legacy/unknown categories (e.g. old 🚗 after the Transport icon change) — deduped.
+- **Rich empty states** (new `RichEmptyState` + `EmptyPill` in `common_widgets.dart`): art + Gloock title + desc + suggestion pills + teal CTA + ghost button. Applied to **Saving Goals** (Trip/MacBook/House…), **Subscriptions** (Spotify/Netflix…), **Reminders** (Rent/Electricity…), and **Groups** (Create + "Join with Invite Code" → `JoinGroupScreen`). Removed old `_EmptySubsState` + `_AvatarCircleIllustration`.
+
+### 2026-06-02 — Wallet delete fix, Home/Planner tweaks
+- **Bug fix:** deleting the active currency wallet left `homeCurrency` pointing at it (deleted account kept showing). `deleteWallet` now deletes local-first (cloud in background) and **switches `homeCurrency`** off the deleted one; Home also self-heals if the saved currency has no wallet. (`app_state.dart`, `personal_finance_tab.dart`)
+- Home: removed "Coming Up" section; **Goals stat capped at 100%**; added "See all → Planner" above the 3 stat tiles; Spent tile icon 📊→🧾; donut card got a "See all → transactions".
+- Transport category icon 🚗→🚌 (distinct from Vehicle).
+- Planner snapshot: "Monthly Subs" money → **active-subscriptions count** (no multi-currency total).
+- Plan doc `docs/CATEGORY_HIERARCHY_PLAN.md` (groups→subcategories; owner chose to plan-as-phase; start Phase 1 = budget-form picker only).
+
+### 2026-06-03 — Email verification, App Check, dev/prod flavors
+- **Email verification (soft gate):** `signUpWithEmail` now sends a verification email; `AuthService` gained `isEmailPasswordUser`, `isEmailVerified`, `sendEmailVerification()`, `reloadEmailVerified()`. Home shows a dismissible "Verify your email" banner (`_buildEmailVerifyBanner` in `personal_finance_tab.dart`) with Resend / "I've verified" — **not a hard lock** (existing testers keep working).
+- **App Check (activated, NOT enforced):** added `firebase_app_check`; `main.dart` calls `FirebaseAppCheck.instance.activate` (debug provider in debug builds, Play Integrity / DeviceCheck in release). Nothing is rejected until enforcement is flipped in the Firebase console + (optionally) `enforceAppCheck: true` on callables — safe for current users. Debug builds print a debug token to register in the console.
+- **Dev/prod Firebase split (Android):** `android/app/build.gradle.kts` now defines `prod`/`dev` product flavors (dim `env`); `dev` uses applicationId suffix `.dev` + its own Firebase project. **Builds now REQUIRE a flavor** — use `flutter run --flavor prod -d <device>` (and `--flavor prod` for builds). Prod uses the existing root `google-services.json` (plugin fallback); dev needs `android/app/src/dev/google-services.json` (see that folder's README). `firebase/.firebaserc` gained `prod`/`dev` aliases (dev id is a placeholder).
+- **Manual/console follow-ups:** create the `dev` Firebase project + drop in its `google-services.json`; set the dev project id in `.firebaserc`; iOS flavor schemes not set up (Android only); a device build is needed to confirm the gradle flavor config (no Java/emulator here). App Check enforcement is a later console step.
+
+### 2026-06-04 — Backend security audit #2 + rules re-deploy (dev + PROD)
+- **Second hardening pass on `firestore.rules` / `storage.rules` / `functions/index.js` / AndroidManifest** (invite-code mapping is owner-only + code-matched; group `update` split into creator-edit / invite-join / self-leave branches so a crafted client can't rewrite unrelated fields or inject another uid; expense/settlement `addedBy` immutable; `users/{uid}` subcollections restricted to an explicit allowlist; `purchaseQueue` shape validated; Storage uploads limited to typed image MIME+ext+size; `usesCleartextTraffic="false"`).
+- **Independently verified** the rules against `firestore_service.dart` writes — every field the rules require, the client already sends (`createdBy`, `joinAttemptCode`, `addedBy`, `{groupId}`-only mapping, exact `purchaseQueue` keys); all 6 synced user subcollections are allowlisted. **No core-flow lockout.** Rules **compiled + deployed to dev AND PROD** (`splitsmart-3898`).
+- **Storage rules:** could not deploy — Storage not initialized on dev or prod (needs Blaze "Get Started"). No bucket = nothing exposed; rules staged.
+- **Dependency audit (Functions):** generated `firebase/functions/package-lock.json`; `npm audit` = **11 moderate, 0 high/critical**, all the same transitive `uuid` advisory (GHSA-w5hq-g745-h8pq) via firebase-admin/functions/googleapis — not exploitable in our usage. Non-breaking `npm audit fix` = no change; `--force` would bump firebase-admin 12→13 / firebase-functions 5→7 / googleapis 144→173 (breaking) — **deferred** to whenever Functions are actually deployed (needs Blaze) so the majors can be tested.
+- **Emulator rules-unit tests: RUN + GREEN (22/22).** Used Android Studio's bundled JDK (`…\Android Studio\jbr`, OpenJDK 21) as `JAVA_HOME` to start the Firestore emulator; `cd firebase/test && npm install && npm test`. Fixed a latent harness bug first — `seedGroup`/child-doc `beforeEach` called `ctx.firestore()` twice per context (rules-unit-testing re-applies emulator settings each call → "Firestore already started"); store the instance once and reuse. Attack cases (anon create, invite-code poisoning, guest non-premium join, member injecting another uid, profile-rewrite-on-join, self-leave+rename, owner adding arbitrary uids, premium flag without claim, addedBy rewrite, arbitrary user subcollection) all correctly DENIED; legit ops allowed.
+- **Still console-only:** App Check enforcement (toggle after on-device verification).
+
+### 2026-06-04 — Pentest remediation + PROD rules deploy
+- **Pentest pass (grey-box).** Verdict: trust model is genuinely server-side (auth + `premium` custom claim + validated rules + server-verified IAP). Fixes: **IAP replay protection** — `verifyPurchase` binds each receipt to one uid via hashed `purchaseTokens/{sha256}` in a transaction (`firebase/functions/index.js`); **settlement tamper fix** — settlement update/delete restricted to `addedBy`/creator (firestore.rules); **PII out of logs** — removed uid/email from auth `debugPrint`s. CSV formula-injection = **N/A** (no CSV export path; export is PDF/zip only).
+- **Firestore rules DEPLOYED TO PRODUCTION** (`splitsmart-3898`) — all hardening is live for real users.
+- **Known prod gaps (cost-gated, by owner choice):** (1) **Storage not enabled** on prod → receipt uploads fall back to local-only (no bucket = nothing exposed; `storage.rules` ready for when Storage is enabled, needs Blaze). (2) **Cloud Functions staged, not deployed** (need Blaze) → server-side IAP verification + replay protection live only once deployed. (3) **App Check** activated client-side, enforcement = console toggle (do after verifying live app). (4) data-at-rest encryption (SQLCipher) deferred.
+
+### 2026-06-04 — Budget sub-categories, Phase 1 (DB v18)
+- **Sub-categories** (Wallet-style) keyed by parent category emoji: `AppState.subcategories` map + helpers `subsFor`/`subByKey`/`parentOfSub`/`labelForKey`. Sub keys are stable `sub:<group>:<name>` strings (no emoji-collision, storable on tx/budgets).
+- **`TransactionData.subcat`** (nullable) — **DB v17 → v18** additive `transactions.subcat` + Firestore round-trip. Add/Edit transaction shows optional sub-category chips for expense categories that have subs.
+- **Budget category picker is now expandable** (`new_budget_screen.dart`): parent checkbox = whole category; expand → per-sub checkboxes. `budgetSpent` + budget detail chart match a tx by **parent emoji OR sub key**. Budget card/picker render icons (not emoji), incl. `sub:` keys via `iconForEmoji`/`colorForEmoji`.
+- **UX fix:** Budgets empty state no longer shows two "New Budget" buttons — the FAB is hidden while the list is empty (the centered CTA covers it).
+- Tests: `test/widget_test.dart` group `budgetSpent subcategories` (5 cases). **DB version is now 18** (update §2 if it changes). See `docs/CATEGORY_HIERARCHY_PLAN.md` (Phases 2–3 pending).
+
+### 2026-06-04 — Icons-only UI + account-only/creator-only groups (DB v17)
+- **Emoji → Material icons everywhere.** New `lib/utils/icon_map.dart` (`iconForEmoji()` + `colorForEmoji()`) maps every stored emoji (categories, group/goal/subscription icons, decorative glyphs, `←`) to a Material icon. **Emoji stays the storage key** — no data migration; old records render as icons automatically. Shared widgets (`EmojiBox`, `EmptyState`, `RichEmptyState` art + `EmptyPill`) + all category/transaction render sites + pickers + decorative emojis converted across ~25 screens. Currency **flags kept** (distinct identifiers). Category icons tint via each category's palette color.
+- **Account-only group members.** Group creation no longer accepts typed names — you create solo and others join via invite code (real accounts). `new_group_screen` builds a creator-only roster.
+- **Creator-only group management.** New `GroupData.createdBy` (**DB v16 → v17**, additive `groups.created_by`; parsed from Firestore). `isCreatedBy()` helper (legacy fallback = first member). Group Settings: creator can rename/change icon/remove members/delete; non-creators get a **read-only** view + **Leave group**. New `AppState.leaveGroup` + `removeMember` (local-first) + `FirestoreService.removeMemberFromGroup`.
+- **Rules:** group edits + delete are now **creator-only**; added a precise **self-leave** path (a member may remove only their own uid); invite-join unchanged. Deployed to **dev** (compiled OK); push to prod with `--project prod` when ready.
+- **Crash fix:** reverted the premature `.then((_) => ctrl.dispose())` on 5 dialogs/sheets (it disposed `TextEditingController`s mid-close-animation → "used after disposed"). Controllers are intentionally not disposed there (tiny bounded leak); proper fix = StatefulWidget-owned controllers later.
+- **DB version is now 17** (update §2 if it changes).
+
+### 2026-06-03 — Stable member-id keyed balances (DB v16) + security hardening
+- **Duplicate-name balance corruption fixed.** New `GroupMember {id,name,uid?,isGuest}` + `GroupData.roster`; `ExpenseData.paidById/splitIds`; `SettlementData.fromId/toId`. New **`getBalancesById()`** keys balances by stable id (Firebase uid for app users, generated `local:` id for typed members); `getAllBalances()` is now a name-projection of it (back-compat). `getMyBalance`/`buildSettlePlan` work in id-space. Legacy name-only rows resolve via the roster when unambiguous, else fall back to `name:<name>` — **no data rewrite**.
+- **DB schema 15 → 16** (additive/nullable): `group_members.member_id/uid/is_guest`, `expenses.paid_by_id/split_ids_json`, `settlements.from_id/to_id`. Round-tripped in `database_service.dart` + `firestore_service.dart` (unified `memberMeta: {memberId:{name,uid?,isGuest}}`; roster only trusted when it covers all member names). UI: `new_group_screen` builds the roster; `add_expense_screen` derives ids at save; `settle_up_screen` passes `fromId/toId`. 5 new unit tests (duplicate-name regression, legacy fallback, mixed merge, settlement-by-id, custom id splits). **DB version is now 16** (update §2 if it changes).
+- **Security (audit fixes):** Apple App Store JWS now cryptographically verified (x5c chain → pinned Apple Root CA G3 + ES256) instead of `jwt.decode()`; Firestore rules tightened (immutable `createdBy`/`inviteCode`, group-create validation, expense/settlement amount+field validation, fcmTokens cap, support-ticket schema); `ANDROID_PACKAGE` default fixed; Functions Node 18 → 20; release build now fails without a keystore (no silent debug-signing); corrected "encrypted storage/backups" copy.
+- **Known follow-ups:** add-expense *picker* is still name-keyed (can't assign an expense to a *specific* same-named member yet — engine/storage already support it); breakdown-tab per-member cards still group by display name. Deploy `firebase deploy --only firestore:rules` (rules not emulator-compiled here — no Java). DB-migration + multi-user cloud paths need device testing.
+
+### 2026-06-02 — Budgets Phase B (detail + forecast trend chart)
+- New `budget_detail_screen.dart`: period summary (limit, % used, progress, Spent/Remains) + **forecast trend chart** via `fl_chart` (green actual cumulative spend, blue dashed forecast, red overspend segment past the limit-crossing day, gray dashed limit line) + "You risk overspending" warning + legend.
+- Budget card tap now opens the **detail** (edit moved to the pencil in the detail header). `budget_screen.dart`.
+
+### 2026-06-02 — Wallet-style Budgets, Phase A (DB v15)
+- **DB schema bumped 14 → 15**: new `budgets` table (CREATE + v15 migration in `database_service.dart`) + CRUD. **DB version is now 15** (update §2 if it changes).
+- New **`Budget` model** (`app_state.dart`): id, name, period (weekly/monthly/yearly), amount, currency, categories (emoji list; empty = all), notifyOverspent. **Local SQLite only** (not cloud-synced yet — Phase C). AppState: `budgets`, load, `addBudget`/`updateBudget`/`deleteBudget`, `budgetSpent(b)`.
+- **Budgets list** rewritten (`budget_screen.dart`): named budgets with spent/limit, % badge, progress bar, remaining/over text, swipe-to-delete, tap-to-edit, FAB → new budget, empty state. Reached via Planner → Budgets.
+- **New/Edit Budget form** (`new_budget_screen.dart`): name, period chips, amount + currency picker, **category multi-select sheet** (All or specific from `expenseCategories`), notify-overspent toggle.
+- Plan doc: `docs/BUDGET_REDESIGN_PLAN.md` (Phase B = detail + forecast trend chart; Phase C = one-time/labels/notifications/cloud sync — NOT built yet).
+
+### 2026-06-02 — Home monthly-spending donut
+- Added a **donut chart of this month's expenses by category** on Home, right after the 3 stat tiles (`personal_finance_tab.dart`: `_buildMonthlyDonut`, `_HomeDonutPainter`). Scoped to the active/home currency; hidden when there's no spend. Center shows total (Gloock); legend shows top categories + %/amount. Uses `AppState.getCategoryColor`.
+
+### 2026-06-02 — Goal icon + colour picker (DB v14)
+- **DB schema bumped 13 → 14**: added `icon` + `color` (TEXT) columns to `saving_goals` (CREATE + v14 ALTER migration in `database_service.dart`). Firestore is schemaless so `toMap()` carries them automatically.
+- `SavingGoal` model gains `icon`/`color` (nullable); `fromMap`/`toMap`/`copyWith` + `addSavingGoal`/`updateSavingGoal` updated (`app_state.dart`).
+- Add/Edit goal sheet now has an **Icon picker** (emoji choices) + **Colour picker** (swatches); goal cards render the chosen icon/colour, falling back to auto when null (`saving_goals_screen.dart`).
+- NOTE: DB version is now **14** — update §2 if it changes again.
+- TODO (next): Home monthly-expenses donut.
+
+### 2026-06-02 — Splash, Subscriptions, Budget access
+- Splash logo: removed the 💚 heart → wallet icon (`main.dart`).
+- Subscriptions: removed the monthly-cost hero entirely (multi-currency) — screen now starts with the category breakdown + list (`subscriptions_screen.dart`).
+- **Budget screen is now reachable** — added a "Budgets" tile on the Planner that opens `BudgetScreen` (it existed but was never linked) (`planner_screen.dart`).
+- TODO (next, careful): goal add/edit **icon + colour picker** (needs DB migration to add `icon`/`color` to `SavingGoal`); Home **monthly-expenses donut** below the 3 stat tiles.
+
+### 2026-06-02 — Onboarding currency + multi-currency cleanups
+- **First-run base currency step:** new `base_currency_screen.dart` — after sign-in, if the user has no wallet, they pick their main/home currency (creates the first wallet + sets `homeCurrency`). Wired into `main.dart` `_AppGate` (gated on `wallets.isEmpty`). Mentions banks can be connected later.
+- **Subscriptions:** removed the false combined "Total Monthly / Per Year / Per Day" (subs can be multi-currency) — hero now shows monthly cost **per currency** + an Active count pill. `subscriptions_screen.dart`.
+- **Saving Goals:** slimmed the goal progress bar (was a chunky 28px filled pill → now an 8px `LinearProgressIndicator` with the % beside it in the goal's color). `saving_goals_screen.dart`.
+- Budget screen reviewed — already on TC design system, no change needed.
+
+### 2026-06-02 — Planning docs
+- Added `docs/BANK_SYNC_PLAN.md` — cost-first phased plan for "Connect bank account" (Phase 0 free: CSV import + Android SMS parsing; Phase 1: GoCardless/Nordigen free-tier behind the paywall; Phase 2: paid scale / Plaid). No spend until the app is proven.
+- (Existing) `docs/PREMIUM_GUEST_PLAN.md` — subscription/paywall + guest-join plan.
 
 ### 2026-06-02 — UI/UX overhaul + critical fixes
 - **Fixed "Add Expense/Income save does nothing"** (both personal & group): switched `addTransaction()` / `addExpenseToGroup()` to **local-first** — await SQLite, update state, pop immediately; Firestore sync runs in background (was hanging on offline-await). `app_state.dart`.

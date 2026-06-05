@@ -21,6 +21,7 @@ import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
 import 'contact_us_screen.dart';
+import 'import_csv_screen.dart';
 import '../services/firestore_service.dart';
 
 const Color _cGreen = Color(0xFF2DCE98);
@@ -793,7 +794,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   _privacySection(
                     'Data Storage',
-                    'Your personal data is stored securely on your device using encrypted local storage. Optional cloud sync is powered by Firebase, which stores your data in compliance with Google\'s privacy standards.',
+                    'Your data is stored locally on your device in the app\'s private, sandboxed storage, which other apps cannot access. Optional cloud sync is powered by Firebase, which encrypts your data in transit and at rest on Google\'s servers.',
                   ),
                   _privacySection(
                     'Data Sharing',
@@ -809,7 +810,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   _privacySection(
                     'Security',
-                    'We implement industry-standard security measures including optional biometric authentication and encrypted backups to protect your data.',
+                    'We implement security measures including optional biometric app lock and sandboxed on-device storage. Backups you export are portable data files — keep them somewhere safe, as anyone with the file can read its contents.',
                   ),
                 ],
               ),
@@ -1692,6 +1693,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     _Tile(
                       icon: const Icon(
+                        Icons.download_rounded,
+                        color: _cGreen,
+                        size: 20,
+                      ),
+                      iconBg: _cGreenL,
+                      title: 'Import from CSV',
+                      subtitle: 'Bring in transactions from a bank/app export',
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const ImportCsvScreen()));
+                      },
+                    ),
+                    _Tile(
+                      icon: const Icon(
                         Icons.autorenew_rounded,
                         color: _cOrange,
                         size: 20,
@@ -1809,7 +1825,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                     _Tile(
-                      icon: const Text('⭐', style: TextStyle(fontSize: 18)),
+                      icon: const Icon(Icons.star_rounded, size: 18),
                       iconBg: _cYellowL,
                       title: 'Rate App',
                       subtitle: 'Leave a review on the Play Store',
@@ -1869,7 +1885,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: _shareSupportLogs,
                     ),
                     _Tile(
-                      icon: const Text('🔥', style: TextStyle(fontSize: 18)),
+                      icon: const Icon(Icons.local_fire_department_rounded, size: 18),
                       iconBg: _cYellowL,
                       title: 'Firebase Test Tools',
                       subtitle: 'Check sync, auth, and Firestore status',
@@ -1884,7 +1900,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () => _seedDemoData(state),
                     ),
                     _Tile(
-                      icon: const Text('🚀', style: TextStyle(fontSize: 18)),
+                      icon: const Icon(Icons.rocket_launch_rounded, size: 18),
                       iconBg: _cBlueL,
                       title: 'Reset Onboarding',
                       subtitle: 'Show onboarding screens on next app launch',

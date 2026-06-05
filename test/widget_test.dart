@@ -224,6 +224,201 @@ void main() {
     });
   });
 
+  group('getBalancesById (stable member ids)', () {
+    late AppState state;
+    setUp(() => state = AppState());
+
+    test('duplicate names stay separate when keyed by id', () {
+      final g = GroupData(
+        id: 100,
+        name: 'Dup',
+        emoji: '🏠',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Sam', 'Sam', 'You'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Sam'),
+          GroupMember(id: 'u2', name: 'Sam'),
+          GroupMember(id: 'u3', name: 'You'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1,
+            desc: 'Dinner',
+            amount: 30,
+            cat: '🍽️',
+            paidBy: 'Sam',
+            paidById: 'u1', // disambiguates which Sam paid
+            date: '2024-01-01',
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      // u1 paid 30, equal share 10 → +20; the OTHER Sam (u2) owes 10.
+      expect(byId['u1'], 20.0);
+      expect(byId['u2'], -10.0);
+      expect(byId['u3'], -10.0);
+
+      // Name projection sums same-named members (documented behavior).
+      final byName = state.getAllBalances(g);
+      expect(byName['Sam'], 10.0); // 20 + (-10)
+      expect(byName['You'], -10.0);
+    });
+
+    test('legacy name-only expense resolves to id via roster', () {
+      final g = GroupData(
+        id: 101,
+        name: 'Legacy',
+        emoji: '🏠',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Ann', 'Bob'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Ann'),
+          GroupMember(id: 'u2', name: 'Bob'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1,
+            desc: 'Cab',
+            amount: 20,
+            cat: '🚗',
+            paidBy: 'Ann', // no paidById → resolved via roster
+            date: '2024-01-01',
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      expect(byId['u1'], 10.0);
+      expect(byId['u2'], -10.0);
+    });
+
+    test('mixed legacy + id expenses merge into one balance per member', () {
+      final g = GroupData(
+        id: 102,
+        name: 'Mixed',
+        emoji: '🏠',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Ann', 'Bob'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Ann'),
+          GroupMember(id: 'u2', name: 'Bob'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1, desc: 'Old', amount: 20, cat: '🍽️',
+            paidBy: 'Ann', date: '2024-01-01', // legacy
+          ),
+          ExpenseData(
+            id: 2, desc: 'New', amount: 10, cat: '🍽️',
+            paidBy: 'Ann', paidById: 'u1', date: '2024-01-02', // id-keyed
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      // Both expenses' payer collapse to u1: +15 / -15, not split across keys.
+      expect(byId['u1'], 15.0);
+      expect(byId['u2'], -15.0);
+      expect(byId.keys.where((k) => k.startsWith('name:')), isEmpty);
+    });
+
+    test('settlement by id reduces the correct member', () {
+      final g = GroupData(
+        id: 103,
+        name: 'Settle',
+        emoji: '🏠',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Ann', 'Bob'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Ann'),
+          GroupMember(id: 'u2', name: 'Bob'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1, desc: 'Cab', amount: 20, cat: '🚗',
+            paidBy: 'Ann', paidById: 'u1', date: '2024-01-01',
+          ),
+        ],
+        settlements: [
+          const SettlementData(
+            from: 'Bob', to: 'Ann', amount: 10, method: 'Cash',
+            date: '2024-01-02', fromId: 'u2', toId: 'u1',
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      expect(byId['u1'], 0.0);
+      expect(byId['u2'], 0.0);
+    });
+
+    test('custom id-keyed splits compute correctly', () {
+      final g = GroupData(
+        id: 104,
+        name: 'CustomId',
+        emoji: '💰',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Ann', 'Bob'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Ann'),
+          GroupMember(id: 'u2', name: 'Bob'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1, desc: 'Hotel', amount: 100, cat: '🏠',
+            paidBy: 'Ann', paidById: 'u1', date: '2024-01-01',
+            splitIds: {'u1': 30, 'u2': 70},
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      expect(byId['u1'], 70.0);
+      expect(byId['u2'], -70.0);
+    });
+
+    test('unresolvable explicit id never leaks as a balance key', () {
+      // Regression: a paidById that is NOT in the roster (stale / cross-device
+      // id) must fall back to name-keying so the UI never shows a raw uid.
+      final g = GroupData(
+        id: 105,
+        name: 'Stale',
+        emoji: '💰',
+        currency: 'USD',
+        sym: '\$',
+        members: ['Ann', 'Bob'],
+        roster: [
+          GroupMember(id: 'u1', name: 'Ann'),
+          GroupMember(id: 'u2', name: 'Bob'),
+        ],
+        expenses: [
+          ExpenseData(
+            id: 1, desc: 'Cab', amount: 20, cat: '🚗',
+            paidBy: 'Ann', paidById: 'dEd5aVqduOPRstaleUid', // not in roster
+            date: '2024-01-01',
+          ),
+        ],
+      );
+
+      final byId = state.getBalancesById(g);
+      // The stale id must NOT appear; the payer resolves to 'Ann' → u1.
+      expect(byId.containsKey('dEd5aVqduOPRstaleUid'), isFalse);
+      expect(byId['u1'], 10.0);
+      expect(byId['u2'], -10.0);
+      // Every key must be displayable (a roster id or a name: pseudo-key).
+      for (final k in byId.keys) {
+        expect(g.displayNameForKey(k) != k || k.startsWith('name:'), isTrue,
+            reason: 'key "$k" is not resolvable to a display name');
+      }
+    });
+  });
+
   group('buildSettlePlan', () {
     late AppState state;
 
@@ -543,6 +738,60 @@ void main() {
         normalized = cleaned.replaceAll(',', '');
       }
       expect(double.tryParse(normalized), 42.50);
+    });
+  });
+
+  group('budgetSpent subcategories', () {
+    late AppState state;
+    final today = DateTime.now().toIso8601String();
+
+    setUp(() {
+      state = AppState();
+      state.transactions = [
+        // Food (parent), no sub-category
+        TransactionData(id: 1, type: 'expense', desc: 'Lunch', amount: 20, cat: '🍽️', currency: 'USD', sym: '\$', date: today),
+        // Food → Groceries
+        TransactionData(id: 2, type: 'expense', desc: 'Market', amount: 50, cat: '🍽️', subcat: 'sub:food:groceries', currency: 'USD', sym: '\$', date: today),
+        // Food → Restaurants
+        TransactionData(id: 3, type: 'expense', desc: 'Dinner', amount: 30, cat: '🍽️', subcat: 'sub:food:restaurant', currency: 'USD', sym: '\$', date: today),
+        // Transport (parent)
+        TransactionData(id: 4, type: 'expense', desc: 'Bus', amount: 10, cat: '🚌', currency: 'USD', sym: '\$', date: today),
+        // Income — must never count toward a spending budget
+        TransactionData(id: 5, type: 'income', desc: 'Pay', amount: 999, cat: '💼', currency: 'USD', sym: '\$', date: today),
+        // Different currency — must be excluded
+        TransactionData(id: 6, type: 'expense', desc: 'EU food', amount: 77, cat: '🍽️', currency: 'EUR', sym: '€', date: today),
+      ];
+    });
+
+    Budget budget(List<String> cats) => Budget(
+        id: 1, name: 'B', amount: 1000, currency: 'USD', period: 'monthly', categories: cats);
+
+    test('parent-level budget counts every transaction of that category', () {
+      // Food parent = 20 + 50 + 30 = 100 (EUR food excluded)
+      expect(state.budgetSpent(budget(['🍽️'])), 100);
+    });
+
+    test('sub-level budget counts only the matching sub-category', () {
+      expect(state.budgetSpent(budget(['sub:food:groceries'])), 50);
+      expect(state.budgetSpent(budget(['sub:food:restaurant'])), 30);
+    });
+
+    test('empty categories counts all expenses in the budget currency', () {
+      // 20 + 50 + 30 + 10 = 110 (income + EUR excluded)
+      expect(state.budgetSpent(budget([])), 110);
+    });
+
+    test('parent + another category sum without double counting', () {
+      // Food parent (100) + Transport (10) = 110
+      expect(state.budgetSpent(budget(['🍽️', '🚌'])), 110);
+    });
+
+    test('subcategory helpers resolve keys', () {
+      expect(AppState.subsFor('🍽️').isNotEmpty, true);
+      expect(AppState.parentOfSub('sub:food:groceries'), '🍽️');
+      expect(AppState.subByKey('sub:food:groceries')?.label, 'Groceries');
+      expect(AppState.labelForKey('🍽️'), 'Food');
+      expect(AppState.labelForKey('sub:food:groceries'), 'Groceries');
     });
   });
 }

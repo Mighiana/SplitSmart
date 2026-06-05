@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
+import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../widgets/common_widgets.dart';
 import '../services/export_service.dart';
@@ -1283,7 +1284,7 @@ class _TxnSearchDelegate extends SearchDelegate<String> {
           final t = filtered[i];
           final isInc = t.type == 'income';
           return ListTile(
-            leading: Text(t.cat, style: const TextStyle(fontSize: 24)),
+            leading: Icon(iconForEmoji(t.cat), size: 24, color: colorForEmoji(t.cat, fallback: AppColors.green)),
             title: Text(t.desc,
                 style: TextStyle(color: TC.text(context))),
             subtitle: Text(t.date,

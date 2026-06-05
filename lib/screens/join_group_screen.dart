@@ -86,7 +86,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
-              const Center(child: Text('🔗', style: TextStyle(fontSize: 44))),
+              const Center(child: Icon(Icons.link_rounded, size: 44, color: Color(0xFF0D7377))),
               const SizedBox(height: 16),
               Text(
                 'Join as a guest',
@@ -151,7 +151,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Text('💡', style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.lightbulb_outline_rounded, size: 16, color: Color(0xFF9E9E9E)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

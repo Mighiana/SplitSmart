@@ -50,6 +50,40 @@ class AuthService {
   /// User photo URL from Google, or null.
   String? get photoUrl => _auth.currentUser?.photoURL;
 
+  // ─── Email verification ───────────────────────────────────────────────────
+
+  /// True when the signed-in user authenticated with email + password.
+  /// (Google/anonymous sign-ins are considered verified / not applicable.)
+  bool get isEmailPasswordUser =>
+      _auth.currentUser?.providerData
+          .any((p) => p.providerId == 'password') ??
+      false;
+
+  /// True when the current user's email is verified — or when verification
+  /// doesn't apply (Google sign-in, guest, or signed out). The UI uses this to
+  /// decide whether to show the "verify your email" nudge.
+  bool get isEmailVerified {
+    final u = _auth.currentUser;
+    if (u == null || u.isAnonymous) return true;
+    if (!isEmailPasswordUser) return true; // Google etc. — already trusted.
+    return u.emailVerified;
+  }
+
+  /// (Re)send the verification email to the current email/password user.
+  Future<void> sendEmailVerification() async {
+    final u = _auth.currentUser;
+    if (u != null && !u.emailVerified) {
+      await u.sendEmailVerification();
+    }
+  }
+
+  /// Refresh the user from Firebase and return the latest verified state.
+  /// Call after the user taps "I've verified" so the banner can disappear.
+  Future<bool> reloadEmailVerified() async {
+    await _auth.currentUser?.reload();
+    return isEmailVerified;
+  }
+
   // ─── Google Sign-In ─────────────────────────────────────────────────────
 
   /// Sign in with Google. Returns the [UserCredential] on success.
@@ -77,7 +111,7 @@ class AuthService {
         await prefs.setString('user_first_name', name);
       }
 
-      debugPrint('[Auth] Google sign-in success: ${userCredential.user?.uid}');
+      debugPrint('[Auth] Google sign-in success');
       return userCredential;
     } catch (e) {
       debugPrint('[Auth] Google sign-in error: $e');
@@ -94,7 +128,7 @@ class AuthService {
   Future<UserCredential> signInAnonymously() async {
     try {
       final cred = await _auth.signInAnonymously();
-      debugPrint('[Auth] Anonymous sign-in: ${cred.user?.uid}');
+      debugPrint('[Auth] Anonymous sign-in');
       return cred;
     } catch (e) {
       debugPrint('[Auth] Anonymous sign-in error: $e');
@@ -122,7 +156,7 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_first_name', name);
     }
-    debugPrint('[Auth] Linked anonymous → Google: ${cred.user?.uid}');
+    debugPrint('[Auth] Linked anonymous → Google');
     return cred;
   }
 
@@ -144,7 +178,7 @@ class AuthService {
     await cred.user?.reload();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_first_name', displayName);
-    debugPrint('[Auth] Linked anonymous → email: ${cred.user?.uid}');
+    debugPrint('[Auth] Linked anonymous → email');
     return cred;
   }
 
@@ -206,11 +240,19 @@ class AuthService {
       await userCredential.user?.updateDisplayName(displayName);
       await userCredential.user?.reload();
 
+      // Send a verification email (soft gate — account still works, but the UI
+      // nudges the user to verify). Non-fatal if it fails (e.g. offline).
+      try {
+        await userCredential.user?.sendEmailVerification();
+      } catch (e) {
+        debugPrint('[Auth] sendEmailVerification failed (non-fatal): $e');
+      }
+
       // Store locally
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_first_name', displayName);
 
-      debugPrint('[Auth] Email sign-up success: ${userCredential.user?.uid}');
+      debugPrint('[Auth] Email sign-up success');
       return userCredential;
     } catch (e) {
       debugPrint('[Auth] Email sign-up error: $e');
@@ -236,7 +278,7 @@ class AuthService {
         await prefs.setString('user_first_name', name);
       }
 
-      debugPrint('[Auth] Email sign-in success: ${userCredential.user?.uid}');
+      debugPrint('[Auth] Email sign-in success');
       return userCredential;
     } catch (e) {
       debugPrint('[Auth] Email sign-in error: $e');
@@ -251,7 +293,7 @@ class AuthService {
   Future<void> sendPasswordReset(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      debugPrint('[Auth] Password reset sent to: $email');
+      debugPrint('[Auth] Password reset sent');
     } on FirebaseAuthException catch (e) {
       debugPrint('[Auth] Password reset Firebase error: ${e.code} - ${e.message}');
       rethrow;

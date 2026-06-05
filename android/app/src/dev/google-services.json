@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "240344977400",
+    "project_id": "splitsmart-dev",
+    "storage_bucket": "splitsmart-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:240344977400:android:5eebc39fc8f8f41eb5900d",
+        "android_client_info": {
+          "package_name": "com.splitsmart.splitsmart.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "240344977400-84563287ouef24peght22uhg780fkpfo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.splitsmart.splitsmart.dev",
+            "certificate_hash": "b7b372bfdb2f6bd4b184d0ebfe9e3763334cc482"
+          }
+        },
+        {
+          "client_id": "240344977400-97ueergakqp1s2na9to4f9acfm3oiif2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjMjwTXzQIoHqGwyNPqgb2fvznOvgNV_Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "240344977400-97ueergakqp1s2na9to4f9acfm3oiif2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

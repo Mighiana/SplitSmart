@@ -278,7 +278,7 @@ class _AuthScreenState extends State<AuthScreen>
               ),
             ],
           ),
-          child: const Text('💚', style: TextStyle(fontSize: 42)),
+          child: const Icon(Icons.account_balance_wallet_rounded, size: 42, color: Colors.white),
         )
             .animate()
             .scale(

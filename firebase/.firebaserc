@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "splitsmart-3898"
+    "default": "splitsmart-3898",
+    "prod": "splitsmart-3898",
+    "dev": "splitsmart-dev"
   }
 }

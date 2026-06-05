@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../main.dart';
 import '../utils/app_utils.dart';
 import '../utils/theme_utils.dart';
+import '../utils/icon_map.dart';
 
 // ─── Pill Badge ──────────────────────────────────────────────────────────────
 class PillBadge extends StatelessWidget {
@@ -80,10 +82,6 @@ class EmojiBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final codeUnit = emoji.isNotEmpty ? emoji.codeUnitAt(0) : 0;
-    final isLegacyMaterialIcon =
-        emoji.length == 1 && codeUnit >= 0xE000 && codeUnit <= 0xF8FF;
-
     return Container(
       width: size,
       height: size,
@@ -92,13 +90,11 @@ class EmojiBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       alignment: Alignment.center,
-      child: isLegacyMaterialIcon
-          ? Icon(
-              IconData(codeUnit, fontFamily: 'MaterialIcons'),
-              size: size * 0.52,
-              color: AppColors.green,
-            )
-          : Text(emoji, style: TextStyle(fontSize: size * 0.45)),
+      child: Icon(
+        iconForEmoji(emoji),
+        size: size * 0.5,
+        color: AppColors.green,
+      ),
     );
   }
 }
@@ -418,7 +414,7 @@ class _EmptyStateState extends State<EmptyState>
               offset: Offset(0, _float.value),
               child: Transform.scale(
                 scale: _pulse.value,
-                child: Text(widget.icon, style: const TextStyle(fontSize: 48)),
+                child: Icon(iconForEmoji(widget.icon), size: 50, color: TC.primary(context)),
               ),
             ),
             const SizedBox(height: 16),
@@ -432,6 +428,132 @@ class _EmptyStateState extends State<EmptyState>
             Text(widget.subtitle,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: TC.text2(context))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Rich Empty State (art + pills + CTA + ghost) ──────────────────────────────
+class EmptyPill {
+  final String emoji;
+  final String label;
+  final VoidCallback? onTap;
+  const EmptyPill(this.emoji, this.label, {this.onTap});
+}
+
+class RichEmptyState extends StatelessWidget {
+  final String art;
+  final String title;
+  final String desc;
+  final String? ctaLabel;
+  final VoidCallback? onCta;
+  final String? ghostLabel;
+  final VoidCallback? onGhost;
+  final List<EmptyPill>? pills;
+
+  const RichEmptyState({
+    super.key,
+    required this.art,
+    required this.title,
+    required this.desc,
+    this.ctaLabel,
+    this.onCta,
+    this.ghostLabel,
+    this.onGhost,
+    this.pills,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(36, 24, 36, 40),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 112, height: 112,
+              decoration: BoxDecoration(
+                color: TC.primaryPale(context),
+                borderRadius: BorderRadius.circular(32),
+              ),
+              alignment: Alignment.center,
+              child: Icon(iconForEmoji(art), size: 52, color: TC.primary(context)),
+            ).animate().fadeIn(duration: 300.ms).scale(begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
+            const SizedBox(height: 24),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: TC.gloock(context, fontSize: 22, color: TC.text(context), letterSpacing: -0.2))
+                .animate().fadeIn(delay: 80.ms, duration: 320.ms),
+            const SizedBox(height: 10),
+            Text(desc,
+                textAlign: TextAlign.center,
+                style: TC.geist(context, fontSize: 14, color: TC.text2(context), height: 1.6))
+                .animate().fadeIn(delay: 120.ms, duration: 320.ms),
+            if (pills != null && pills!.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
+                children: pills!.map((p) => GestureDetector(
+                  onTap: p.onTap == null ? null : () { HapticFeedback.selectionClick(); p.onTap!(); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: TC.card(context),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: TC.border(context)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(iconForEmoji(p.emoji), size: 15, color: TC.primaryMd(context)),
+                        const SizedBox(width: 6),
+                        Text(p.label,
+                            style: TC.geist(context, fontSize: 13, fontWeight: FontWeight.w500, color: TC.text(context))),
+                      ],
+                    ),
+                  ),
+                )).toList(),
+              ).animate().fadeIn(delay: 160.ms, duration: 340.ms),
+            ],
+            if (ctaLabel != null) ...[
+              const SizedBox(height: 28),
+              GestureDetector(
+                onTap: () { HapticFeedback.mediumImpact(); onCta?.call(); },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  decoration: BoxDecoration(
+                    color: TC.primary(context),
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [BoxShadow(color: TC.primaryGlow(context), blurRadius: 18, offset: const Offset(0, 6))],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('+  $ctaLabel',
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+              ).animate().fadeIn(delay: 200.ms, duration: 340.ms),
+            ],
+            if (ghostLabel != null) ...[
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () { HapticFeedback.lightImpact(); onGhost?.call(); },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: TC.border(context), width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(ghostLabel!,
+                      style: TC.geist(context, fontSize: 14, fontWeight: FontWeight.w600, color: TC.text2(context))),
+                ),
+              ).animate().fadeIn(delay: 240.ms, duration: 340.ms),
+            ],
           ],
         ),
       ),
@@ -549,6 +671,156 @@ class ReceiptViewer extends StatelessWidget {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Count-Up Number ──────────────────────────────────────────────────────────
+/// Animates a numeric value, smoothly tweening from the previously shown value
+/// to [value] whenever it changes. [builder] receives the interpolated value so
+/// the caller controls formatting (currency symbol, decimals) and text style.
+class CountUpText extends StatelessWidget {
+  final double value;
+  final Duration duration;
+  final Curve curve;
+  final Widget Function(BuildContext context, double value) builder;
+
+  const CountUpText({
+    super.key,
+    required this.value,
+    required this.builder,
+    this.duration = const Duration(milliseconds: 650),
+    this.curve = Curves.easeOutCubic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: value, end: value),
+      duration: duration,
+      curve: curve,
+      builder: (ctx, v, _) => builder(ctx, v),
+    );
+  }
+}
+
+// ─── Shimmer Skeletons ────────────────────────────────────────────────────────
+/// A single shimmering placeholder block used while data loads.
+class ShimmerBox extends StatefulWidget {
+  final double? width;
+  final double height;
+  final double radius;
+  const ShimmerBox({
+    super.key,
+    this.width,
+    this.height = 16,
+    this.radius = 8,
+  });
+
+  @override
+  State<ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<ShimmerBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = TC.border(context).withValues(alpha: 0.35);
+    final hi = TC.border(context).withValues(alpha: 0.12);
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (ctx, _) {
+        final t = _c.value;
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            gradient: LinearGradient(
+              begin: Alignment(-1 - 2 * (1 - t), 0),
+              end: Alignment(1 - 2 * (1 - t) + 2, 0),
+              colors: [base, hi, base],
+              stops: const [0.35, 0.5, 0.65],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A card-shaped skeleton placeholder matching the app's card style.
+class SkeletonCard extends StatelessWidget {
+  final double height;
+  const SkeletonCard({super.key, this.height = 80});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TC.border(context)),
+      ),
+      child: const Row(
+        children: [
+          ShimmerBox(width: 44, height: 44, radius: 12),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShimmerBox(width: 140, height: 13),
+                SizedBox(height: 8),
+                ShimmerBox(width: 90, height: 11),
+              ],
+            ),
+          ),
+          SizedBox(width: 14),
+          ShimmerBox(width: 56, height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+/// A vertical stack of [count] skeleton cards for list placeholders.
+class SkeletonList extends StatelessWidget {
+  final int count;
+  final double itemHeight;
+  final EdgeInsetsGeometry padding;
+  const SkeletonList({
+    super.key,
+    this.count = 5,
+    this.itemHeight = 80,
+    this.padding = const EdgeInsets.symmetric(horizontal: 20),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Column(
+        children: [
+          for (int i = 0; i < count; i++) ...[
+            SkeletonCard(height: itemHeight),
+            if (i < count - 1) const SizedBox(height: 12),
+          ],
+        ],
       ),
     );
   }

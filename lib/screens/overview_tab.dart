@@ -9,6 +9,7 @@ import '../utils/app_utils.dart';
 import '../l10n/app_localizations.dart';
 import 'transaction_type_screen.dart';
 import 'personal_charts_screen.dart';
+import '../utils/icon_map.dart';
 
 // ─── Filter enum ────────────────────────────────────────────────────────────
 enum _OvTab { all, personal, groups }
@@ -117,8 +118,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     return Scaffold(
       backgroundColor: TC.bg(context),
       body: SafeArea(
-        child: ListView(
-          physics: const BouncingScrollPhysics(),
+        child: RefreshIndicator(
+          onRefresh: () => context.read<AppState>().refresh(),
+          color: TC.primary(context),
+          backgroundColor: TC.card(context),
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.only(bottom: 100),
           children: [
             _buildHeader(context, isDark, curFlag, selectedCur, dateLabel)
@@ -151,6 +157,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 16),
           ],
         ),
+        ),
       ),
     );
   }
@@ -176,11 +183,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             (c) => c.icon == top.key,
             orElse: () => const CategoryItem('', 'Other', ''),
           );
+    final topLabel = topCat?.label ?? 'Other';
     final story = totalExpense <= 0
         ? 'No spending recorded for this range yet.'
         : top == null
             ? 'Your spending is ready for review.'
-            : '${topCat?.label ?? 'Other'} is your top category at ${totalExpense > 0 ? (top.value / totalExpense * 100).round() : 0}% of spending.';
+            : topLabel == 'Other'
+                // Everything is uncategorised — a "100% Other" stat is useless.
+                ? 'Tip: set a category on your expenses to see where your money goes.'
+                : '$topLabel is your top category at ${(top.value / totalExpense * 100).round()}% of spending.';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -428,9 +439,16 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
     // Normalise slices so they ALWAYS sum to 1.0 — eliminates any white gap
     final sliceTotal = displayCats.fold(0.0, (s, e) => s + e.value);
+    final visibleCats = displayCats.where((e) => e.value > 0).toList();
+    // A lone "Other" ring looks dull/grey — tint a single slice with the brand
+    // colour instead so the donut still reads as a chart.
     final donutSlices = sliceTotal > 0
-        ? displayCats.where((e) => e.value > 0)
-            .map((e) => _DonutSlice(value: e.value / sliceTotal, color: _getCatColor(e.key)))
+        ? visibleCats
+            .map((e) => _DonutSlice(
+                value: e.value / sliceTotal,
+                color: (visibleCats.length == 1 && e.key == 'Other')
+                    ? TC.primary(context)
+                    : _getCatColor(e.key)))
             .toList()
         : <_DonutSlice>[];
 
@@ -483,9 +501,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 final pct = total > 0 ? (e.value/total*100) : 0.0;
                 final catName = e.key == 'Other' ? 'Other' : AppState.expenseCategories.firstWhere((x) => x.icon == e.key, orElse: () => const CategoryItem('','Other','')).label;
                 final cc = _getCatColor(e.key);
-                final iconWidget = e.key == 'Other' 
-                  ? Icon(Icons.more_horiz, size: 14, color: cc) 
-                  : Text(e.key, style: const TextStyle(fontSize: 14));
+                final iconWidget = e.key == 'Other'
+                  ? Icon(Icons.more_horiz, size: 14, color: cc)
+                  : Icon(iconForEmoji(e.key), size: 15, color: cc);
                 return Padding(padding: const EdgeInsets.only(bottom: 10), child: Row(children: [
                   Container(width: 28, height: 28, decoration: BoxDecoration(color: cc.withValues(alpha:0.15), borderRadius: BorderRadius.circular(8)), alignment: Alignment.center,
                     child: iconWidget),
@@ -545,11 +563,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final maxVal = [...incData, ...expData].fold(0.0, (m,v) => v > m ? v : m);
     final incRatio = (income + expense) > 0 ? (income / (income + expense)) : 0.0;
     final expRatio = (income + expense) > 0 ? (expense / (income + expense)) : 0.0;
+    void openCharts() {
+      HapticFeedback.selectionClick();
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const MoneyChartsScreen()));
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // Income vs Expense
-        Expanded(child: Container(
+        Expanded(child: GestureDetector(onTap: openCharts, child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(18),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))]),
@@ -601,17 +623,22 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   ]),
             ),
           ]),
-        )),
+        ))),
         const SizedBox(width: 12),
         // Monthly Trend
-        Expanded(child: Container(
+        Expanded(child: GestureDetector(onTap: openCharts, child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: TC.card(context), borderRadius: BorderRadius.circular(18),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark?0.15:0.05), blurRadius: 10, offset: const Offset(0,3))]),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Monthly Trend', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context))),
-              Text('Selected Period', style: TextStyle(fontSize: 11, color: TC.text3(context), fontWeight: FontWeight.w500)),
+              Row(children: [
+                Expanded(child: Text('Monthly Trend', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TC.text(context)))),
+                Icon(Icons.bar_chart_rounded, size: 15, color: TC.primary(context)),
+                const SizedBox(width: 2),
+                Icon(Icons.chevron_right_rounded, size: 15, color: TC.text3(context)),
+              ]),
+              Text('Tap for detailed charts', style: TextStyle(fontSize: 11, color: TC.text3(context), fontWeight: FontWeight.w500)),
               const SizedBox(height: 6),
               Row(children: [
                 Container(width: 14, height: 2, decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(1))),
@@ -637,7 +664,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             else
               const SizedBox.shrink(),
           ]),
-        )),
+        ))),
       ])),
     );
   }
@@ -674,7 +701,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               alignment: Alignment.center,
               child: e.key == 'Other'
                   ? Icon(Icons.more_horiz_rounded, size: 18, color: cc)
-                  : Text(e.key, style: const TextStyle(fontSize: 18)),
+                  : Icon(iconForEmoji(e.key), size: 18, color: cc),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -1151,15 +1178,47 @@ class _TrendPainter extends CustomPainter {
 
     void drawLine(List<double> data, Color color) {
       if (data.isEmpty) return;
-      final path = Path()..moveTo(toX(0), toY(data[0]));
-      for (int i = 1; i < data.length; i++) {
-        path.lineTo(toX(i), toY(data[i]));
+      final pts = [for (int i = 0; i < data.length; i++) Offset(toX(i), toY(data[i]))];
+
+      // Smooth curve through the points (horizontal-tangent cubic).
+      final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+      for (int i = 1; i < pts.length; i++) {
+        final p0 = pts[i - 1], p1 = pts[i];
+        final midX = (p0.dx + p1.dx) / 2;
+        line.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
       }
-      canvas.drawPath(path, Paint()..color=color..strokeWidth=2..style=PaintingStyle.stroke..strokeJoin=StrokeJoin.round);
-      for (int i = 0; i < data.length; i++) {
-        canvas.drawCircle(Offset(toX(i), toY(data[i])), 3, Paint()..color=Colors.white..style=PaintingStyle.fill);
-        canvas.drawCircle(Offset(toX(i), toY(data[i])), 3, Paint()..color=color..strokeWidth=1.5..style=PaintingStyle.stroke);
-      }
+
+      // Soft gradient area fill under the curve.
+      final baseY = pad.top + H;
+      final fill = Path.from(line)
+        ..lineTo(pts.last.dx, baseY)
+        ..lineTo(pts.first.dx, baseY)
+        ..close();
+      canvas.drawPath(
+        fill,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.0)],
+          ).createShader(Rect.fromLTWH(pad.left, pad.top, W, H)),
+      );
+
+      // The line itself.
+      canvas.drawPath(
+        line,
+        Paint()
+          ..color = color
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round,
+      );
+
+      // A single dot on the latest point only (cleaner than dotting every node).
+      final last = pts.last;
+      canvas.drawCircle(last, 3.5, Paint()..color = Colors.white..style = PaintingStyle.fill);
+      canvas.drawCircle(last, 3.5, Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke);
     }
 
     drawLine(income, AppColors.green);

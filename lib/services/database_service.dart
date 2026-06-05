@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 13,
+      version: 18,
       onCreate: _create,
       onUpgrade: _upgrade,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
@@ -51,33 +51,39 @@ class DatabaseService {
         currency     TEXT    NOT NULL DEFAULT "USD",
         sym          TEXT    NOT NULL DEFAULT "\$",
         is_archived  INTEGER NOT NULL DEFAULT 0,
-        firestore_id TEXT
+        firestore_id TEXT,
+        created_by   TEXT
       )''');
 
     // group members
     batch.execute('''
       CREATE TABLE group_members (
-        id       INTEGER PRIMARY KEY AUTOINCREMENT,
-        group_id INTEGER NOT NULL,
-        name     TEXT    NOT NULL,
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id  INTEGER NOT NULL,
+        name      TEXT    NOT NULL,
+        member_id TEXT,
+        uid       TEXT,
+        is_guest  INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
       )''');
 
     // expenses
     batch.execute('''
       CREATE TABLE expenses (
-        id           INTEGER PRIMARY KEY,
-        group_id     INTEGER NOT NULL,
-        desc         TEXT    NOT NULL,
-        amount       REAL    NOT NULL,
-        cat          TEXT    NOT NULL DEFAULT "🍽️",
-        paid_by      TEXT    NOT NULL,
-        date         TEXT    NOT NULL,
-        receipt      INTEGER NOT NULL DEFAULT 0,
-        receipt_path TEXT,
-        split_json   TEXT,
-        created_by   TEXT,
-        updated_by   TEXT,
+        id             INTEGER PRIMARY KEY,
+        group_id       INTEGER NOT NULL,
+        desc           TEXT    NOT NULL,
+        amount         REAL    NOT NULL,
+        cat            TEXT    NOT NULL DEFAULT "🍽️",
+        paid_by        TEXT    NOT NULL,
+        paid_by_id     TEXT,
+        date           TEXT    NOT NULL,
+        receipt        INTEGER NOT NULL DEFAULT 0,
+        receipt_path   TEXT,
+        split_json     TEXT,
+        split_ids_json TEXT,
+        created_by     TEXT,
+        updated_by     TEXT,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
       )''');
 
@@ -88,6 +94,8 @@ class DatabaseService {
         group_id  INTEGER NOT NULL,
         from_m    TEXT    NOT NULL,
         to_m      TEXT    NOT NULL,
+        from_id   TEXT,
+        to_id     TEXT,
         amount    REAL    NOT NULL,
         method    TEXT    NOT NULL DEFAULT "Cash",
         date      TEXT    NOT NULL,
@@ -105,7 +113,8 @@ class DatabaseService {
         currency     TEXT    NOT NULL,
         sym          TEXT    NOT NULL,
         date         TEXT    NOT NULL,
-        receipt_path TEXT
+        receipt_path TEXT,
+        subcat       TEXT
       )''');
 
     // wallets — one row per currency code (Personal Finance)
@@ -165,7 +174,21 @@ class DatabaseService {
         title         TEXT    NOT NULL,
         target_amount REAL    NOT NULL,
         saved_amount  REAL    NOT NULL DEFAULT 0,
-        target_date   TEXT
+        target_date   TEXT,
+        icon          TEXT,
+        color         TEXT
+      )''');
+
+    // named budgets (Phase A)
+    batch.execute('''
+      CREATE TABLE budgets (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        name             TEXT    NOT NULL,
+        period           TEXT    NOT NULL DEFAULT 'monthly',
+        amount           REAL    NOT NULL,
+        currency         TEXT    NOT NULL,
+        categories       TEXT,
+        notify_overspent INTEGER NOT NULL DEFAULT 1
       )''');
 
     await batch.commit(noResult: true);
@@ -282,6 +305,63 @@ class DatabaseService {
         await db.execute('ALTER TABLE groups ADD COLUMN firestore_id TEXT');
       } catch (e) { debugPrint('[DB] migration v13 groups.firestore_id failed: $e'); }
     }
+    if (oldVersion < 14) {
+      // Saving goals: optional custom icon (emoji) and colour (hex string).
+      try {
+        await db.execute('ALTER TABLE saving_goals ADD COLUMN icon TEXT');
+        await db.execute('ALTER TABLE saving_goals ADD COLUMN color TEXT');
+      } catch (e) { debugPrint('[DB] migration v14 saving_goals icon/color failed: $e'); }
+    }
+    if (oldVersion < 15) {
+      // Named budgets (Phase A).
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS budgets (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            name             TEXT    NOT NULL,
+            period           TEXT    NOT NULL DEFAULT 'monthly',
+            amount           REAL    NOT NULL,
+            currency         TEXT    NOT NULL,
+            categories       TEXT,
+            notify_overspent INTEGER NOT NULL DEFAULT 1
+          )''');
+      } catch (e) { debugPrint('[DB] migration v15 budgets failed: $e'); }
+    }
+    if (oldVersion < 16) {
+      // Stable member-id keying (fix duplicate-name balance corruption).
+      // All additive + nullable: existing rows read back null → engine falls
+      // back to name-based behavior. No data rewrite.
+      Future<void> addCol(String sql) async {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          debugPrint('[DB] migration v16 add column skipped: $e');
+        }
+      }
+      await addCol('ALTER TABLE group_members ADD COLUMN member_id TEXT');
+      await addCol('ALTER TABLE group_members ADD COLUMN uid TEXT');
+      await addCol('ALTER TABLE group_members ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
+      await addCol('ALTER TABLE expenses ADD COLUMN paid_by_id TEXT');
+      await addCol('ALTER TABLE expenses ADD COLUMN split_ids_json TEXT');
+      await addCol('ALTER TABLE settlements ADD COLUMN from_id TEXT');
+      await addCol('ALTER TABLE settlements ADD COLUMN to_id TEXT');
+    }
+    if (oldVersion < 17) {
+      // Group creator uid (creator-only management). Additive + nullable.
+      try {
+        await db.execute('ALTER TABLE groups ADD COLUMN created_by TEXT');
+      } catch (e) {
+        debugPrint('[DB] migration v17 groups.created_by failed: $e');
+      }
+    }
+    if (oldVersion < 18) {
+      // Transaction sub-category key (sub:...) for granular budgets. Nullable.
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN subcat TEXT');
+      } catch (e) {
+        debugPrint('[DB] migration v18 transactions.subcat failed: $e');
+      }
+    }
   }
 
   // ─── Groups ───────────────────────────────────────────────────────────────
@@ -299,6 +379,20 @@ class DatabaseService {
       final mRows = await db.query('group_members',
           where: 'group_id = ?', whereArgs: [gId]);
       final members = mRows.map((r) => r['name'] as String).toList();
+      // Roster only when member ids were persisted (v16+); else leave empty so
+      // the engine falls back to name-based behavior for legacy data.
+      final roster = <GroupMember>[];
+      for (final r in mRows) {
+        final mid = r['member_id'] as String?;
+        if (mid != null && mid.isNotEmpty) {
+          roster.add(GroupMember(
+            id: mid,
+            name: r['name'] as String,
+            uid: r['uid'] as String?,
+            isGuest: (r['is_guest'] as int? ?? 0) == 1,
+          ));
+        }
+      }
 
       // expenses
       final eRows = await db.query('expenses',
@@ -310,16 +404,24 @@ class DatabaseService {
           final raw = jsonDecode(sj) as Map<String, dynamic>;
           splits = raw.map((k, v) => MapEntry(k, (v as num).toDouble()));
         }
+        Map<String, double>? splitIds;
+        final sij = r['split_ids_json'] as String?;
+        if (sij != null) {
+          final raw = jsonDecode(sij) as Map<String, dynamic>;
+          splitIds = raw.map((k, v) => MapEntry(k, (v as num).toDouble()));
+        }
         return ExpenseData(
           id:          r['id']           as int,
           desc:        r['desc']         as String,
           amount:      (r['amount'] as num).toDouble(),
           cat:         r['cat']          as String,
           paidBy:      r['paid_by']      as String,
+          paidById:    r['paid_by_id']   as String?,
           date:        r['date']         as String,
           receipt:     (r['receipt'] as int) == 1,
           receiptPath: r['receipt_path'] as String?,
           splits:      splits,
+          splitIds:    splitIds,
           createdBy:   r['created_by'] as String?,
           updatedBy:   r['updated_by'] as String?,
         );
@@ -331,6 +433,8 @@ class DatabaseService {
       final settlements = sRows.map((r) => SettlementData(
             from:   r['from_m'] as String,
             to:     r['to_m']   as String,
+            fromId: r['from_id'] as String?,
+            toId:   r['to_id']   as String?,
             amount: (r['amount'] as num).toDouble(),
             method: r['method'] as String,
             date:   r['date']   as String,
@@ -343,14 +447,50 @@ class DatabaseService {
         currency:    row['currency']    as String,
         sym:         row['sym']         as String,
         members:     members,
+        roster:      roster,
         expenses:    expenses,
         settlements: settlements,
         isArchived:  (row['is_archived'] as int? ?? 0) == 1,
+        createdBy:   row['created_by'] as String?,
         firestoreId: row['firestore_id'] as String?,
       ));
     }
     return groups;
   }
+
+  /// Member rows for [group_members], preferring the canonical roster (id+name)
+  /// and falling back to plain names for legacy groups with no roster.
+  List<Map<String, Object?>> _memberRows(GroupData g) {
+    if (g.roster.isNotEmpty) {
+      return g.roster
+          .map((m) => {
+                'group_id': g.id,
+                'name': m.name,
+                'member_id': m.id,
+                'uid': m.uid,
+                'is_guest': m.isGuest ? 1 : 0,
+              })
+          .toList();
+    }
+    return g.members.map((name) => {'group_id': g.id, 'name': name}).toList();
+  }
+
+  Map<String, Object?> _expenseRow(int groupId, ExpenseData e) => {
+        'id': e.id,
+        'group_id': groupId,
+        'desc': e.desc,
+        'amount': e.amount,
+        'cat': e.cat,
+        'paid_by': e.paidBy,
+        'paid_by_id': e.paidById,
+        'date': e.date,
+        'receipt': e.receipt ? 1 : 0,
+        'receipt_path': e.receiptPath,
+        'split_json': e.splitsJson,
+        'split_ids_json': e.splitIdsJson,
+        'created_by': e.createdBy,
+        'updated_by': e.updatedBy,
+      };
 
   Future<void> insertGroup(GroupData g) async {
     final db = await _database;
@@ -362,11 +502,13 @@ class DatabaseService {
       'sym':          g.sym,
       'is_archived':  g.isArchived ? 1 : 0,
       'firestore_id': g.firestoreId,
+      'created_by':   g.createdBy,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-    // members
-    for (final name in g.members) {
-      await db.insert('group_members', {'group_id': g.id, 'name': name});
+    // members (clear any stale rows first so re-insert is idempotent)
+    await db.delete('group_members', where: 'group_id = ?', whereArgs: [g.id]);
+    for (final row in _memberRows(g)) {
+      await db.insert('group_members', row);
     }
   }
 
@@ -391,32 +533,23 @@ class DatabaseService {
           'sym':          g.sym,
           'is_archived':  g.isArchived ? 1 : 0,
           'firestore_id': g.firestoreId,
+          'created_by':   g.createdBy,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-        for (final m in g.members) {
-          await txn.insert('group_members', {'group_id': g.id, 'name': m});
+        for (final row in _memberRows(g)) {
+          await txn.insert('group_members', row);
         }
         for (final e in g.expenses) {
-          await txn.insert('expenses', {
-            'id':           e.id,
-            'group_id':     g.id,
-            'desc':         e.desc,
-            'amount':       e.amount,
-            'cat':          e.cat,
-            'paid_by':      e.paidBy,
-            'date':         e.date,
-            'receipt':      e.receipt ? 1 : 0,
-            'receipt_path': e.receiptPath,
-            'split_json':   e.splitsJson,
-            'created_by':   e.createdBy,
-            'updated_by':   e.updatedBy,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert('expenses', _expenseRow(g.id, e),
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
         for (final s in g.settlements) {
           await txn.insert('settlements', {
             'group_id': g.id,
             'from_m':   s.from,
             'to_m':     s.to,
+            'from_id':  s.fromId,
+            'to_id':    s.toId,
             'amount':   s.amount,
             'method':   s.method,
             'date':     s.date,
@@ -437,8 +570,8 @@ class DatabaseService {
 
       // Replace members
       await txn.delete('group_members', where: 'group_id = ?', whereArgs: [g.id]);
-      for (final name in g.members) {
-        await txn.insert('group_members', {'group_id': g.id, 'name': name});
+      for (final row in _memberRows(g)) {
+        await txn.insert('group_members', row);
       }
     });
   }
@@ -458,37 +591,14 @@ class DatabaseService {
 
   Future<void> insertExpense(int groupId, ExpenseData e) async {
     final db = await _database;
-    await db.insert('expenses', {
-      'id':           e.id,
-      'group_id':     groupId,
-      'desc':         e.desc,
-      'amount':       e.amount,
-      'cat':          e.cat,
-      'paid_by':      e.paidBy,
-      'date':         e.date,
-      'receipt':      e.receipt ? 1 : 0,
-      'receipt_path': e.receiptPath,
-      'split_json':   e.splitsJson,
-      'created_by':   e.createdBy,
-      'updated_by':   e.updatedBy,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('expenses', _expenseRow(groupId, e),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> updateExpense(int groupId, ExpenseData e) async {
     final db = await _database;
-    await db.update('expenses', {
-      'group_id':     groupId,
-      'desc':         e.desc,
-      'amount':       e.amount,
-      'cat':          e.cat,
-      'paid_by':      e.paidBy,
-      'date':         e.date,
-      'receipt':      e.receipt ? 1 : 0,
-      'receipt_path': e.receiptPath,
-      'split_json':   e.splitsJson,
-      'created_by':   e.createdBy,
-      'updated_by':   e.updatedBy,
-    }, where: 'id = ?', whereArgs: [e.id]);
+    final row = _expenseRow(groupId, e)..remove('id');
+    await db.update('expenses', row, where: 'id = ?', whereArgs: [e.id]);
   }
 
   Future<void> deleteExpense(int id) async {
@@ -504,6 +614,8 @@ class DatabaseService {
       'group_id': groupId,
       'from_m':   s.from,
       'to_m':     s.to,
+      'from_id':  s.fromId,
+      'to_id':    s.toId,
       'amount':   s.amount,
       'method':   s.method,
       'date':     s.date,
@@ -525,6 +637,7 @@ class DatabaseService {
           sym:         r['sym']          as String,
           date:        r['date']         as String,
           receiptPath: r['receipt_path'] as String?,
+          subcat:      r['subcat']       as String?,
         )).toList();
   }
 
@@ -541,8 +654,9 @@ class DatabaseService {
         'sym':          t.sym,
         'date':         t.date,
         'receipt_path': t.receiptPath,
+        'subcat':       t.subcat,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-      
+
       await txn.insert('wallets', {'currency': t.currency, 'balance': newBal}, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
@@ -559,6 +673,7 @@ class DatabaseService {
       'sym':          t.sym,
       'date':         t.date,
       'receipt_path': t.receiptPath,
+      'subcat':       t.subcat,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -574,6 +689,7 @@ class DatabaseService {
         'sym':          t.sym,
         'date':         t.date,
         'receipt_path': t.receiptPath,
+        'subcat':       t.subcat,
       }, where: 'id = ?', whereArgs: [t.id]);
       
       await txn.insert('wallets', {'currency': oldCur, 'balance': revertedBal}, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -787,6 +903,33 @@ class DatabaseService {
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
+  }
+
+  // ─── Budgets (named, Phase A) ───────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> loadBudgets() async {
+    final db = await _database;
+    try {
+      return await db.query('budgets', orderBy: 'id DESC');
+    } catch (e) {
+      debugPrint('[DB] loadBudgets failed: $e');
+      return [];
+    }
+  }
+
+  Future<int> insertBudget(Map<String, dynamic> data) async {
+    final db = await _database;
+    return await db.insert('budgets', data);
+  }
+
+  Future<void> updateBudget(int id, Map<String, dynamic> data) async {
+    final db = await _database;
+    await db.update('budgets', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteBudget(int id) async {
+    final db = await _database;
+    await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
   }
 
   // ─── Saving Goals ─────────────────────────────────────────────────────────

@@ -7,11 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
+import '../utils/icon_map.dart';
 import '../widgets/common_widgets.dart';
 import '../services/analytics_service.dart';
 import '../services/firestore_service.dart';
 import 'group_detail_screen.dart';
 import 'new_group_screen.dart';
+import 'join_group_screen.dart';
 import 'qr_scan_screen.dart';
 import 'qr_share_screen.dart';
 
@@ -334,171 +336,20 @@ class _GroupsTabState extends State<GroupsTab> {
 
               // LIST
               if (_tab == 'active' && active.isEmpty)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1C2D25) : const Color(0xFFEAFBF4),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF264F3D) : const Color(0xFFB6F0D6),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+                SizedBox(
+                  height: 520,
+                  child: RichEmptyState(
+                    art: '\u{1F465}',
+                    title: 'No groups yet',
+                    desc: 'Create a group for trips, rent, or dinners. Everyone sees who owes what.',
+                    ctaLabel: 'Create a Group',
+                    onCta: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const NewGroupScreen())),
+                    ghostLabel: '\u{1F517}  Join with Invite Code',
+                    onGhost: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const JoinGroupScreen())),
                   ),
-                  child: Column(
-                    children: [
-                      // ── Stacked avatars illustration ──
-                      SizedBox(
-                        height: 72,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Left avatar
-                            const Positioned(
-                              left: 0,
-                              right: 60,
-                              child: _AvatarCircleIllustration(
-                                color: Color(0xFF6EE7B7),
-                                icon: Icons.person_rounded,
-                                iconColor: Color(0xFF059669),
-                                size: 54,
-                              ),
-                            ),
-                            // Right avatar
-                            const Positioned(
-                              left: 60,
-                              right: 0,
-                              child: _AvatarCircleIllustration(
-                                color: Color(0xFFBBF7D0),
-                                icon: Icons.person_rounded,
-                                iconColor: Color(0xFF16A34A),
-                                size: 54,
-                              ),
-                            ),
-                            // Center avatar (on top)
-                            const _AvatarCircleIllustration(
-                              color: Color(0xFF22C55E),
-                              icon: Icons.person_rounded,
-                              iconColor: Colors.white,
-                              size: 66,
-                              border: 3,
-                            ),
-                            // Green + badge
-                            Positioned(
-                              right: 58,
-                              top: 2,
-                              child: Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF16A34A),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                ),
-                                child: const Icon(Icons.add, color: Colors.white, size: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Split with your people',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 19,
-                          height: 1.2,
-                          fontWeight: FontWeight.w800,
-                          color: TC.text(context),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Create a group or scan a QR\nto join an existing circle.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          fontWeight: FontWeight.w500,
-                          color: TC.text2(context),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // ── Buttons row ──
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => const QRScanScreen()));
-                              },
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: TC.card(context),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: TC.border(context), width: 1.4),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.qr_code_scanner_rounded, size: 18, color: Color(0xFF19C98D)),
-                                    const SizedBox(width: 6),
-                                    Text('Scan QR', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context))),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => const NewGroupScreen()));
-                              },
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF08E1A0), Color(0xFF07C887)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF08D894).withValues(alpha: 0.30),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.add_rounded, size: 20, color: Colors.white),
-                                    SizedBox(width: 5),
-                                    Text('New Group', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ).animate().fade().slideY(begin: 0.1, end: 0, delay: 200.ms, duration: 320.ms)
+                )
               else if (_tab == 'archive' && archived.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
@@ -808,7 +659,7 @@ class _GroupsTabState extends State<GroupsTab> {
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Text('🔗', style: TextStyle(fontSize: 22)),
+              leading: Icon(iconForEmoji('🔗'), size: 22, color: TC.primary(context)),
               title: Text('Share Invite Code', style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(context))),
               subtitle: Text('Share code or QR to invite friends', style: TextStyle(color: TC.text2(context))),
               onTap: () {
@@ -1119,7 +970,7 @@ class _GroupCardState extends State<_GroupCard> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       alignment: Alignment.center,
-                      child: Text(g.emoji, style: const TextStyle(fontSize: 26)),
+                      child: Icon(iconForEmoji(g.emoji), size: 26, color: AppColors.green),
                     ),
                   ),
                 ),
@@ -1236,48 +1087,4 @@ class _GroupCardState extends State<_GroupCard> {
     width: 3, height: 3,
     decoration: BoxDecoration(color: TC.text3(ctx), shape: BoxShape.circle),
   );
-}
-
-
-
-// ── Helper: avatar circle for the empty-state illustration ───────────────────
-class _AvatarCircleIllustration extends StatelessWidget {
-  final Color color;
-  final IconData icon;
-  final Color iconColor;
-  final double size;
-  final double border;
-
-  const _AvatarCircleIllustration({
-    required this.color,
-    required this.icon,
-    required this.iconColor,
-    required this.size,
-    this.border = 0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: border > 0
-              ? Border.all(color: Colors.white, width: border)
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(icon, color: iconColor, size: size * 0.52),
-      ),
-    );
-  }
 }

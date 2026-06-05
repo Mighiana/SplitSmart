@@ -5,8 +5,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
+import '../utils/icon_map.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
+import '../widgets/common_widgets.dart';
 import 'add_subscription_screen.dart';
 
 class SubscriptionsScreen extends StatefulWidget {
@@ -19,33 +21,16 @@ class SubscriptionsScreen extends StatefulWidget {
 class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   String _catFilter = 'All';
 
-  String _sym(String code) => AppState.currencies
-      .firstWhere((c) => c.code == code,
-          orElse: () => CurrencyData(code, code, '💰', code))
-      .sym;
+  void _openAddSub(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const AddSubscriptionScreen()));
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final all = state.subscriptions;
-
-    // Monthly totals per currency → dominant currency drives the hero & chart.
-    final monthlyCosts = state.subscriptionMonthlyCostByCurrency;
-    String? domCur;
-    double domTotal = 0;
-    monthlyCosts.forEach((cur, sum) {
-      if (sum >= domTotal) { domTotal = sum; domCur = cur; }
-    });
-    final sym = domCur != null ? _sym(domCur!) : '';
-    final activeCount = all.where((s) => s.isActive).length;
-    final domSubs = domCur != null ? all.where((s) => s.currency == domCur).toList() : <SubscriptionData>[];
-
-    // Category breakdown (dominant currency, monthly-equivalent).
-    final catTotals = <String, double>{};
-    for (final s in domSubs) {
-      catTotals[s.category] = (catTotals[s.category] ?? 0) + s.monthlyEquivalent;
-    }
-    final sortedCats = catTotals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     final cats = <String>['All', ...{for (final s in all) s.category}];
     final shown = _catFilter == 'All' ? all : all.where((s) => s.category == _catFilter).toList();
@@ -56,17 +41,35 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       body: SafeArea(
         bottom: false,
         child: all.isEmpty
-            ? Column(children: [_header(context), const Expanded(child: _EmptySubsState())])
-            : ListView(
+            ? Column(children: [
+                _header(context),
+                Expanded(
+                  child: RichEmptyState(
+                    art: '💳',
+                    title: 'Track your subscriptions',
+                    desc: 'See everything you pay monthly. Catch unused ones before they renew.',
+                    pills: [
+                      EmptyPill('🎵', 'Spotify', onTap: () => _openAddSub(context)),
+                      EmptyPill('📺', 'Netflix', onTap: () => _openAddSub(context)),
+                      EmptyPill('🤖', 'ChatGPT', onTap: () => _openAddSub(context)),
+                      EmptyPill('☁️', 'iCloud', onTap: () => _openAddSub(context)),
+                      EmptyPill('▶️', 'YouTube', onTap: () => _openAddSub(context)),
+                    ],
+                    ctaLabel: 'Add a Subscription',
+                    onCta: () => _openAddSub(context),
+                  ),
+                ),
+              ])
+            : RefreshIndicator(
+                onRefresh: () => context.read<AppState>().refresh(),
+                color: TC.primary(context),
+                backgroundColor: TC.card(context),
+                child: ListView(
                 padding: const EdgeInsets.only(bottom: 32),
-                physics: const BouncingScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics()),
                 children: [
                   _header(context),
-                  _summaryHero(context, sym, domTotal, activeCount)
-                      .animate().fadeIn(duration: 360.ms).slideY(begin: 0.1, curve: Curves.easeOut),
-                  if (sortedCats.isNotEmpty)
-                    _categoryBreakdown(context, sym, domTotal, sortedCats)
-                        .animate().fadeIn(delay: 80.ms, duration: 440.ms),
                   _filterChips(context, cats),
                   ...List.generate(shown.length, (i) {
                     return _subCard(context, state, shown[i])
@@ -76,6 +79,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   }),
                   if (pausedCount > 0) _insightBanner(context, pausedCount).animate().fadeIn(delay: 120.ms),
                 ],
+              ),
               ),
       ),
     );
@@ -93,7 +97,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               width: 38, height: 38,
               decoration: BoxDecoration(color: TC.bg2(context), borderRadius: BorderRadius.circular(13)),
               alignment: Alignment.center,
-              child: Text('←', style: TextStyle(fontSize: 16, color: TC.text(context))),
+              child: Icon(Icons.arrow_back_rounded, size: 18, color: TC.text(context)),
             ),
           ),
           const SizedBox(width: 12),
@@ -122,145 +126,6 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               child: const Text('+ Add', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Summary hero ─────────────────────────────────────────────────────────
-  Widget _summaryHero(BuildContext context, String sym, double total, int activeCount) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        color: TC.primaryPale(context),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(
-                  color: TC.primary(context),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: TC.primaryGlow(context), blurRadius: 14, offset: const Offset(0, 4))],
-                ),
-                alignment: Alignment.center,
-                child: const Text('💳', style: TextStyle(fontSize: 22)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('TOTAL MONTHLY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: TC.text3(context))),
-                    const SizedBox(height: 3),
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(text: '$sym${total.toStringAsFixed(2)}', style: TC.gloock(context, fontSize: 30, color: TC.text(context), letterSpacing: -1)),
-                          TextSpan(text: '/mo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: TC.text3(context))),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            decoration: BoxDecoration(color: TC.surface(context), borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                _heroStat(context, 'Per Year', '$sym${(total * 12).toStringAsFixed(0)}'),
-                _heroDivider(context),
-                _heroStat(context, 'Active', '$activeCount'),
-                _heroDivider(context),
-                _heroStat(context, 'Per Day', '$sym${(total / 30).toStringAsFixed(2)}'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroStat(BuildContext context, String label, String value) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        child: Column(
-          children: [
-            Text(label.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: TC.text3(context))),
-            const SizedBox(height: 2),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(value, style: TC.gloock(context, fontSize: 15, color: TC.text(context))),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _heroDivider(BuildContext context) => Container(width: 1, height: 38, color: TC.border(context));
-
-  // ─── Category breakdown ─────────────────────────────────────────────────────
-  Widget _categoryBreakdown(BuildContext context, String sym, double total, List<MapEntry<String, double>> cats) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: TC.surface(context),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 3, offset: const Offset(0, 1))],
-        border: isDark ? Border.all(color: TC.border(context)) : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Spending by Category', style: TC.gloock(context, fontSize: 16, color: TC.text(context))),
-          const SizedBox(height: 10),
-          ...List.generate(cats.length, (i) {
-            final e = cats[i];
-            final pct = total > 0 ? ((e.value / total) * 100).round() : 0;
-            return Padding(
-              padding: EdgeInsets.only(bottom: i < cats.length - 1 ? 10 : 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(e.key, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: TC.text(context))),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(text: '$sym${e.value.toStringAsFixed(2)} ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text(context))),
-                            TextSpan(text: '($pct%)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: TC.text3(context))),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: LinearProgressIndicator(
-                      value: pct / 100,
-                      minHeight: 4,
-                      backgroundColor: TC.bg2(context),
-                      valueColor: AlwaysStoppedAnimation(TC.primary(context)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
         ],
       ),
     );
@@ -301,7 +166,53 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   Widget _subCard(BuildContext context, AppState state, SubscriptionData s) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final renews = DateFormat('MMM d').format(s.nextBillingDate);
-    return GestureDetector(
+    return Dismissible(
+      key: ValueKey('sub_${s.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        decoration: BoxDecoration(
+          color: TC.erPale(context),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Icon(Icons.delete_outline_rounded, color: TC.er(context), size: 24),
+      ),
+      confirmDismiss: (_) async {
+        HapticFeedback.mediumImpact();
+        return await showDialog<bool>(
+              context: context,
+              builder: (dCtx) => AlertDialog(
+                backgroundColor: TC.card(dCtx),
+                title: Text('Delete ${s.name}?',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, color: TC.text(dCtx))),
+                content: Text(
+                    'This will remove the subscription and cancel its reminders.',
+                    style: TextStyle(color: TC.text2(dCtx))),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, false),
+                    child: Text('Cancel',
+                        style: TextStyle(color: TC.text2(dCtx))),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, true),
+                    child: const Text('Delete',
+                        style: TextStyle(
+                            color: AppColors.red, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      },
+      onDismissed: (_) {
+        NotificationService.cancelForSub(s.id);
+        state.deleteSubscription(s);
+      },
+      child: GestureDetector(
       onTap: () => _showOptions(context, state, s),
       child: AnimatedOpacity(
         opacity: s.isActive ? 1.0 : 0.6,
@@ -321,7 +232,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 width: 48, height: 48,
                 decoration: BoxDecoration(color: TC.bg2(context), borderRadius: BorderRadius.circular(15)),
                 alignment: Alignment.center,
-                child: Text(s.emoji, style: const TextStyle(fontSize: 22)),
+                child: Icon(iconForEmoji(s.emoji), size: 22, color: TC.primary(context)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -365,6 +276,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -384,7 +296,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       decoration: BoxDecoration(color: TC.wnPale(context), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          const Text('💡', style: TextStyle(fontSize: 20)),
+          Icon(iconForEmoji('💡'), size: 20, color: TC.wn(context)),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
@@ -483,32 +395,3 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 }
 
-// ─── Empty state ────────────────────────────────────────────────────────────
-class _EmptySubsState extends StatelessWidget {
-  const _EmptySubsState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              color: TC.primaryPale(context),
-              shape: BoxShape.circle,
-              border: Border.all(color: TC.primary(context).withValues(alpha: 0.25), width: 2),
-            ),
-            alignment: Alignment.center,
-            child: const Text('💳', style: TextStyle(fontSize: 34)),
-          ),
-          const SizedBox(height: 20),
-          Text('No subscriptions yet', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: TC.text(context))),
-          const SizedBox(height: 6),
-          Text('Tap + Add to track Netflix, Spotify…', style: TextStyle(fontSize: 13, color: TC.text2(context))),
-        ],
-      ),
-    );
-  }
-}

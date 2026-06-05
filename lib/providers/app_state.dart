@@ -216,7 +216,7 @@ class AppState extends ChangeNotifier {
 
   static const List<CategoryItem> expenseCategories = [
     CategoryItem('🍽️', 'Food',       '#FF9800', Icons.restaurant_rounded),
-    CategoryItem('🚗', 'Transport',   '#448AFF', Icons.directions_car_rounded),
+    CategoryItem('🚌', 'Transport',   '#448AFF', Icons.directions_bus_rounded),
     CategoryItem('🛒', 'Shopping',    '#FFC107', Icons.shopping_bag_rounded),
     CategoryItem('🎫', 'Activity',    '#E040FB', Icons.local_activity_rounded),
     CategoryItem('💡', 'Bills',       '#00E676', Icons.receipt_long_rounded),
@@ -239,6 +239,110 @@ class AppState extends ChangeNotifier {
     CategoryItem('💰', 'Other',       '#757575', Icons.category_rounded),
   ];
 
+  /// Fixed default sub-categories, keyed by their PARENT category emoji.
+  ///
+  /// Sub keys use the form `sub:<group>:<name>` so they never collide with the
+  /// top-level category emojis and can be stored directly on transactions
+  /// (`TransactionData.subcat`) and budgets (`Budget.categories`). Subs inherit
+  /// their parent's colour.
+  static const Map<String, List<CategoryItem>> subcategories = {
+    '🍽️': [
+      CategoryItem('sub:food:groceries',   'Groceries',    '#FF9800', Icons.local_grocery_store_rounded),
+      CategoryItem('sub:food:restaurant',  'Restaurants',  '#FF9800', Icons.restaurant_menu_rounded),
+      CategoryItem('sub:food:coffee',      'Coffee & Tea', '#FF9800', Icons.local_cafe_rounded),
+      CategoryItem('sub:food:takeout',     'Takeout',      '#FF9800', Icons.takeout_dining_rounded),
+      CategoryItem('sub:food:snacks',      'Snacks',       '#FF9800', Icons.icecream_rounded),
+    ],
+    '🚌': [
+      CategoryItem('sub:transport:fuel',        'Fuel',            '#448AFF', Icons.local_gas_station_rounded),
+      CategoryItem('sub:transport:transit',     'Public Transit',  '#448AFF', Icons.directions_subway_rounded),
+      CategoryItem('sub:transport:taxi',        'Taxi & Rideshare','#448AFF', Icons.local_taxi_rounded),
+      CategoryItem('sub:transport:parking',     'Parking',         '#448AFF', Icons.local_parking_rounded),
+      CategoryItem('sub:transport:maintenance', 'Maintenance',     '#448AFF', Icons.build_rounded),
+    ],
+    '🛒': [
+      CategoryItem('sub:shopping:clothing',    'Clothing',      '#FFC107', Icons.checkroom_rounded),
+      CategoryItem('sub:shopping:electronics', 'Electronics',   '#FFC107', Icons.devices_rounded),
+      CategoryItem('sub:shopping:home',        'Home & Garden', '#FFC107', Icons.chair_rounded),
+      CategoryItem('sub:shopping:gifts',       'Gifts',         '#FFC107', Icons.card_giftcard_rounded),
+      CategoryItem('sub:shopping:beauty',      'Personal Care', '#FFC107', Icons.spa_rounded),
+    ],
+    '🎫': [
+      CategoryItem('sub:activity:movies',  'Movies',  '#E040FB', Icons.movie_rounded),
+      CategoryItem('sub:activity:events',  'Events',  '#E040FB', Icons.confirmation_number_rounded),
+      CategoryItem('sub:activity:sports',  'Sports',  '#E040FB', Icons.sports_basketball_rounded),
+      CategoryItem('sub:activity:hobbies', 'Hobbies', '#E040FB', Icons.palette_rounded),
+    ],
+    '💡': [
+      CategoryItem('sub:bills:electricity',   'Electricity',   '#00E676', Icons.bolt_rounded),
+      CategoryItem('sub:bills:water',         'Water',         '#00E676', Icons.water_drop_rounded),
+      CategoryItem('sub:bills:internet',      'Internet',      '#00E676', Icons.wifi_rounded),
+      CategoryItem('sub:bills:phone',         'Phone',         '#00E676', Icons.phone_iphone_rounded),
+      CategoryItem('sub:bills:subscriptions', 'Subscriptions', '#00E676', Icons.subscriptions_rounded),
+    ],
+    '🏠': [
+      CategoryItem('sub:rent:rent',      'Rent',      '#FF9100', Icons.home_rounded),
+      CategoryItem('sub:rent:mortgage',  'Mortgage',  '#FF9100', Icons.account_balance_rounded),
+      CategoryItem('sub:rent:utilities', 'Utilities', '#FF9100', Icons.handyman_rounded),
+      CategoryItem('sub:rent:insurance', 'Insurance', '#FF9100', Icons.shield_rounded),
+    ],
+    '🎉': [
+      CategoryItem('sub:fun:nightlife', 'Nightlife', '#7C4DFF', Icons.nightlife_rounded),
+      CategoryItem('sub:fun:games',     'Games',     '#7C4DFF', Icons.sports_esports_rounded),
+      CategoryItem('sub:fun:parties',   'Parties',   '#7C4DFF', Icons.celebration_rounded),
+    ],
+    '💊': [
+      CategoryItem('sub:health:pharmacy',  'Pharmacy', '#1DE9B6', Icons.medication_rounded),
+      CategoryItem('sub:health:doctor',    'Doctor',   '#1DE9B6', Icons.medical_services_rounded),
+      CategoryItem('sub:health:fitness',   'Fitness',  '#1DE9B6', Icons.fitness_center_rounded),
+      CategoryItem('sub:health:insurance', 'Insurance','#1DE9B6', Icons.health_and_safety_rounded),
+    ],
+    '📚': [
+      CategoryItem('sub:education:tuition', 'Tuition', '#546E7A', Icons.school_rounded),
+      CategoryItem('sub:education:books',   'Books',   '#546E7A', Icons.menu_book_rounded),
+      CategoryItem('sub:education:courses', 'Courses', '#546E7A', Icons.cast_for_education_rounded),
+    ],
+    '✈️': [
+      CategoryItem('sub:travel:flights',   'Flights',   '#00B0FF', Icons.flight_rounded),
+      CategoryItem('sub:travel:hotels',    'Hotels',    '#00B0FF', Icons.hotel_rounded),
+      CategoryItem('sub:travel:transport', 'Transport', '#00B0FF', Icons.directions_car_rounded),
+      CategoryItem('sub:travel:food',      'Food',      '#00B0FF', Icons.restaurant_rounded),
+    ],
+  };
+
+  /// Sub-categories for a parent category emoji (empty if none defined).
+  static List<CategoryItem> subsFor(String parentIcon) =>
+      subcategories[parentIcon] ?? const [];
+
+  /// Look up a sub-category by its `sub:...` key.
+  static CategoryItem? subByKey(String key) {
+    for (final subs in subcategories.values) {
+      for (final s in subs) {
+        if (s.icon == key) return s;
+      }
+    }
+    return null;
+  }
+
+  /// Parent category emoji that owns a given `sub:...` key (null if unknown).
+  static String? parentOfSub(String key) {
+    for (final e in subcategories.entries) {
+      for (final s in e.value) {
+        if (s.icon == key) return e.key;
+      }
+    }
+    return null;
+  }
+
+  /// Human label for either a category emoji or a `sub:...` key.
+  static String labelForKey(String key) {
+    if (key.startsWith('sub:')) return subByKey(key)?.label ?? 'Other';
+    final c = expenseCategories.firstWhere((c) => c.icon == key,
+        orElse: () => incomeCategories.firstWhere((c) => c.icon == key,
+            orElse: () => const CategoryItem('💰', 'Other', '#9E9E9E')));
+    return c.label;
+  }
+
   static const List<String> settleMethods = [
     'Cash',
     'Revolut',
@@ -256,6 +360,7 @@ class AppState extends ChangeNotifier {
   List<SubscriptionData> subscriptions = [];
   List<ReminderData> reminders = [];
   List<SavingGoal> savingGoals = [];
+  List<Budget> budgets = []; // named budgets (Phase A) — local SQLite only
   GroupData? currentGroup;
 
   /// Globally selected currency for Home and Overview tabs
@@ -319,6 +424,7 @@ class AppState extends ChangeNotifier {
       groupWallets = await db.loadGroupWallets();
       budgetLimits = await db.loadBudgetLimits();
       savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+      budgets = (await db.loadBudgets()).map((r) => Budget.fromMap(r)).toList();
       subscriptions = await db.loadSubscriptions();
       reminders = await db.loadReminders();
 
@@ -408,6 +514,7 @@ class AppState extends ChangeNotifier {
       subscriptions = await db.loadSubscriptions();
       reminders = await db.loadReminders();
       savingGoals = (await db.loadSavingGoals()).map((r) => SavingGoal.fromMap(r)).toList();
+      budgets = (await db.loadBudgets()).map((r) => Budget.fromMap(r)).toList();
 
       // (Sample data seeding has been removed for production)
     }
@@ -776,48 +883,103 @@ class AppState extends ChangeNotifier {
   String? _guestMemberName;
 
   // ─── Balance logic ───────────────────────────────────────────────────────
-  Map<String, double> getAllBalances(GroupData g) {
+
+  /// Canonical balances keyed by STABLE member id. This is the correctness-
+  /// critical engine: two members with the same display name keep separate
+  /// balances because they have distinct ids.
+  ///
+  /// Backward-compatible: legacy rows that only carry names are resolved to ids
+  /// via the roster when the name is unambiguous, otherwise keyed by the pseudo
+  /// id `name:<name>` (which reproduces the old name-based behavior exactly).
+  Map<String, double> getBalancesById(GroupData g) {
+    final useRoster = g.roster.isNotEmpty;
+    // Ids we can map back to a display name. A balance key MUST be either one of
+    // these or a `name:<name>` pseudo-key, so the UI never shows a raw id.
+    final validIds = g.roster.map((m) => m.id).toSet();
+    final List<String> memberKeys = useRoster
+        ? g.roster.map((m) => m.id).toList()
+        : g.members.map((n) => 'name:$n').toList();
+
+    // Resolve a (name, explicitId) reference to a DISPLAYABLE canonical key.
+    // An explicit id is only trusted when it exists in the roster (so it can be
+    // resolved back to a name); otherwise we fall back to name-keying. This
+    // prevents raw uids / `local:` ids from leaking into the UI for multi-user
+    // or partially-synced groups.
+    String refId(String name, String? explicitId) {
+      if (explicitId != null && explicitId.isNotEmpty && validIds.contains(explicitId)) {
+        return explicitId;
+      }
+      return g.memberIdForName(name) ?? 'name:$name';
+    }
+
     final bal = <String, double>{};
-    for (final m in g.members) {
-      bal[m] = 0;
+    for (final k in memberKeys) {
+      bal[k] = 0;
     }
 
     for (final e in g.expenses) {
-      if (e.splits != null && e.splits!.isNotEmpty) {
-        final rawTotal = e.splits!.values.fold(0.0, (s, v) => s + v);
+      final payerKey = refId(e.paidBy, e.paidById);
+
+      // Prefer id-keyed splits — but ONLY if every split id is resolvable to a
+      // roster member; otherwise project the name-keyed splits onto ids so the
+      // UI can always show names.
+      Map<String, double>? splitById;
+      if (e.splitIds != null &&
+          e.splitIds!.isNotEmpty &&
+          e.splitIds!.keys.every(validIds.contains)) {
+        splitById = e.splitIds;
+      } else if (e.splits != null && e.splits!.isNotEmpty) {
+        splitById = <String, double>{};
+        e.splits!.forEach((name, v) {
+          final key = refId(name, null);
+          splitById![key] = (splitById[key] ?? 0) + v;
+        });
+      }
+
+      if (splitById != null && splitById.isNotEmpty) {
+        final rawTotal = splitById.values.fold(0.0, (s, v) => s + v);
         final needsNormalize =
             rawTotal > 0 && (rawTotal - e.amount).abs() > 0.01;
         final scale = needsNormalize ? e.amount / rawTotal : 1.0;
-
-        for (final m in g.members) {
-          final share = (e.splits![m] ?? 0) * scale;
-          if (e.paidBy == m) {
-            bal[m] = (bal[m] ?? 0) + e.amount - share;
-          } else {
-            bal[m] = (bal[m] ?? 0) - share;
-          }
-        }
+        splitById.forEach((key, v) {
+          bal[key] = (bal[key] ?? 0) - v * scale;
+        });
+        bal[payerKey] = (bal[payerKey] ?? 0) + e.amount;
       } else {
-        // UI-3 FIX: Guard against division by zero for empty groups
-        if (g.members.isEmpty) continue;
-        final share = e.amount / g.members.length;
-        for (final m in g.members) {
-          if (e.paidBy == m) {
-            bal[m] = (bal[m] ?? 0) + e.amount - share;
-          } else {
-            bal[m] = (bal[m] ?? 0) - share;
-          }
+        // Equal split. UI-3 FIX: guard against division by zero.
+        if (memberKeys.isEmpty) continue;
+        final share = e.amount / memberKeys.length;
+        for (final key in memberKeys) {
+          bal[key] = (bal[key] ?? 0) - share;
         }
+        bal[payerKey] = (bal[payerKey] ?? 0) + e.amount;
       }
     }
 
     for (final s in g.settlements) {
-      bal[s.from] = (bal[s.from] ?? 0) + s.amount;
-      bal[s.to] = (bal[s.to] ?? 0) - s.amount;
+      final fromKey = refId(s.from, s.fromId);
+      final toKey = refId(s.to, s.toId);
+      bal[fromKey] = (bal[fromKey] ?? 0) + s.amount;
+      bal[toKey] = (bal[toKey] ?? 0) - s.amount;
     }
 
     bal.updateAll((k, v) => double.parse(v.toStringAsFixed(2)));
     return bal;
+  }
+
+  /// Name-keyed balances (display/back-compat). A projection of
+  /// [getBalancesById]; identical to the old behavior when names are unique.
+  /// NOTE: where two members share a name their balances are SUMMED here — use
+  /// [getBalancesById] anywhere correctness for duplicates matters.
+  Map<String, double> getAllBalances(GroupData g) {
+    final byId = getBalancesById(g);
+    final byName = <String, double>{};
+    byId.forEach((key, v) {
+      final name = g.displayNameForKey(key);
+      byName[name] = (byName[name] ?? 0) + v;
+    });
+    byName.updateAll((k, v) => double.parse(v.toStringAsFixed(2)));
+    return byName;
   }
 
   /// Returns a set of all active currencies across personal wallets and groups.
@@ -832,20 +994,32 @@ class AppState extends ChangeNotifier {
     return curs;
   }
 
-  // ARCH-3 FIX: Check 'You', the user's display name, and (for guests) the
-  // persisted guest member name.
+  // ARCH-3 FIX: Resolve the current user's stable member id, then read the
+  // id-keyed balance. Falls back through uid → guest name → 'You' → real name.
   double getMyBalance(GroupData g) {
-    final balances = getAllBalances(g);
-    // Guests: resolve by their chosen member name first (they have no 'You').
-    if (isGuest && _guestMemberName != null &&
-        balances.containsKey(_guestMemberName)) {
-      return balances[_guestMemberName]!;
+    final byId = getBalancesById(g);
+
+    // 1. Cloud: match my Firebase uid against the roster.
+    final myUid = AuthService.instance.uid;
+    if (myUid != null) {
+      for (final m in g.roster) {
+        if (m.uid == myUid && byId.containsKey(m.id)) return byId[m.id]!;
+      }
     }
-    // Try 'You' first (local/offline groups always use 'You')
-    if (balances.containsKey('You')) return balances['You']!;
-    // For cloud groups, the member name may be the user's real name
+    // 2. Guest: their chosen member name.
+    if (isGuest && _guestMemberName != null) {
+      final id = g.memberIdForName(_guestMemberName!) ?? 'name:${_guestMemberName!}';
+      if (byId.containsKey(id)) return byId[id]!;
+    }
+    // 3. 'You' (local/offline groups always use 'You').
+    final youId = g.memberIdForName('You') ?? 'name:You';
+    if (byId.containsKey(youId)) return byId[youId]!;
+    // 4. The user's real display name (cloud groups without uid match).
     final userName = AuthService.instance.currentUser?.displayName;
-    if (userName != null && balances.containsKey(userName)) return balances[userName]!;
+    if (userName != null) {
+      final id = g.memberIdForName(userName) ?? 'name:$userName';
+      if (byId.containsKey(id)) return byId[id]!;
+    }
     return 0;
   }
 
@@ -858,7 +1032,8 @@ class AppState extends ChangeNotifier {
   }
 
   List<SettlePair> buildSettlePlan(GroupData g) {
-    final balances = getAllBalances(g);
+    // Work in id-space so same-named members settle independently.
+    final balances = getBalancesById(g);
 
     final creditors = balances.entries
         .where((e) => e.value > 0.01)
@@ -881,7 +1056,14 @@ class AppState extends ChangeNotifier {
           : debtors[j].amt;
 
       if (amt > 0.01) {
-        plan.add(SettlePair(debtors[j].name, creditors[i].name, amt));
+        // _Pair.name holds the canonical id key; expose both id + display name.
+        plan.add(SettlePair(
+          g.displayNameForKey(debtors[j].name),
+          g.displayNameForKey(creditors[i].name),
+          amt,
+          fromId: debtors[j].name,
+          toId: creditors[i].name,
+        ));
       }
 
       creditors[i].amt -= amt;
@@ -1059,10 +1241,14 @@ class AppState extends ChangeNotifier {
             amount: e.amount,
             cat: e.cat,
             paidBy: e.paidBy,
+            paidById: e.paidById, // preserve stable member ids
             date: e.date,
             receipt: true,
             receiptPath: url, // Cloud URL instead of local path
             splits: e.splits,
+            splitIds: e.splitIds,
+            createdBy: e.createdBy, // preserve audit/edit metadata
+            updatedBy: e.updatedBy,
           );
         }
       } catch (err) {
@@ -1195,6 +1381,70 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Current user leaves a group: removes the group from THIS device and drops
+  /// the user's own uid/name from the cloud member list (others keep the group).
+  /// Local-first so it never hangs offline.
+  Future<void> leaveGroup(GroupData g) async {
+    final myUid = AuthService.instance.uid;
+    // Resolve the current user's display name within this group.
+    String? myName;
+    if (myUid != null) {
+      for (final m in g.roster) {
+        if (m.uid == myUid) { myName = m.name; break; }
+      }
+    }
+    myName ??= (isGuest ? _guestMemberName : null);
+    myName ??= g.members.contains('You')
+        ? 'You'
+        : AuthService.instance.currentUser?.displayName;
+
+    // Remove from this device immediately.
+    await DatabaseService.instance.deleteGroup(g.id);
+    groups = groups.where((x) => x.id != g.id).toList();
+    if (currentGroup?.id == g.id) currentGroup = null;
+    _cachedAllTxns = null;
+    notifyListeners();
+
+    // Cloud: remove only myself (fire-and-forget; offline-safe).
+    if (_useCloud && myUid != null) {
+      final name = myName ?? '';
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.removeMemberFromGroup(g.id, myUid, name);
+        } catch (e) {
+          debugPrint('[cloud] leaveGroup deferred: $e');
+        }
+      }());
+    }
+  }
+
+  /// Creator removes another member from the group. Updates the roster + member
+  /// list locally, persists, and revokes the member's cloud access (memberUids).
+  Future<void> removeMember(GroupData g, GroupMember m) async {
+    g.roster = g.roster.where((x) => x.id != m.id).toList();
+    if (g.roster.isNotEmpty) {
+      g.members = g.roster.map((x) => x.name).toList();
+    } else {
+      final idx = g.members.indexOf(m.name);
+      if (idx >= 0) g.members = (List.of(g.members)..removeAt(idx));
+    }
+    await DatabaseService.instance.updateGroup(g);
+    groups = List.of(groups);
+    _cachedAllTxns = null;
+    notifyListeners();
+
+    if (_useCloud) {
+      unawaited(() async {
+        try {
+          await FirestoreService.instance
+              .removeMemberFromGroup(g.id, m.uid ?? m.id, m.name);
+        } catch (e) {
+          debugPrint('[cloud] removeMember deferred: $e');
+        }
+      }());
+    }
+  }
+
   Future<void> addTransaction(TransactionData t) async {
     final isNewWallet = !wallets.containsKey(t.currency);
     final cur = wallets[t.currency] ?? 0;
@@ -1286,19 +1536,28 @@ class AppState extends ChangeNotifier {
           .toStringAsFixed(2),
     );
 
-    if (_useCloud) {
-      await FirestoreService.instance.deleteTransaction(t.id);
-      await FirestoreService.instance.upsertWallet(t.currency, newBal);
-      // FIX: also persist wallet changes to SQLite cache so balance survives restart
-      await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
-    } else {
-      await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
-    }
+    // Local-first: persist to SQLite and update in-memory state immediately so
+    // the UI (incl. swipe-to-delete Dismissibles) reflects the change at once.
+    // Awaiting Firestore here would hang while offline (the "save does nothing"
+    // class of bug) and leave a dismissed Dismissible still in the tree.
+    await DatabaseService.instance.deleteTransactionAtomic(t.id, t.currency, newBal);
 
     transactions = transactions.where((x) => x.id != t.id).toList();
     wallets = Map.of(wallets)..[t.currency] = newBal;
     _cachedAllTxns = null;
     notifyListeners();
+
+    // Cloud writes fire-and-forget — they don't resolve while offline.
+    if (_useCloud) {
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.deleteTransaction(t.id);
+          await FirestoreService.instance.upsertWallet(t.currency, newBal);
+        } catch (e) {
+          debugPrint('[cloud] delete tx deferred: $e');
+        }
+      }());
+    }
   }
 
   Future<void> resetAllData() async {
@@ -1325,6 +1584,7 @@ class AppState extends ChangeNotifier {
     budgetLimits = {};
     subscriptions = [];
     reminders = [];
+    budgets = [];
     savingGoals = [];      // FIX: was missing — savingGoals persisted after reset
     currentGroup = null;
     dashboardCurrency = null;
@@ -1346,12 +1606,30 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteWallet(String currency) async {
+    // Local-first: remove from SQLite immediately; cloud delete in background.
+    await DatabaseService.instance.deleteWallet(currency);
     if (_useCloud) {
-      await FirestoreService.instance.deleteWallet(currency);
-    } else {
-      await DatabaseService.instance.deleteWallet(currency);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.deleteWallet(currency);
+        } catch (e) {
+          debugPrint('[cloud] wallet delete deferred: $e');
+        }
+      }());
     }
     wallets = Map.of(wallets)..remove(currency);
+    // If the deleted wallet was the open/home account, switch to another (or none).
+    if (homeCurrency == currency) {
+      final next = wallets.keys.isNotEmpty ? wallets.keys.first : null;
+      homeCurrency = next;
+      SharedPreferences.getInstance().then((p) {
+        if (next != null) {
+          p.setString('home_currency', next);
+        } else {
+          p.remove('home_currency');
+        }
+      });
+    }
     notifyListeners();
   }
 
@@ -1515,9 +1793,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateReminder(ReminderData r) async {
-    if (_useCloud) {
-      await FirestoreService.instance.updateReminder(r);
-    }
+    // Local-first: SQLite + state immediately; cloud fire-and-forget (offline-safe).
     await DatabaseService.instance.updateReminder(r);
     final idx = reminders.indexWhere((x) => x.id == r.id);
     if (idx >= 0) {
@@ -1529,16 +1805,33 @@ class AppState extends ChangeNotifier {
     }
     await NotificationService.scheduleReminder(r);
     notifyListeners();
+    if (_useCloud) {
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.updateReminder(r);
+        } catch (e) {
+          debugPrint('[cloud] update reminder deferred: $e');
+        }
+      }());
+    }
   }
 
   Future<void> deleteReminder(ReminderData r) async {
-    if (_useCloud) {
-      await FirestoreService.instance.deleteReminder(r.id);
-    }
+    // Local-first: removing from state immediately keeps swipe-to-delete
+    // Dismissibles consistent and avoids the offline Firestore hang.
     await DatabaseService.instance.deleteReminder(r.id);
     reminders = reminders.where((x) => x.id != r.id).toList();
     await NotificationService.cancelReminder(r.id);
     notifyListeners();
+    if (_useCloud) {
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.deleteReminder(r.id);
+        } catch (e) {
+          debugPrint('[cloud] delete reminder deferred: $e');
+        }
+      }());
+    }
   }
 
   Future<void> toggleReminderCompleted(ReminderData r) async {
@@ -1548,13 +1841,15 @@ class AppState extends ChangeNotifier {
 
   // ─── Saving Goals ─────────────────────────────────────────────────────────
 
-  Future<void> addSavingGoal(String currency, String title, double targetAmount, {DateTime? targetDate}) async {
+  Future<void> addSavingGoal(String currency, String title, double targetAmount, {DateTime? targetDate, double savedAmount = 0.0, String? icon, String? color}) async {
     final data = {
       'currency': currency,
       'title': title,
       'target_amount': targetAmount,
-      'saved_amount': 0.0,
+      'saved_amount': savedAmount,
       'target_date': targetDate?.toIso8601String(),
+      'icon': icon,
+      'color': color,
     };
     int id;
     if (_useCloud) {
@@ -1562,11 +1857,11 @@ class AppState extends ChangeNotifier {
     } else {
       id = await DatabaseService.instance.insertSavingGoal(data);
     }
-    savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, targetDate: targetDate));
+    savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, savedAmount: savedAmount, targetDate: targetDate, icon: icon, color: color));
     notifyListeners();
   }
 
-  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate, List<GoalDeposit>? deposits}) async {
+  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate, String? icon, String? color, List<GoalDeposit>? deposits}) async {
     final updated = SavingGoal(
       id: g.id,
       currency: g.currency,
@@ -1574,6 +1869,8 @@ class AppState extends ChangeNotifier {
       targetAmount: targetAmount ?? g.targetAmount,
       savedAmount: savedAmount ?? g.savedAmount,
       targetDate: targetDate ?? g.targetDate,
+      icon: icon ?? g.icon,
+      color: color ?? g.color,
       deposits: deposits ?? g.deposits,   // ← carry existing deposits forward
     );
     if (_useCloud) {
@@ -1600,13 +1897,86 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteSavingGoal(int id) async {
-    if (_useCloud) {
-      await FirestoreService.instance.deleteSavingGoal(id);
-    } else {
-      await DatabaseService.instance.deleteSavingGoal(id);
-    }
+    // Local-first: always remove from SQLite (so it can't resurrect from the
+    // local cache on next launch) and update state immediately; cloud delete
+    // fire-and-forget so it never hangs while offline.
+    await DatabaseService.instance.deleteSavingGoal(id);
     savingGoals.removeWhere((g) => g.id == id);
     notifyListeners();
+    if (_useCloud) {
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.deleteSavingGoal(id);
+        } catch (e) {
+          debugPrint('[cloud] delete saving goal deferred: $e');
+        }
+      }());
+    }
+  }
+
+  // ─── Budgets (named, Phase A — local SQLite only) ───────────────────────────
+  Future<void> addBudget({
+    required String name,
+    required double amount,
+    required String currency,
+    String period = 'monthly',
+    List<String> categories = const [],
+    bool notifyOverspent = true,
+  }) async {
+    final tmp = Budget(
+        id: 0, name: name, amount: amount, currency: currency,
+        period: period, categories: categories, notifyOverspent: notifyOverspent);
+    final id = await DatabaseService.instance.insertBudget(tmp.toMap());
+    budgets.insert(0, Budget(
+        id: id, name: name, amount: amount, currency: currency,
+        period: period, categories: categories, notifyOverspent: notifyOverspent));
+    notifyListeners();
+  }
+
+  Future<void> updateBudget(Budget b) async {
+    await DatabaseService.instance.updateBudget(b.id, b.toMap());
+    final i = budgets.indexWhere((x) => x.id == b.id);
+    if (i >= 0) budgets[i] = b;
+    notifyListeners();
+  }
+
+  Future<void> deleteBudget(int id) async {
+    await DatabaseService.instance.deleteBudget(id);
+    budgets.removeWhere((b) => b.id == id);
+    notifyListeners();
+  }
+
+  /// Amount spent against a budget in its current period (single currency).
+  double budgetSpent(Budget b) {
+    final now = DateTime.now();
+    DateTime start;
+    switch (b.period) {
+      case 'weekly':
+        final s = now.subtract(Duration(days: now.weekday - 1));
+        start = DateTime(s.year, s.month, s.day);
+        break;
+      case 'yearly':
+        start = DateTime(now.year, 1, 1);
+        break;
+      default: // monthly
+        start = DateTime(now.year, now.month, 1);
+    }
+    double total = 0;
+    for (final t in allTransactionsWithGroupShares) {
+      if (t.type.toLowerCase() != 'expense') continue;
+      if (t.currency != b.currency) continue;
+      if (b.categories.isNotEmpty) {
+        // Match a budget's targets against either the transaction's parent
+        // category emoji OR its specific sub-category key.
+        final matchesParent = b.categories.contains(t.cat);
+        final matchesSub = t.subcat != null && b.categories.contains(t.subcat);
+        if (!matchesParent && !matchesSub) continue;
+      }
+      final d = t.rawDate ?? DateTime.tryParse(t.date);
+      if (d == null || d.isBefore(start)) continue;
+      total += t.amount;
+    }
+    return total;
   }
 
   static Color getCategoryColor(String emoji) {
@@ -1677,6 +2047,44 @@ class CategoryItem {
   const CategoryItem(this.icon, this.label, this.color, [this.materialIcon]);
 }
 
+/// A group member with a STABLE identity. [id] is the canonical key used for
+/// balances/splits/settlements: the Firebase UID for app users, or a generated
+/// `local:<...>` id for typed/offline members. [name] is display-only.
+class GroupMember {
+  final String id;
+  String name;
+  final String? uid; // Firebase UID when this member is an app user.
+  final bool isGuest;
+
+  GroupMember({
+    required this.id,
+    required this.name,
+    this.uid,
+    this.isGuest = false,
+  });
+
+  /// Monotonic counter so ids generated in a tight loop never collide.
+  static int _seq = 0;
+
+  /// Generate a stable id for a typed/offline member.
+  static String generateLocalId() =>
+      'local:${DateTime.now().microsecondsSinceEpoch}-${_seq++}';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        if (uid != null) 'uid': uid,
+        'isGuest': isGuest,
+      };
+
+  factory GroupMember.fromMap(String id, Map<String, dynamic> m) => GroupMember(
+        id: id,
+        name: (m['name'] ?? '').toString(),
+        uid: m['uid'] as String?,
+        isGuest: m['isGuest'] == true,
+      );
+}
+
 class GroupData {
   final int id;
   String name, emoji, currency, sym;
@@ -1685,10 +2093,17 @@ class GroupData {
   /// Mirrors `groups/{id}.isPremiumGroup` in Firestore.
   bool isPremiumGroup;
   String? inviteCode;
+  /// Firebase UID of the group creator (owner). Only the creator may edit the
+  /// group; everyone else gets a read-only view + the ability to leave. Null for
+  /// legacy local groups created before this was tracked (see [isCreatedBy]).
+  String? createdBy;
   /// Raw Firestore document ID (e.g. "abc123xyz"). Stored in SQLite so that
   /// FirestoreService._docIdCache can be rebuilt after an app kill/restart.
   String? firestoreId;
   List<String> members;
+  /// Canonical id+name roster. May be empty for purely-legacy groups, in which
+  /// case the app falls back to name-keyed behavior using [members].
+  List<GroupMember> roster;
   List<ExpenseData> expenses;
   List<SettlementData> settlements;
 
@@ -1699,14 +2114,52 @@ class GroupData {
     required this.currency,
     required this.sym,
     required this.members,
+    List<GroupMember>? roster,
     List<ExpenseData>? expenses,
     List<SettlementData>? settlements,
     this.isArchived = false,
     this.isPremiumGroup = false,
     this.inviteCode,
+    this.createdBy,
     this.firestoreId,
-  })  : expenses = expenses ?? [],
+  })  : roster = roster ?? const [],
+        expenses = expenses ?? [],
         settlements = settlements ?? [];
+
+  /// True when [uid] is the group creator. For legacy groups with no stored
+  /// [createdBy], fall back to the convention that the first member is the
+  /// creator ('You' on this device, or their display name) so old local groups
+  /// remain manageable by their owner.
+  bool isCreatedBy(String? uid, {String? displayName}) {
+    if (createdBy != null) return uid != null && createdBy == uid;
+    // Legacy fallback (no createdBy recorded).
+    if (members.isEmpty) return true;
+    final first = members.first;
+    return first == 'You' || (displayName != null && first == displayName);
+  }
+
+  /// Display names — prefer the canonical roster, fall back to [members].
+  List<String> get memberNames =>
+      roster.isNotEmpty ? roster.map((m) => m.name).toList() : members;
+
+  /// Resolve a display name to a member id, but ONLY when the name is
+  /// unambiguous in the roster. Returns null for absent or duplicate names
+  /// (the duplicate case is exactly what id-keying exists to disambiguate).
+  String? memberIdForName(String name) {
+    if (roster.isEmpty) return null;
+    final matches = roster.where((m) => m.name == name).toList();
+    return matches.length == 1 ? matches.first.id : null;
+  }
+
+  /// The display name for a balance key produced by the engine. Handles both
+  /// real member ids and the legacy `name:<name>` fallback keys.
+  String displayNameForKey(String key) {
+    if (key.startsWith('name:')) return key.substring(5);
+    for (final m in roster) {
+      if (m.id == key) return m.name;
+    }
+    return key;
+  }
 }
 
 class ExpenseData {
@@ -1723,10 +2176,23 @@ class ExpenseData {
   /// Key = member name, value = amount that member owes.
   final Map<String, double>? splits;
 
+  /// Stable member id of the payer (preferred over [paidBy] name). Nullable for
+  /// legacy rows written before id-keying.
+  final String? paidById;
+
+  /// Custom split amounts keyed by stable member id (preferred over [splits]).
+  final Map<String, double>? splitIds;
+
   /// JSON encoding of [splits] for database storage.
   String? get splitsJson {
     if (splits == null || splits!.isEmpty) return null;
     return jsonEncode(splits);
+  }
+
+  /// JSON encoding of [splitIds] for database storage.
+  String? get splitIdsJson {
+    if (splitIds == null || splitIds!.isEmpty) return null;
+    return jsonEncode(splitIds);
   }
 
   ExpenseData({
@@ -1739,6 +2205,8 @@ class ExpenseData {
     this.receipt = false,
     this.receiptPath,
     this.splits,
+    this.paidById,
+    this.splitIds,
     this.createdBy,
     this.updatedBy,
   });
@@ -1749,6 +2217,8 @@ class TransactionData {
   final String type, desc, cat, currency, sym, date;
   final double amount;
   final String? receiptPath;
+  /// Optional sub-category key (`sub:...`) for finer-grained budgeting.
+  final String? subcat;
   final bool isGroupShare;
   final int? groupId;
 
@@ -1837,6 +2307,7 @@ class TransactionData {
     required this.sym,
     required this.date,
     this.receiptPath,
+    this.subcat,
     this.isGroupShare = false,
     this.groupId,
   });
@@ -1845,6 +2316,8 @@ class TransactionData {
 class SettlementData {
   final String from, to, method, date;
   final double amount;
+  /// Stable member ids of payer/payee (preferred over [from]/[to] names).
+  final String? fromId, toId;
 
   const SettlementData({
     required this.from,
@@ -1852,13 +2325,17 @@ class SettlementData {
     required this.amount,
     required this.method,
     required this.date,
+    this.fromId,
+    this.toId,
   });
 }
 
 class SettlePair {
   final String from, to;
   final double amount;
-  const SettlePair(this.from, this.to, this.amount);
+  /// Stable member ids of payer/payee (for unambiguous settle actions).
+  final String? fromId, toId;
+  const SettlePair(this.from, this.to, this.amount, {this.fromId, this.toId});
 }
 
 class _Pair {
@@ -2041,6 +2518,8 @@ class SavingGoal {
   final double targetAmount;
   final double savedAmount;
   final DateTime? targetDate;
+  final String? icon;   // optional custom emoji; null = auto from title
+  final String? color;  // optional hex string e.g. "#D97706"; null = auto palette
   final List<GoalDeposit> deposits;
 
   SavingGoal({
@@ -2050,6 +2529,8 @@ class SavingGoal {
     required this.targetAmount,
     this.savedAmount = 0.0,
     this.targetDate,
+    this.icon,
+    this.color,
     List<GoalDeposit>? deposits,
   }) : deposits = deposits ?? [];
 
@@ -2076,6 +2557,8 @@ class SavingGoal {
       targetAmount: (map['target_amount'] as num?)?.toDouble() ?? 0.0,
       savedAmount: (map['saved_amount'] as num?)?.toDouble() ?? 0.0,
       targetDate: map['target_date'] != null ? DateTime.tryParse(map['target_date']) : null,
+      icon: map['icon'] as String?,
+      color: map['color'] as String?,
       deposits: deps,
     );
   }
@@ -2090,6 +2573,8 @@ class SavingGoal {
       'target_amount': targetAmount,
       'saved_amount': savedAmount,
       'target_date': targetDate?.toIso8601String(),
+      'icon': icon,
+      'color': color,
       'deposits': depsStr,
     };
   }
@@ -2099,6 +2584,8 @@ class SavingGoal {
     double? targetAmount,
     String? title,
     DateTime? targetDate,
+    String? icon,
+    String? color,
     List<GoalDeposit>? deposits,
   }) {
     return SavingGoal(
@@ -2108,7 +2595,71 @@ class SavingGoal {
       targetAmount: targetAmount ?? this.targetAmount,
       savedAmount: savedAmount ?? this.savedAmount,
       targetDate: targetDate ?? this.targetDate,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
       deposits: deposits ?? this.deposits,
+    );
+  }
+}
+
+// ─── Budget (named, Phase A) ──────────────────────────────────────────────────
+class Budget {
+  final int id;
+  final String name;
+  final String period;   // 'monthly' | 'weekly' | 'yearly'
+  final double amount;
+  final String currency;
+  final List<String> categories; // category emojis; empty = All
+  final bool notifyOverspent;
+
+  Budget({
+    required this.id,
+    required this.name,
+    required this.amount,
+    required this.currency,
+    this.period = 'monthly',
+    List<String>? categories,
+    this.notifyOverspent = true,
+  }) : categories = categories ?? const [];
+
+  factory Budget.fromMap(Map<String, dynamic> m) {
+    final catRaw = (m['categories'] as String?) ?? '';
+    return Budget(
+      id: (m['id'] as num).toInt(),
+      name: (m['name'] as String?) ?? 'Budget',
+      period: (m['period'] as String?) ?? 'monthly',
+      amount: (m['amount'] as num?)?.toDouble() ?? 0.0,
+      currency: (m['currency'] as String?) ?? 'USD',
+      categories: catRaw.isEmpty ? const [] : catRaw.split('||'),
+      notifyOverspent: ((m['notify_overspent'] as num?)?.toInt() ?? 1) == 1,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'period': period,
+        'amount': amount,
+        'currency': currency,
+        'categories': categories.join('||'),
+        'notify_overspent': notifyOverspent ? 1 : 0,
+      };
+
+  Budget copyWith({
+    String? name,
+    String? period,
+    double? amount,
+    String? currency,
+    List<String>? categories,
+    bool? notifyOverspent,
+  }) {
+    return Budget(
+      id: id,
+      name: name ?? this.name,
+      period: period ?? this.period,
+      amount: amount ?? this.amount,
+      currency: currency ?? this.currency,
+      categories: categories ?? this.categories,
+      notifyOverspent: notifyOverspent ?? this.notifyOverspent,
     );
   }
 }

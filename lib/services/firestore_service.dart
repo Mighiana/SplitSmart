@@ -129,6 +129,33 @@ class FirestoreService {
     }
   }
 
+  /// Build a canonical id+name roster from a group's `memberMeta` map, but ONLY
+  /// when it covers every member name — otherwise return empty so the app falls
+  /// back to safe name-based behavior (mixed app-user + typed-name legacy
+  /// groups). Handles both new (id-keyed) and legacy (uid-keyed) meta shapes.
+  List<GroupMember> _rosterFromData(Map<String, dynamic> d) {
+    final meta = d['memberMeta'];
+    if (meta is! Map || meta.isEmpty) return const [];
+    final tmp = <GroupMember>[];
+    meta.forEach((id, m) {
+      if (m is Map) {
+        final mm = Map<String, dynamic>.from(m);
+        tmp.add(GroupMember(
+          id: id.toString(),
+          name: (mm['name'] ?? '').toString(),
+          // Legacy meta was keyed by uid, so fall back to the key.
+          uid: (mm['uid'] ?? id).toString(),
+          isGuest: mm['isGuest'] == true,
+        ));
+      }
+    });
+    final memberNames = List<String>.from(d['members'] ?? []);
+    final rosterNames = tmp.map((e) => e.name).toSet();
+    final coversAll = memberNames.every(rosterNames.contains) &&
+        tmp.length >= memberNames.length;
+    return coversAll ? tmp : const [];
+  }
+
   GroupData _groupFromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
     final id = doc.id.hashCode;
@@ -140,9 +167,11 @@ class FirestoreService {
       currency: d['currency'] ?? 'USD',
       sym: d['sym'] ?? '\$',
       members: List<String>.from(d['members'] ?? []),
+      roster: _rosterFromData(d),
       isArchived: d['isArchived'] ?? false,
       isPremiumGroup: d['isPremiumGroup'] ?? false,
       inviteCode: d['inviteCode'],
+      createdBy: d['createdBy'] as String?,
       firestoreId: doc.id,
     );
   }
@@ -168,16 +197,24 @@ class FirestoreService {
           (ed['splits'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
         );
       }
+      Map<String, double>? splitIds;
+      if (ed['splitIds'] != null) {
+        splitIds = Map<String, double>.from(
+          (ed['splitIds'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+        );
+      }
       return ExpenseData(
         id: eid,
         desc: ed['desc'] ?? '',
         amount: (ed['amount'] as num?)?.toDouble() ?? 0,
         cat: ed['cat'] ?? '💰',
         paidBy: ed['paidBy'] ?? '',
+        paidById: ed['paidById'],
         date: ed['date'] ?? '',
         receipt: ed['receipt'] ?? false,
         receiptPath: ed['receiptUrl'],
         splits: splits,
+        splitIds: splitIds,
         createdBy: ed['createdBy'],
         updatedBy: ed['updatedBy'],
       );
@@ -194,6 +231,8 @@ class FirestoreService {
       return SettlementData(
         from: sd['from'] ?? '',
         to: sd['to'] ?? '',
+        fromId: sd['fromId'],
+        toId: sd['toId'],
         amount: (sd['amount'] as num?)?.toDouble() ?? 0,
         method: sd['method'] ?? 'Cash',
         date: sd['date'] ?? '',
@@ -210,11 +249,13 @@ class FirestoreService {
       currency: d['currency'] ?? 'USD',
       sym: d['sym'] ?? '\$',
       members: List<String>.from(d['members'] ?? []),
+      roster: _rosterFromData(d),
       expenses: expenses,
       settlements: settlements,
       isArchived: d['isArchived'] ?? false,
       isPremiumGroup: d['isPremiumGroup'] ?? false,
       inviteCode: d['inviteCode'],
+      createdBy: d['createdBy'] as String?,
       firestoreId: groupDocId,
     );
   }
@@ -226,21 +267,37 @@ class FirestoreService {
     // else their display name, else 'You'. We record an authoritative
     // uid→name mapping in `memberMeta` to fix the legacy parallel-array bug.
     final ownerName = g.members.isNotEmpty ? g.members.first : 'You';
+    // Authoritative memberId → {name, uid?, isGuest} mapping. When the caller
+    // supplies a roster (post-refactor), persist EVERY member (incl. typed ones
+    // with generated ids) so balances can be id-keyed. Else fall back to an
+    // owner-only entry keyed by uid (legacy shape).
+    final Map<String, dynamic> memberMeta = {};
+    final List<String> memberUids = [_uid];
+    if (g.roster.isNotEmpty) {
+      for (final m in g.roster) {
+        memberMeta[m.id] = {
+          'name': m.name,
+          if (m.uid != null) 'uid': m.uid,
+          'isGuest': m.isGuest,
+        };
+        if (m.uid != null && !memberUids.contains(m.uid)) memberUids.add(m.uid!);
+      }
+    } else {
+      memberMeta[_uid] = {
+        'name': ownerName,
+        'uid': _uid,
+        'isGuest': AuthService.instance.isGuest,
+        'provider': AuthService.instance.isGuest ? 'anonymous' : 'full',
+      };
+    }
     final doc = await _groupsCol.add({
       'name': g.name,
       'emoji': g.emoji,
       'currency': g.currency,
       'sym': g.sym,
       'members': g.members,
-      'memberUids': [_uid],
-      // Authoritative uid → {name, isGuest, provider} mapping.
-      'memberMeta': {
-        _uid: {
-          'name': ownerName,
-          'isGuest': AuthService.instance.isGuest,
-          'provider': AuthService.instance.isGuest ? 'anonymous' : 'full',
-        },
-      },
+      'memberUids': memberUids,
+      'memberMeta': memberMeta,
       // Guest-join gate. Flipped to true only when a PREMIUM owner enables
       // guest access (enforced by security rules via the `premium` claim).
       'isPremiumGroup': false,
@@ -301,6 +358,19 @@ class FirestoreService {
     await _groupsCol.doc(docId).update({'isArchived': archived});
   }
 
+  /// Remove a member from a group: drops their uid from `memberUids`, their
+  /// display name from `members`, and their `memberMeta` entry. Used for a
+  /// member leaving (uid == self) and the creator removing someone.
+  Future<void> removeMemberFromGroup(int groupId, String uid, String name) async {
+    final docId = await _groupDocId(groupId);
+    if (docId == null) return;
+    await _groupsCol.doc(docId).update({
+      'memberUids': FieldValue.arrayRemove([uid]),
+      'members': FieldValue.arrayRemove([name]),
+      'memberMeta.$uid': FieldValue.delete(),
+    });
+  }
+
   Future<void> deleteGroup(GroupData g) async {
     final docId = g.firestoreId ?? await _groupDocId(g.id);
     if (docId == null) {
@@ -355,10 +425,12 @@ class FirestoreService {
       'amount': e.amount,
       'cat': e.cat,
       'paidBy': e.paidBy,
+      'paidById': e.paidById,
       'date': e.date,
       'receipt': e.receipt,
       'receiptUrl': e.receiptPath,
       'splits': e.splits,
+      'splitIds': e.splitIds,
       'addedBy': _uid,
       'createdBy': e.createdBy,
       'updatedBy': e.updatedBy,
@@ -378,10 +450,12 @@ class FirestoreService {
         'amount': e.amount,
         'cat': e.cat,
         'paidBy': e.paidBy,
+        'paidById': e.paidById,
         'date': e.date,
         'receipt': e.receipt,
         'receiptUrl': e.receiptPath,
         'splits': e.splits,
+        'splitIds': e.splitIds,
         'updatedBy': e.updatedBy,
       });
       return;
@@ -396,10 +470,12 @@ class FirestoreService {
           'amount': e.amount,
           'cat': e.cat,
           'paidBy': e.paidBy,
+          'paidById': e.paidById,
           'date': e.date,
           'receipt': e.receipt,
           'receiptUrl': e.receiptPath,
           'splits': e.splits,
+          'splitIds': e.splitIds,
           'updatedBy': e.updatedBy,
         });
         return;
@@ -451,6 +527,8 @@ class FirestoreService {
     await _groupsCol.doc(docId).collection('settlements').add({
       'from': s.from,
       'to': s.to,
+      'fromId': s.fromId,
+      'toId': s.toId,
       'amount': s.amount,
       'method': s.method,
       'date': s.date,
@@ -477,16 +555,25 @@ class FirestoreService {
                       (k, v) => MapEntry(k.toString(), (v as num).toDouble())),
                 );
               }
+              Map<String, double>? splitIds;
+              if (ed['splitIds'] != null) {
+                splitIds = Map<String, double>.from(
+                  (ed['splitIds'] as Map).map(
+                      (k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                );
+              }
               return ExpenseData(
                 id: e.id.hashCode,
                 desc: ed['desc'] ?? '',
                 amount: (ed['amount'] as num?)?.toDouble() ?? 0,
                 cat: ed['cat'] ?? '💰',
                 paidBy: ed['paidBy'] ?? '',
+                paidById: ed['paidById'],
                 date: ed['date'] ?? '',
                 receipt: ed['receipt'] ?? false,
                 receiptPath: ed['receiptUrl'],
                 splits: splits,
+                splitIds: splitIds,
                 createdBy: ed['createdBy'],
                 updatedBy: ed['updatedBy'],
               );
@@ -554,6 +641,7 @@ class FirestoreService {
             Map<String, dynamic>.from(data['memberMeta'] as Map? ?? {});
         memberMeta[_uid] = {
           'name': safeName,
+          'uid': _uid,
           'isGuest': isGuest,
           'provider': isGuest ? 'anonymous' : 'full',
         };
@@ -701,6 +789,7 @@ class FirestoreService {
           desc: data['desc'] ?? '',
           amount: (data['amount'] as num?)?.toDouble() ?? 0,
           cat: data['cat'] ?? '💰',
+          subcat: data['subcat'] as String?,
           currency: data['currency'] ?? 'USD',
           sym: data['sym'] ?? '\$',
           date: data['date'] ?? '',
@@ -719,6 +808,7 @@ class FirestoreService {
       'desc': t.desc,
       'amount': t.amount,
       'cat': t.cat,
+      'subcat': t.subcat,
       'currency': t.currency,
       'sym': t.sym,
       'date': t.date,
@@ -737,6 +827,7 @@ class FirestoreService {
         'desc': t.desc,
         'amount': t.amount,
         'cat': t.cat,
+        'subcat': t.subcat,
         'currency': t.currency,
         'sym': t.sym,
         'date': t.date,
@@ -754,6 +845,7 @@ class FirestoreService {
           'desc': t.desc,
           'amount': t.amount,
           'cat': t.cat,
+          'subcat': t.subcat,
           'currency': t.currency,
           'sym': t.sym,
           'date': t.date,

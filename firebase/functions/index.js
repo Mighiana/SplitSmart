@@ -19,6 +19,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
+const crypto = require("crypto");
 
 initializeApp();
 
@@ -29,14 +30,17 @@ const auth = getAuth();
 // ─── Helper: get FCM tokens for a list of UIDs, excluding the sender ──────────
 async function getTokensForUids(uids, excludeUid) {
   const tokens = [];
-  for (const uid of uids) {
+  for (const uid of uids.slice(0, 50)) {
     if (uid === excludeUid) continue;
     try {
       const userDoc = await db.collection("users").doc(uid).get();
       if (userDoc.exists) {
         const data = userDoc.data();
         if (data.fcmTokens && Array.isArray(data.fcmTokens)) {
-          tokens.push(...data.fcmTokens);
+          tokens.push(
+            ...data.fcmTokens.filter((t) => typeof t === "string").slice(0, 25)
+          );
+          if (tokens.length >= 500) break;
         }
       }
     } catch (e) {
@@ -60,6 +64,7 @@ function sanitizeNotifText(text, maxLen = 100) {
 
 // ─── Helper: send multicast and clean up stale tokens ──────────────────────────
 async function sendMulticast(tokens, notification, data, targetUids) {
+  tokens = tokens.filter((t) => typeof t === "string").slice(0, 500);
   if (tokens.length === 0) return;
 
   const message = {
@@ -151,7 +156,9 @@ exports.onExpenseCreated = onDocumentCreated(
 
     const groupData = groupDoc.data();
     const groupName = groupData.name || "Group";
-    const memberUids = groupData.memberUids || [];
+    const memberUids = Array.isArray(groupData.memberUids)
+      ? groupData.memberUids.slice(0, 50)
+      : [];
 
     if (memberUids.length <= 1) return; // No one else to notify
 
@@ -194,7 +201,9 @@ exports.onSettlementCreated = onDocumentCreated(
 
     const groupData = groupDoc.data();
     const groupName = groupData.name || "Group";
-    const memberUids = groupData.memberUids || [];
+    const memberUids = Array.isArray(groupData.memberUids)
+      ? groupData.memberUids.slice(0, 50)
+      : [];
 
     // Notify all members except the person who recorded it
     const tokens = await getTokensForUids(memberUids, addedBy);
@@ -221,7 +230,10 @@ exports.onSettlementCreated = onDocumentCreated(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Android package name + iOS bundle id (override via env in production).
-const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || "com.splitsmart.app";
+// Must match the app's applicationId (android/app/build.gradle.kts).
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || "com.splitsmart.splitsmart";
+// iOS bundle id used for Apple App Store JWS audience checks.
+const IOS_BUNDLE_ID = process.env.IOS_BUNDLE_ID || "com.splitsmart.splitsmart";
 
 // Map product IDs → subscription duration (fallback only; we prefer the store's
 // own expiry timestamp when the validation response provides one).
@@ -229,6 +241,7 @@ const PRODUCT_DURATION_MS = {
   splitsmart_premium_monthly: 31 * 24 * 60 * 60 * 1000,
   splitsmart_premium_yearly: 366 * 24 * 60 * 60 * 1000,
 };
+const ALLOWED_PRODUCT_IDS = new Set(Object.keys(PRODUCT_DURATION_MS));
 
 /**
  * Apply (or revoke) a user's entitlement everywhere it matters:
@@ -308,29 +321,97 @@ async function validatePlay(productId, token) {
   };
 }
 
+// Apple Root CA - G3 SHA-256 fingerprint (uppercase, colon-separated).
+// Pinning the root anchors the whole x5c chain to Apple. If Apple ever rotates
+// its root, update this value from https://www.apple.com/certificateauthority/
+const APPLE_ROOT_CA_G3_FP =
+  "63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79";
+
+/**
+ * Verify an Apple-signed JWS (StoreKit 2 signed transaction / App Store Server
+ * Notifications V2). This does REAL verification, not jwt.decode():
+ *   1. Pull the x5c certificate chain from the JWS header.
+ *   2. Check every cert's validity window.
+ *   3. Verify each cert is signed by the next (chain integrity).
+ *   4. Require the chain to terminate at the pinned Apple Root CA - G3.
+ *   5. Verify the JWS ES256 signature with the leaf certificate's public key.
+ * Returns the verified payload, or throws on any failure.
+ */
+function verifyAppleJws(jws) {
+  const jwt = require("jsonwebtoken");
+  const decodedHeader = jwt.decode(jws, { complete: true });
+  const x5c = decodedHeader && decodedHeader.header && decodedHeader.header.x5c;
+  if (!Array.isArray(x5c) || x5c.length < 2) {
+    throw new Error("apple jws: missing x5c certificate chain");
+  }
+
+  const chain = x5c.map(
+    (b64) => new crypto.X509Certificate(Buffer.from(b64, "base64"))
+  );
+
+  // 2. Validity window for every cert.
+  const now = new Date();
+  for (const cert of chain) {
+    if (now < new Date(cert.validFrom) || now > new Date(cert.validTo)) {
+      throw new Error("apple jws: a certificate is expired or not yet valid");
+    }
+  }
+
+  // 3. Each cert must be signed by the next one up the chain.
+  for (let i = 0; i < chain.length - 1; i++) {
+    if (!chain[i].verify(chain[i + 1].publicKey)) {
+      throw new Error("apple jws: broken certificate chain");
+    }
+  }
+
+  // 4. Root must be the pinned Apple Root CA - G3, and self-signed.
+  const root = chain[chain.length - 1];
+  if (root.fingerprint256 !== APPLE_ROOT_CA_G3_FP) {
+    throw new Error("apple jws: untrusted root certificate");
+  }
+  if (!root.verify(root.publicKey)) {
+    throw new Error("apple jws: root is not self-signed");
+  }
+
+  // 5. Verify the JWS signature with the leaf cert's public key.
+  const leafPem = chain[0].publicKey.export({ type: "spki", format: "pem" });
+  return jwt.verify(jws, leafPem, { algorithms: ["ES256"] });
+}
+
 /**
  * Validate an App Store transaction (StoreKit 2 JWS signed transaction).
- * For brevity this decodes the signed payload; production should additionally
- * verify the x5c certificate chain against Apple's root CA.
+ * The JWS signature + Apple certificate chain are cryptographically verified
+ * before any entitlement is granted.
  */
 async function validateAppStore(productId, jws) {
-  const jwt = require("jsonwebtoken");
-  const decoded = jwt.decode(jws, { complete: true });
-  if (!decoded || !decoded.payload) {
+  let p;
+  try {
+    p = verifyAppleJws(jws);
+  } catch (e) {
+    console.error("[billing] appstore JWS verification failed:", e.message);
     return { valid: false, store: "appstore" };
   }
-  const p = decoded.payload;
+  // Bind the receipt to our app to reject transactions from other apps.
+  if (p.bundleId && IOS_BUNDLE_ID && p.bundleId !== IOS_BUNDLE_ID) {
+    console.warn("[billing] appstore bundleId mismatch:", p.bundleId);
+    return { valid: false, store: "appstore" };
+  }
+  if (!ALLOWED_PRODUCT_IDS.has(p.productId) || p.productId !== productId) {
+    console.warn("[billing] appstore productId mismatch:", p.productId);
+    return { valid: false, store: "appstore" };
+  }
   const until = p.expiresDate ? Number(p.expiresDate) : null;
   const revoked = !!p.revocationDate;
   return {
     valid: !revoked && (!until || until > Date.now()),
     until,
     productId: p.productId || productId,
+    originalTransactionId: p.originalTransactionId || null,
     store: "appstore",
   };
 }
 
-exports.verifyPurchase = onCall(async (request) => {
+exports.verifyPurchase = onCall({ enforceAppCheck: true }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "Sign in required.");
@@ -344,6 +425,12 @@ exports.verifyPurchase = onCall(async (request) => {
   const { store, productId, token } = request.data || {};
   if (!store || !productId || !token) {
     throw new HttpsError("invalid-argument", "Missing purchase data.");
+  }
+  if (!ALLOWED_PRODUCT_IDS.has(productId)) {
+    throw new HttpsError("invalid-argument", "Unknown product.");
+  }
+  if (typeof token !== "string" || token.length > 20000) {
+    throw new HttpsError("invalid-argument", "Invalid purchase token.");
   }
 
   let result;
@@ -369,6 +456,47 @@ exports.verifyPurchase = onCall(async (request) => {
     return { valid: false };
   }
 
+  // SEC: bind this purchase to a SINGLE account (anti-replay / sub-sharing).
+  // A valid receipt token may only ever entitle one uid. Hashed so the raw
+  // token isn't stored. clients never read/write this collection (default-deny).
+  const tokenHash = crypto
+    .createHash("sha256")
+    .update(`${store}:${token}`)
+    .digest("hex");
+  const tokenRef = db.collection("purchaseTokens").doc(tokenHash);
+  const refsToBind = [tokenRef];
+  if (result.originalTransactionId) {
+    const originalTxHash = crypto
+      .createHash("sha256")
+      .update(`${store}:${result.originalTransactionId}`)
+      .digest("hex");
+    refsToBind.push(db.collection("purchaseTokens").doc(originalTxHash));
+  }
+  try {
+    await db.runTransaction(async (txn) => {
+      for (const ref of refsToBind) {
+        const snap = await txn.get(ref);
+        if (snap.exists && snap.data().uid && snap.data().uid !== uid) {
+          throw new HttpsError(
+            "permission-denied",
+            "This purchase is already linked to another account."
+          );
+        }
+      }
+      for (const ref of refsToBind) {
+        txn.set(
+          ref,
+          { uid, store, productId, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true }
+        );
+      }
+    });
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    console.error("[billing] token binding failed:", e.message);
+    throw new HttpsError("internal", "Could not finalize the purchase.");
+  }
+
   const ent = { premium: true, until: result.until, productId, store };
   await applyEntitlement(uid, ent);
   return { valid: true, entitlement: ent };
@@ -386,18 +514,31 @@ exports.playRtdnHandler = onMessagePublished("play-rtdn", async (event) => {
     const sub = notification.subscriptionNotification;
     if (!sub) return; // ignore non-subscription notifications
     const { subscriptionId, purchaseToken } = sub;
+    if (!ALLOWED_PRODUCT_IDS.has(subscriptionId)) {
+      console.warn("[billing] RTDN ignored unknown product:", subscriptionId);
+      return;
+    }
 
-    // Look up which user owns this purchase token.
-    const q = await db
-      .collectionGroup("purchaseQueue")
-      .where("token", "==", purchaseToken)
-      .limit(1)
-      .get();
-    if (q.empty) {
+    // Look up which user owns this purchase token. Prefer the server-owned
+    // binding written by verifyPurchase; keep purchaseQueue as a legacy fallback.
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(`play:${purchaseToken}`)
+      .digest("hex");
+    const boundToken = await db.collection("purchaseTokens").doc(tokenHash).get();
+    let uid = boundToken.exists ? boundToken.data().uid : null;
+    if (!uid) {
+      const q = await db
+        .collectionGroup("purchaseQueue")
+        .where("token", "==", purchaseToken)
+        .limit(1)
+        .get();
+      uid = q.empty ? null : q.docs[0].ref.parent.parent.id;
+    }
+    if (!uid) {
       console.warn("[billing] RTDN: no user found for token");
       return;
     }
-    const uid = q.docs[0].ref.parent.parent.id;
 
     const result = await validatePlay(subscriptionId, purchaseToken);
     await applyEntitlement(uid, {
@@ -414,28 +555,67 @@ exports.playRtdnHandler = onMessagePublished("play-rtdn", async (event) => {
 // ─── App Store Server Notifications V2 (HTTPS) ────────────────────────────────
 exports.appStoreNotifications = onRequest(async (req, res) => {
   try {
-    const jwt = require("jsonwebtoken");
+    if (req.method !== "POST") {
+      res.status(405).send("method not allowed");
+      return;
+    }
     const signedPayload = req.body && req.body.signedPayload;
     if (!signedPayload) {
       res.status(400).send("missing signedPayload");
       return;
     }
-    const decoded = jwt.decode(signedPayload);
+    // Verify the outer notification JWS against Apple's certificate chain.
+    let decoded;
+    try {
+      decoded = verifyAppleJws(signedPayload);
+    } catch (e) {
+      console.error("[billing] appStoreNotifications JWS verify failed:", e.message);
+      res.status(400).send("invalid signature");
+      return;
+    }
     const info = decoded && decoded.data && decoded.data.signedTransactionInfo;
     if (!info) {
       res.status(202).send("ignored");
       return;
     }
-    const tx = jwt.decode(info);
+    // The inner transaction is independently signed — verify it too.
+    let tx;
+    try {
+      tx = verifyAppleJws(info);
+    } catch (e) {
+      console.error("[billing] appStoreNotifications tx JWS verify failed:", e.message);
+      res.status(400).send("invalid transaction signature");
+      return;
+    }
     const originalTxId = tx.originalTransactionId;
+    if (!originalTxId) {
+      res.status(202).send("missing original transaction");
+      return;
+    }
+    if (tx.bundleId && IOS_BUNDLE_ID && tx.bundleId !== IOS_BUNDLE_ID) {
+      res.status(400).send("bundle mismatch");
+      return;
+    }
+    if (!ALLOWED_PRODUCT_IDS.has(tx.productId)) {
+      res.status(202).send("ignored product");
+      return;
+    }
 
-    const q = await db
-      .collectionGroup("purchaseQueue")
-      .where("token", "==", originalTxId)
-      .limit(1)
-      .get();
-    if (!q.empty) {
-      const uid = q.docs[0].ref.parent.parent.id;
+    const originalTxHash = crypto
+      .createHash("sha256")
+      .update(`appstore:${originalTxId}`)
+      .digest("hex");
+    const boundToken = await db.collection("purchaseTokens").doc(originalTxHash).get();
+    let uid = boundToken.exists ? boundToken.data().uid : null;
+    if (!uid) {
+      const q = await db
+        .collectionGroup("purchaseQueue")
+        .where("token", "==", originalTxId)
+        .limit(1)
+        .get();
+      uid = q.empty ? null : q.docs[0].ref.parent.parent.id;
+    }
+    if (uid) {
       const until = tx.expiresDate ? Number(tx.expiresDate) : null;
       const revoked = !!tx.revocationDate;
       await applyEntitlement(uid, {

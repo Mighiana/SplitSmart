@@ -10,12 +10,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'l10n/app_localizations.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/lock_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/base_currency_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'providers/app_state.dart';
@@ -27,6 +28,7 @@ import 'services/security_service.dart';
 import 'services/analytics_service.dart';
 import 'utils/theme_utils.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 Future<void> main() async {
@@ -52,6 +54,23 @@ Future<void> main() async {
       );
     } else {
       await Firebase.initializeApp();
+    }
+
+    // App Check — attaches attestation tokens to Firebase requests so the
+    // backend can (later) reject traffic that isn't from our genuine app.
+    // ACTIVATED ONLY (not enforced): nothing is rejected until App Check
+    // enforcement is turned on in the Firebase console / Cloud Functions, so
+    // this is safe to ship to existing users. In debug builds we use the debug
+    // provider (register the printed debug token in the console to test).
+    try {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider:
+            kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+        appleProvider:
+            kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+      );
+    } catch (e) {
+      debugPrint('[main] App Check activate failed (non-fatal): $e');
     }
   } catch (e) {
     debugPrint('[main] Firebase init failed: $e');
@@ -555,9 +574,10 @@ class _AppGateState extends State<_AppGate>
                             ),
                           ],
                         ),
-                        child: const Text(
-                          '💚',
-                          style: TextStyle(fontSize: 44),
+                        child: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          color: Colors.white,
+                          size: 44,
                         ),
                       ),
                     ),
@@ -638,6 +658,15 @@ class _AppGateState extends State<_AppGate>
           // Handled by authStateChanges listener above
         },
       );
+    }
+
+    // First-run: if the user has no account/wallet yet, ask for their main
+    // (home) currency before entering the app. Creating it flips this flag.
+    final hasWallet = context.select<AppState, bool>((s) => s.wallets.isNotEmpty);
+    if (!hasWallet) {
+      return BaseCurrencyScreen(onDone: () {
+        if (mounted) setState(() {});
+      });
     }
 
     return const _AppLockGate(child: HomeScreen());

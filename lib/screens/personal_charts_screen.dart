@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_state.dart';
+import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../main.dart';
 import '../l10n/app_localizations.dart';
@@ -606,8 +607,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                       shape: BoxShape.circle,
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text(cat.key,
-                                        style: const TextStyle(fontSize: 16)),
+                                    child: Icon(iconForEmoji(cat.key), size: 18, color: color),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -1486,7 +1486,7 @@ class _TrendHistogram extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('📊', style: TextStyle(fontSize: 40)),
+                    Icon(iconForEmoji('📊'), size: 40, color: TC.text3(context)),
                     const SizedBox(height: 10),
                     Text(l.noDataPeriod,
                         style: TextStyle(

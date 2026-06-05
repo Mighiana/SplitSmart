@@ -450,7 +450,7 @@ class _QRShareScreenState extends State<QRShareScreen>
       ),
       child: Row(
         children: [
-          const Text('🔗', style: TextStyle(fontSize: 22)),
+          const Icon(Icons.link_rounded, size: 22, color: Color(0xFF0D7377)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

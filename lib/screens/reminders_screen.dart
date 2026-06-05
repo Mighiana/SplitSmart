@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/app_state.dart';
 import '../main.dart';
 import '../utils/app_utils.dart';
+import '../widgets/common_widgets.dart';
 import '../services/analytics_service.dart';
 
 class RemindersScreen extends StatefulWidget {
@@ -77,9 +78,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
       backgroundColor: TC.bg(context),
       body: SafeArea(
         bottom: false,
-        child: ListView(
+        child: RefreshIndicator(
+          onRefresh: () => context.read<AppState>().refresh(),
+          color: TC.primary(context),
+          backgroundColor: TC.card(context),
+          child: ListView(
           padding: const EdgeInsets.only(bottom: 32),
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
           children: [
             _header(context, state),
             _summaryStrip(context, sym, overdue.length, totalOverdue, upcoming.length, totalUpcoming)
@@ -90,6 +96,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
             if (_tab == 'Overdue') _overdueTab(context, state, overdue),
             if (_tab == 'Done') _doneTab(context, state, done, sym),
           ],
+        ),
         ),
       ),
     );
@@ -107,7 +114,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
               width: 38, height: 38,
               decoration: BoxDecoration(color: TC.bg2(context), borderRadius: BorderRadius.circular(13)),
               alignment: Alignment.center,
-              child: Text('←', style: TextStyle(fontSize: 16, color: TC.text(context))),
+              child: Icon(Icons.arrow_back_rounded, size: 18, color: TC.text(context)),
             ),
           ),
           const SizedBox(width: 12),
@@ -200,7 +207,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
       decoration: BoxDecoration(color: TC.primaryPale(context), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          const Text('🔔', style: TextStyle(fontSize: 20)),
+          Icon(Icons.notifications_rounded, size: 20, color: TC.primary(context)),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
@@ -282,7 +289,19 @@ class _RemindersScreenState extends State<RemindersScreen> {
   // ─── Upcoming tab ─────────────────────────────────────────────────────────
   Widget _upcomingTab(BuildContext context, AppState state, List<ReminderData> upcoming, DateTime today) {
     if (upcoming.isEmpty) {
-      return _empty(context, '📅', 'No upcoming reminders', 'Tap + to add a payment reminder');
+      return RichEmptyState(
+        art: '🔔',
+        title: 'Never miss a payment',
+        desc: "Add bills and due dates. We'll remind you 3 days before each one.",
+        pills: [
+          EmptyPill('🏠', 'Rent', onTap: () => _showAddReminderSheet(context, state)),
+          EmptyPill('⚡', 'Electricity', onTap: () => _showAddReminderSheet(context, state)),
+          EmptyPill('💳', 'Credit Card', onTap: () => _showAddReminderSheet(context, state)),
+          EmptyPill('🌐', 'Internet', onTap: () => _showAddReminderSheet(context, state)),
+        ],
+        ctaLabel: 'Add a Reminder',
+        onCta: () => _showAddReminderSheet(context, state),
+      );
     }
     final thisWeek = <ReminderData>[];
     final later = <ReminderData>[];
@@ -453,7 +472,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
           decoration: BoxDecoration(color: TC.okPale(context), borderRadius: BorderRadius.circular(14)),
           child: Row(
             children: [
-              const Text('🎉', style: TextStyle(fontSize: 20)),
+              Icon(Icons.celebration_rounded, size: 20, color: TC.ok(context)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -681,7 +700,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
           const SizedBox(height: 16),
           Row(
             children: [
-              const Text('🔔', style: TextStyle(fontSize: 24)),
+              Icon(Icons.notifications_rounded, size: 24, color: TC.text3(context)),
               const SizedBox(width: 10),
               Text('New Reminder', style: TextStyle(color: TC.text(context), fontSize: 18, fontWeight: FontWeight.w800)),
             ],

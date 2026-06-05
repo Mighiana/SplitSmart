@@ -187,7 +187,8 @@ class _SettleUpScreenState extends State<SettleUpScreen>
                       canRecord: canRecord,
                       onMethodChanged: (m) => setState(() => _methods[i] = m),
                       onConfirm: canRecord
-                          ? () => _confirm(context, i, p.from, p.to, p.amount, g)
+                          ? () => _confirm(context, i, p.from, p.to, p.amount, g,
+                              fromId: p.fromId, toId: p.toId)
                           : null,
                     ),
                   ),
@@ -205,8 +206,10 @@ class _SettleUpScreenState extends State<SettleUpScreen>
     String from,
     String to,
     double amount,
-    GroupData g,
-  ) async {
+    GroupData g, {
+    String? fromId,
+    String? toId,
+  }) async {
     if (_isSettling) return; // Guard against double-taps
     setState(() => _isSettling = true);
     HapticFeedback.heavyImpact();
@@ -224,6 +227,8 @@ class _SettleUpScreenState extends State<SettleUpScreen>
             SettlementData(
               from: from,
               to: to,
+              fromId: fromId,
+              toId: toId,
               amount: amount,
               method: method,
               date: today,

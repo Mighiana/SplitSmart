@@ -5,6 +5,8 @@ import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
+import '../utils/icon_map.dart';
 import 'group_detail_screen.dart';
 
 class NewGroupScreen extends StatefulWidget {
@@ -16,7 +18,6 @@ class NewGroupScreen extends StatefulWidget {
 
 class _NewGroupScreenState extends State<NewGroupScreen> {
   final _nameCtrl = TextEditingController();
-  final _memberCtrl = TextEditingController();
   String _groupEmoji = '✈️';
 
   static const List<_IconOption> _iconOptions = [
@@ -55,7 +56,6 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _memberCtrl.dispose();
     super.dispose();
   }
 
@@ -218,98 +218,28 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Members ─────────────────────────────────────────────────
-            _label('Add Members'),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _memberCtrl,
-                    style: TextStyle(fontSize: 15, color: TC.text(context)),
-                    decoration: const InputDecoration(
-                      hintText: 'Member name...',
-                    ),
-                    onSubmitted: (_) => _addMember(),
-                    textCapitalization: TextCapitalization.words,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _addMember,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.green,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      '+',
+            // ── Members (account-only: invite by code after creating) ──────
+            _label('Members'),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: TC.card(context),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: TC.border(context)),
+              ),
+              child: Row(
+                children: [
+                  Icon(iconForEmoji('🔗'), size: 20, color: TC.primary(context)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "It's just you for now. After you create the group, share its invite code so friends can join from their own phones — each person adds their own expenses.",
                       style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
+                          fontSize: 12.5, height: 1.4, color: TC.text2(context)),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              children: _members
-                  .map(
-                    (m) => Container(
-                      margin: const EdgeInsets.all(3),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: TC.card(context),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: TC.border(context)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            m,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: TC.text(context),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () {
-                              if (m != 'You') {
-                                HapticFeedback.lightImpact();
-                                setState(() => _members.remove(m));
-                              }
-                            },
-                            child: Text(
-                              m == 'You' ? '·' : '×',
-                              style: TextStyle(
-                                color: m == 'You'
-                                    ? TC.text2(context)
-                                    : AppColors.red,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '💡 Each person adds their own expenses — no disputes about who paid what.',
-              style: TextStyle(fontSize: 12, color: TC.text3(context)),
+                ],
+              ),
             ),
             const SizedBox(height: 28),
 
@@ -353,19 +283,6 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
     ),
   );
 
-  void _addMember() {
-    final name = _memberCtrl.text.trim();
-    if (name.isEmpty) return;
-    if (_members.map((m) => m.toLowerCase()).contains(name.toLowerCase())) {
-      _showToast('Already added!');
-      return;
-    }
-    HapticFeedback.mediumImpact();
-    setState(() {
-      _members.add(name);
-      _memberCtrl.clear();
-    });
-  }
 
   void _showMoreGroupTypes() {
     showModalBottomSheet(
@@ -471,20 +388,29 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
       _showToast('Enter a group name!');
       return;
     }
-    if (_members.length < 2) {
-      _showToast('Add at least 1 member!');
-      return;
-    }
 
     HapticFeedback.mediumImpact();
     final state = context.read<AppState>();
+    // Account-only: the group starts with just the creator; others join via the
+    // invite code. The creator is keyed by their Firebase uid (or a local id if
+    // signed out), and recorded as the group owner via createdBy.
+    final myUid = AuthService.instance.uid;
+    final isGuest = AuthService.instance.isGuest;
+    final creator = GroupMember(
+      id: myUid ?? GroupMember.generateLocalId(),
+      name: _members.isNotEmpty ? _members.first : 'You',
+      uid: myUid,
+      isGuest: isGuest,
+    );
     final g = GroupData(
       id: DateTime.now().microsecondsSinceEpoch,
       name: name,
       emoji: _groupEmoji,
       currency: _currency.code,
       sym: _currency.sym,
-      members: [..._members],
+      members: [creator.name],
+      roster: [creator],
+      createdBy: myUid,
     );
     try {
       await state.addGroup(g);

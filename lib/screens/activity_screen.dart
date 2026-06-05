@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
+import '../utils/icon_map.dart';
 import '../widgets/common_widgets.dart';
 import '../l10n/app_localizations.dart';
 import 'group_detail_screen.dart';
@@ -18,11 +19,12 @@ class _Item {
   final String? receiptPath;
   final DateTime? date;
   final GroupData? group;
+  final TransactionData? txn; // set for personal transactions (enables swipe-delete)
   const _Item({
     required this.kind, required this.emoji, required this.title,
-    required this.subtitle, required this.sub2, required this.amount, 
-    required this.isPositive, required this.sym, 
-    this.receiptPath, this.date, this.group,
+    required this.subtitle, required this.sub2, required this.amount,
+    required this.isPositive, required this.sym,
+    this.receiptPath, this.date, this.group, this.txn,
   });
 }
 
@@ -61,13 +63,16 @@ class _ActivityScreenState extends State<ActivityScreen> {
         amount: t.amount, 
         isPositive: isInc, 
         sym: t.sym,
-        receiptPath: t.receiptPath, 
+        receiptPath: t.receiptPath,
         date: t.rawDate,
+        txn: t,
       ));
     }
+    final myName = state.userName.trim().toLowerCase();
     for (final g in state.groups) {
       for (final e in g.expenses) {
-        final isYou = e.paidBy == 'You';
+        final payer = e.paidBy.trim().toLowerCase();
+        final isYou = payer == 'you' || (myName.isNotEmpty && payer == myName);
         double share;
         if (e.splits != null && e.splits!.isNotEmpty) {
           final rawTotal = e.splits!.values.fold(0.0, (s, v) => s + v);
@@ -283,8 +288,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
                             : 'No matching activity found',
                       ).animate().fade(duration: 400.ms),
                     )
-                  : ListView.builder(
-                      physics: const BouncingScrollPhysics(),
+                  : RefreshIndicator(
+                      onRefresh: () => context.read<AppState>().refresh(),
+                      color: TC.primary(context),
+                      backgroundColor: TC.card(context),
+                      child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics()),
                       padding: const EdgeInsets.fromLTRB(14, 8, 14, 100),
                       itemCount: labelOrder.length,
                       itemBuilder: (context, i) {
@@ -297,6 +307,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                             .fade(duration: 300.ms)
                             .slideY(begin: 0.05);
                       },
+                    ),
                     ),
             ),
           ],
@@ -667,7 +678,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final amtColor = item.isPositive ? TC.ok(context) : TC.er(context);
     final prefix = item.isPositive ? '+' : '-';
 
-    return Material(
+    final row = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
@@ -706,7 +717,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                 height: 38,
                 decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Text(item.emoji, style: const TextStyle(fontSize: 18)),
+                child: Icon(iconForEmoji(item.emoji), size: 19, color: dotColor),
               ),
               const SizedBox(width: 12),
               // Body
@@ -770,6 +781,62 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
         ),
       ),
+    );
+
+    // Swipe-to-delete is only safe for personal transactions; group expenses
+    // and settlements are managed inside the group screen.
+    if (item.kind != _Kind.personal || item.txn == null) return row;
+    final tx = item.txn!;
+    return Dismissible(
+      key: ValueKey('tx_${tx.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 22),
+        decoration: BoxDecoration(
+          color: TC.erPale(context),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.delete_outline_rounded, color: TC.er(context), size: 22),
+      ),
+      confirmDismiss: (_) async {
+        HapticFeedback.mediumImpact();
+        return await showDialog<bool>(
+              context: context,
+              builder: (dCtx) => AlertDialog(
+                backgroundColor: TC.card(dCtx),
+                title: Text('Delete transaction?',
+                    style: TC.geist(dCtx,
+                        fontWeight: FontWeight.w700, color: TC.text(dCtx))),
+                content: Text(
+                    'Remove "${tx.desc}"? This cannot be undone.',
+                    style: TC.geist(dCtx, color: TC.text2(dCtx))),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, false),
+                    child: Text('Cancel',
+                        style: TC.geist(dCtx, color: TC.text3(dCtx))),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, true),
+                    child: Text('Delete',
+                        style: TC.geist(dCtx,
+                            color: TC.er(dCtx), fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      },
+      onDismissed: (_) {
+        context.read<AppState>().deleteTransaction(tx);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted "${tx.desc}"')),
+          );
+        }
+      },
+      child: row,
     );
   }
 }

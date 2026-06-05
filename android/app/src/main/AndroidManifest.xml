@@ -12,11 +12,12 @@
     <!-- Voice input (speech_to_text) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
-        android:label="SplitSmart"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:allowBackup="false"
-        android:fullBackupContent="false">
+        android:fullBackupContent="false"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

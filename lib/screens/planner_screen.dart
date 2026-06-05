@@ -5,9 +5,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
+import '../utils/icon_map.dart';
 import 'reminders_screen.dart';
 import 'subscriptions_screen.dart';
 import 'saving_goals_screen.dart';
+import 'budget_screen.dart';
 
 class PlannerScreen extends StatelessWidget {
   const PlannerScreen({super.key});
@@ -20,6 +22,12 @@ class PlannerScreen extends StatelessWidget {
     Color(0xFF8B5CF6), // purple
     Color(0xFFE85A6A), // red
   ];
+
+  Color _colorFromHex(String? hex) {
+    if (hex == null || hex.isEmpty) return _goalPalette.first;
+    final v = int.tryParse(hex.replaceAll('#', ''), radix: 16);
+    return v == null ? _goalPalette.first : Color(0xFF000000 | v);
+  }
 
   String _sym(String code) => AppState.currencies
       .firstWhere((c) => c.code == code,
@@ -108,10 +116,14 @@ class PlannerScreen extends StatelessWidget {
                 .fade(duration: 280.ms)
                 .slideY(begin: -0.12, end: 0, curve: Curves.easeOutBack),
             _heroCard(context, savedPrimary, activeGoals.length,
-                    subsPrimary, overdue.length)
+                    subs.where((s) => s.isActive).length, overdue.length)
                 .animate(delay: 80.ms)
                 .fade(duration: 360.ms)
                 .slideY(begin: 0.10, end: 0, curve: Curves.easeOutBack),
+            _budgetTile(context)
+                .animate(delay: 120.ms)
+                .fade(duration: 340.ms)
+                .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
             _goalsSection(context, goals, activeGoals)
                 .animate(delay: 160.ms)
                 .fade(duration: 360.ms)
@@ -125,6 +137,62 @@ class PlannerScreen extends StatelessWidget {
                 .fade(duration: 360.ms)
                 .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Budgets link ────────────────────────────────────────────────────────
+  Widget _budgetTile(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const BudgetScreen()));
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: TC.surface(context),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: TC.border(context)),
+            boxShadow: [
+              BoxShadow(
+                  color: TC.shadow(context),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4)),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                    color: TC.primaryPale(context),
+                    borderRadius: BorderRadius.circular(14)),
+                alignment: Alignment.center,
+                child: Icon(iconForEmoji('📊'), size: 22, color: TC.primary(context)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Budgets',
+                        style: TC.gloock(context,
+                            fontSize: 17, color: TC.text(context))),
+                    const SizedBox(height: 2),
+                    Text('Set monthly spending limits',
+                        style: TC.geist(context,
+                            fontSize: 12, color: TC.text3(context))),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: TC.text3(context), size: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -197,12 +265,9 @@ class PlannerScreen extends StatelessWidget {
     BuildContext context,
     MapEntry<String, double>? savedPrimary,
     int activeGoals,
-    MapEntry<String, double>? subsPrimary,
+    int activeSubs,
     int overdueCount,
   ) {
-    final subsSym = subsPrimary != null ? _sym(subsPrimary.key) : '';
-    final subsTotal = subsPrimary?.value ?? 0;
-
     const greenTint = Color(0xE686EFAC); // rgba(134,239,172,.9)
     const redTint = Color(0xE6FCA5A5); // rgba(252,165,165,.9)
 
@@ -239,11 +304,7 @@ class PlannerScreen extends StatelessWidget {
               children: [
                 _heroStat(context, 'Active Goals', '$activeGoals', greenTint),
                 _heroDivider(),
-                _heroStat(
-                    context,
-                    'Monthly Subs',
-                    '$subsSym${AppCurrencyUtils.formatAmount(subsTotal, 0)}',
-                    redTint),
+                _heroStat(context, 'Subscriptions', '$activeSubs', Colors.white),
                 _heroDivider(),
                 _heroStat(context, 'Overdue', '$overdueCount',
                     overdueCount > 0 ? redTint : greenTint),
@@ -361,7 +422,7 @@ class PlannerScreen extends StatelessWidget {
     final pct = g.targetAmount > 0
         ? ((g.savedAmount / g.targetAmount) * 100).round().clamp(0, 100)
         : 0;
-    final color = _goalPalette[g.id % _goalPalette.length];
+    final color = g.color != null ? _colorFromHex(g.color) : _goalPalette[g.id % _goalPalette.length];
     final sym = _sym(g.currency);
     final deadline =
         g.targetDate != null ? _monthYear(g.targetDate!) : 'No date';
@@ -386,8 +447,8 @@ class PlannerScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(11),
                   ),
                   alignment: Alignment.center,
-                  child: Text(_goalEmoji(g.title),
-                      style: const TextStyle(fontSize: 17)),
+                  child: Icon(iconForEmoji(g.icon ?? _goalEmoji(g.title)),
+                      size: 18, color: color),
                 ),
                 const SizedBox(width: 9),
                 Expanded(
@@ -450,8 +511,6 @@ class PlannerScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const SubscriptionsScreen()));
 
     final preview = subs.take(3).toList();
-    final sym = subsPrimary != null ? _sym(subsPrimary.key) : '';
-    final total = subsPrimary?.value ?? 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
@@ -460,37 +519,7 @@ class PlannerScreen extends StatelessWidget {
         children: [
           _sectionHeader(
               context, 'Subscriptions', 'See all ${subs.length} →', openSubs),
-          // Monthly cost banner
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-            decoration: BoxDecoration(
-              color: TC.primaryPale(context),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Total monthly cost',
-                    style: TC.geist(context,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: TC.text2(context))),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text('$sym${AppCurrencyUtils.formatAmount(total, 2)}',
-                        style: TC.gloock(context,
-                            fontSize: 20, color: TC.primary(context))),
-                    Text('/mo',
-                        style: TC.geist(context,
-                            fontSize: 12, color: TC.text3(context))),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
           if (preview.isEmpty)
             _emptyTile(context, '💳', 'No subscriptions yet', openSubs)
           else
@@ -538,7 +567,7 @@ class PlannerScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
-              child: Text(s.emoji, style: const TextStyle(fontSize: 20)),
+              child: Icon(iconForEmoji(s.emoji), size: 20, color: TC.primary(context)),
             ),
             const SizedBox(width: 13),
             Expanded(

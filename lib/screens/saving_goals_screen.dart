@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../main.dart';
 import '../providers/app_state.dart';
+import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../widgets/common_widgets.dart';
 import '../services/analytics_service.dart';
@@ -32,6 +33,26 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
     Color(0xFF8B5CF6), // purple
     Color(0xFFE85A6A), // red
   ];
+
+  // Choices for the add/edit goal sheet
+  static const List<String> _goalIconChoices = [
+    '🎯', '🚗', '🏠', '✈️', '💻', '📱', '🎮', '🏦', '🎓', '💍', '🏖️', '🎁',
+  ];
+  static const List<Color> _goalColorChoices = [
+    Color(0xFF0D7377), Color(0xFF3B82F6), Color(0xFF059669), Color(0xFFD97706),
+    Color(0xFF8B5CF6), Color(0xFFE85A6A), Color(0xFFEC4899), Color(0xFF0EA5E9),
+  ];
+
+  String _hex(Color c) =>
+      '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+  Color _colorFromHex(String? hex) {
+    if (hex == null || hex.isEmpty) return _palette.first;
+    final h = hex.replaceAll('#', '');
+    final v = int.tryParse(h, radix: 16);
+    if (v == null) return _palette.first;
+    return Color(0xFF000000 | v);
+  }
 
   @override
   void initState() {
@@ -79,6 +100,8 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
     final targetController = TextEditingController(text: existing?.targetAmount.toString() ?? '');
     final savedController = TextEditingController(text: existing?.savedAmount.toString() ?? '');
     DateTime? localTargetDate = existing?.targetDate;
+    String localIcon = existing?.icon ?? _emojiFor(existing?.title ?? '');
+    String localColor = existing?.color ?? _hex(_goalColor(existing ?? SavingGoal(id: 0, currency: 'USD', title: '', targetAmount: 1)));
 
     showModalBottomSheet(
       context: context,
@@ -164,6 +187,56 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    Text('Icon', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text3(context))),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _goalIconChoices.map((em) {
+                        final sel = em == localIcon;
+                        final selColor = _colorFromHex(localColor);
+                        return GestureDetector(
+                          onTap: () => setModalState(() => localIcon = em),
+                          child: Container(
+                            width: 44, height: 44,
+                            decoration: BoxDecoration(
+                              color: sel ? selColor.withValues(alpha: 0.16) : TC.bg2(context),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: sel ? selColor : TC.border(context),
+                                  width: sel ? 2 : 1),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(iconForEmoji(em), size: 20,
+                                color: sel ? selColor : TC.text2(context)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Colour', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TC.text3(context))),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _goalColorChoices.map((c) {
+                        final hex = _hex(c);
+                        final sel = hex.toLowerCase() == localColor.toLowerCase();
+                        return GestureDetector(
+                          onTap: () => setModalState(() => localColor = hex),
+                          child: Container(
+                            width: 34, height: 34,
+                            decoration: BoxDecoration(
+                              color: c,
+                              shape: BoxShape.circle,
+                              border: sel ? Border.all(color: TC.text(context), width: 2.5) : null,
+                            ),
+                            child: sel ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
                     if (existing != null) ...[
                       const SizedBox(height: 12),
                       TextField(
@@ -196,10 +269,10 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                         }
 
                         if (existing == null) {
-                          state.addSavingGoal(cur, title, target, targetDate: localTargetDate);
+                          state.addSavingGoal(cur, title, target, targetDate: localTargetDate, savedAmount: saved, icon: localIcon, color: localColor);
                           AnalyticsService.logSavingGoalAdded();
                         } else {
-                          state.updateSavingGoal(existing, title: title, targetAmount: target, savedAmount: saved, targetDate: localTargetDate);
+                          state.updateSavingGoal(existing, title: title, targetAmount: target, savedAmount: saved, targetDate: localTargetDate, icon: localIcon, color: localColor);
                         }
                         Navigator.pop(context);
                       },
@@ -359,16 +432,20 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                 ? Column(
                     children: [
                       _header(context, state),
-                      const Expanded(
-                        child: Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(40),
-                            child: EmptyState(
-                              icon: '🎯',
-                              title: 'No Goals yet',
-                              subtitle: 'Tap "+ Goal" above to get started.',
-                            ),
-                          ),
+                      Expanded(
+                        child: RichEmptyState(
+                          art: '🎯',
+                          title: 'What are you saving for?',
+                          desc: 'Set a target and track your progress every month.',
+                          pills: [
+                            EmptyPill('✈️', 'Trip', onTap: () => _showAddGoalSheet(context, state)),
+                            EmptyPill('💻', 'MacBook', onTap: () => _showAddGoalSheet(context, state)),
+                            EmptyPill('🏠', 'House', onTap: () => _showAddGoalSheet(context, state)),
+                            EmptyPill('🎮', 'Console', onTap: () => _showAddGoalSheet(context, state)),
+                            EmptyPill('🏦', 'Emergency', onTap: () => _showAddGoalSheet(context, state)),
+                          ],
+                          ctaLabel: 'Create a Goal',
+                          onCta: () => _showAddGoalSheet(context, state),
                         ),
                       ),
                     ],
@@ -434,7 +511,7 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
               width: 38, height: 38,
               decoration: BoxDecoration(color: TC.bg2(context), borderRadius: BorderRadius.circular(13)),
               alignment: Alignment.center,
-              child: Text('←', style: TextStyle(fontSize: 16, color: TC.text(context))),
+              child: Icon(Icons.arrow_back_rounded, size: 18, color: TC.text(context)),
             ),
           ),
           const SizedBox(width: 12),
@@ -497,7 +574,7 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
   // ─── Goal card ──────────────────────────────────────────────────────────────
   Widget _goalCard(BuildContext context, AppState state, SavingGoal g) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = _goalColor(g);
+    final color = g.color != null ? _colorFromHex(g.color) : _goalColor(g);
     final progress = g.targetAmount > 0 ? (g.savedAmount / g.targetAmount).clamp(0.0, 1.0) : 0.0;
     final pct = (progress * 100).round();
 
@@ -549,7 +626,7 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                 width: 56, height: 56,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Text(_emojiFor(g.title), style: const TextStyle(fontSize: 26)),
+                child: Icon(iconForEmoji(g.icon ?? _emojiFor(g.title)), size: 26, color: Colors.white),
               ),
               const SizedBox(height: 10),
               Text(
@@ -590,40 +667,29 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
   // Slim progress bar with the percentage shown inside the coloured fill.
   Widget _goalProgressBar(BuildContext context, int pct, Color color) {
     final clamped = pct.clamp(0, 100);
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        final fillW = (w * clamped / 100).clamp(40.0, w);
-        return Stack(
-          children: [
-            Container(
-              height: 28,
-              decoration: BoxDecoration(
-                color: TC.bg2(context),
-                borderRadius: BorderRadius.circular(20),
-              ),
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: clamped / 100,
+              minHeight: 8,
+              backgroundColor: TC.bg2(context),
+              valueColor: AlwaysStoppedAnimation(color),
             ),
-            Container(
-              height: 28,
-              width: fillW,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 12),
-              child: Text(
-                '$clamped%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          '$clamped%',
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }

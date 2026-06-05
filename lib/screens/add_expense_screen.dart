@@ -1169,16 +1169,37 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
     final dateToSave = _isEdit ? _date : _todayStr();
 
+    // Derive STABLE member ids when the roster makes names unambiguous. For
+    // duplicate names (or legacy groups with no roster) these stay null and the
+    // engine falls back to name-keying — no incorrect/partial id maps are saved.
+    final String? paidById = g.memberIdForName(_payer);
+    Map<String, double>? splitIds;
+    if (splits != null && splits.isNotEmpty && g.roster.isNotEmpty) {
+      final mapped = <String, double>{};
+      bool allResolved = true;
+      splits.forEach((name, v) {
+        final id = g.memberIdForName(name);
+        if (id == null) {
+          allResolved = false;
+        } else {
+          mapped[id] = v;
+        }
+      });
+      if (allResolved) splitIds = mapped;
+    }
+
     final newExp = ExpenseData(
       id: widget.existing?.id ?? DateTime.now().millisecondsSinceEpoch,
       desc: desc,
       amount: amt,
       cat: _cat,
       paidBy: _payer,
+      paidById: paidById,
       date: dateToSave,
       receipt: _receipt,
       receiptPath: _receiptPath,
       splits: splits,
+      splitIds: splitIds,
       createdBy: _isEdit ? widget.existing?.createdBy : 'You',
       updatedBy: _isEdit ? 'You' : null,
     );

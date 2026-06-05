@@ -16,6 +16,9 @@ import 'settings_screen.dart';
 import '../services/auth_service.dart';
 import 'saving_goals_screen.dart';
 import 'planner_screen.dart';
+import 'personal_charts_screen.dart';
+import '../widgets/common_widgets.dart';
+import '../utils/icon_map.dart';
 
 
 class MoneyTab extends StatefulWidget {
@@ -42,6 +45,7 @@ class _MoneyTabState extends State<MoneyTab> {
   String? _localPhotoPath;
   bool _hideBalance = false;
   bool _balanceCollapsed = false;
+  bool _emailVerifyDismissed = false;
 
   @override
   void initState() {
@@ -137,11 +141,13 @@ class _MoneyTabState extends State<MoneyTab> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     String? activeCur = state.homeCurrency;
-    if (activeCur == null && wallets.keys.isNotEmpty) {
+    // Fall back if the saved home currency no longer has a wallet (e.g. deleted).
+    if ((activeCur == null || !wallets.containsKey(activeCur)) && wallets.keys.isNotEmpty) {
       activeCur = wallets.keys.first;
+      final fallback = activeCur;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && state.homeCurrency == null) {
-          state.setHomeCurrency(activeCur!);
+        if (mounted && state.homeCurrency != fallback) {
+          state.setHomeCurrency(fallback);
         }
       });
     }
@@ -160,8 +166,23 @@ class _MoneyTabState extends State<MoneyTab> {
       backgroundColor: isDark ? const Color(0xFF121212) : _kBg,
       body: SafeArea(
         bottom: false,
+        child: (state.isLoading && wallets.isEmpty && state.transactions.isEmpty)
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(top: 28),
+                children: const [
+                  SkeletonList(count: 2, itemHeight: 96),
+                  SizedBox(height: 20),
+                  SkeletonList(count: 4),
+                ],
+              )
+            : RefreshIndicator(
+        onRefresh: () => state.refresh(),
+        color: TC.primary(context),
+        backgroundColor: TC.card(context),
         child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
@@ -170,15 +191,16 @@ class _MoneyTabState extends State<MoneyTab> {
                   children: [
                     _buildHeader(context, state, isDark)
                         .animate().fadeIn(duration: 280.ms).slideY(begin: 0.12, end: 0, curve: Curves.easeOut),
+                    _buildEmailVerifyBanner(context),
                     _buildNetPositionCard(context, overallBalance, sym, activeCur, isDark, state),
                     _buildActionButtons(context, activeCur)
                         .animate().fadeIn(delay: 120.ms, duration: 320.ms).slideY(begin: 0.14, end: 0, delay: 120.ms, curve: Curves.easeOut),
                     _buildQuickStats(context, isDark, state, sym, activeCur)
                         .animate().fadeIn(delay: 200.ms, duration: 360.ms).slideY(begin: 0.14, end: 0, delay: 200.ms, curve: Curves.easeOut),
+                    _buildMonthlyDonut(context, isDark, state, sym, activeCur)
+                        .animate().fadeIn(delay: 240.ms, duration: 380.ms).slideY(begin: 0.14, end: 0, delay: 240.ms, curve: Curves.easeOut),
                     _buildSmartInsight(context, isDark, state, sym, activeCur)
                         .animate().fadeIn(delay: 280.ms, duration: 400.ms).slideY(begin: 0.14, end: 0, delay: 280.ms, curve: Curves.easeOut),
-                    _buildUpcomingImportant(context, isDark, state, sym)
-                        .animate().fadeIn(delay: 360.ms, duration: 440.ms).slideY(begin: 0.14, end: 0, delay: 360.ms, curve: Curves.easeOut),
                     _buildRecentTransactions(context, isDark, state, sym, activeCur)
                         .animate().fadeIn(delay: 440.ms, duration: 480.ms).slideY(begin: 0.14, end: 0, delay: 440.ms, curve: Curves.easeOut),
                   ],
@@ -187,6 +209,104 @@ class _MoneyTabState extends State<MoneyTab> {
             ),
           ],
         ),
+      ),
+      ),
+    );
+  }
+
+  /// Soft-gate banner nudging email/password users to verify. Dismissible and
+  /// non-blocking — the account keeps working either way.
+  Widget _buildEmailVerifyBanner(BuildContext context) {
+    final auth = AuthService.instance;
+    if (_emailVerifyDismissed ||
+        !auth.isEmailPasswordUser ||
+        auth.isEmailVerified) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: TC.wnPale(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: TC.wn(context).withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.mark_email_unread_outlined, size: 20, color: TC.wn(context)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Verify your email',
+                    style: TC.geist(context,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: TC.text(context))),
+                const SizedBox(height: 2),
+                Text('Confirm ${auth.email ?? 'your email'} to secure your account.',
+                    style: TC.geist(context,
+                        fontSize: 11, color: TC.text2(context))),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        try {
+                          await auth.sendEmailVerification();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Verification email sent')),
+                            );
+                          }
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Could not send — try again later')),
+                            );
+                          }
+                        }
+                      },
+                      child: Text('Resend',
+                          style: TC.geist(context,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: TC.primary(context))),
+                    ),
+                    const SizedBox(width: 18),
+                    GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        final ok = await auth.reloadEmailVerified();
+                        if (ok && mounted) {
+                          setState(() {});
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Not verified yet — check your inbox')),
+                          );
+                        }
+                      },
+                      child: Text("I've verified",
+                          style: TC.geist(context,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: TC.text2(context))),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _emailVerifyDismissed = true),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Icon(Icons.close_rounded, size: 18, color: TC.text3(context)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -433,15 +553,22 @@ class _MoneyTabState extends State<MoneyTab> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _hideBalance ? '••••' : '${net < 0 ? '-' : ''}${money(net)}',
-                  style: TC.gloock(
-                    context,
-                    fontSize: 42,
-                    letterSpacing: -1.0,
-                    color: Colors.white,
-                  ),
-                ),
+                _hideBalance
+                    ? Text(
+                        '••••',
+                        style: TC.gloock(context,
+                            fontSize: 42, letterSpacing: -1.0, color: Colors.white),
+                      )
+                    : CountUpText(
+                        value: net,
+                        builder: (ctx, v) => Text(
+                          '${v < 0 ? '-' : ''}${money(v)}',
+                          style: TC.gloock(ctx,
+                              fontSize: 42,
+                              letterSpacing: -1.0,
+                              color: Colors.white),
+                        ),
+                      ),
                 if (!_balanceCollapsed) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -523,7 +650,7 @@ class _MoneyTabState extends State<MoneyTab> {
       savedSum += g.savedAmount;
       targetSum += g.targetAmount;
     }
-    final int goalsPct = targetSum > 0 ? (savedSum / targetSum * 100).round() : 0;
+    final int goalsPct = targetSum > 0 ? (savedSum / targetSum * 100).round().clamp(0, 100) : 0;
 
     // Overdue reminders
     final now = DateTime.now();
@@ -547,19 +674,48 @@ class _MoneyTabState extends State<MoneyTab> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(child: _statTile(context, isDark, '🏆', '$goalsPct%', 'Goals', TC.primary(context), () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const SavingGoalsScreen()));
-          })),
-          const SizedBox(width: 10),
-          Expanded(child: _statTile(context, isDark, '🔔', '$overdue', 'Overdue', overdue > 0 ? TC.wn(context) : TC.text3(context), () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const PlannerScreen()));
-          })),
-          const SizedBox(width: 10),
-          Expanded(child: _statTile(context, isDark, '📊', spentStr, 'Spent', TC.er(context), () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityScreen()));
-          })),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Snapshot',
+                    style: TC.gloock(context, fontSize: 17, color: TC.text(context))),
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const PlannerScreen()));
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('See all',
+                          style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w600, color: TC.primaryMd(context))),
+                      Icon(Icons.chevron_right, size: 16, color: TC.primaryMd(context)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(child: _statTile(context, isDark, '🏆', '$goalsPct%', 'Goals', TC.primary(context), () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const SavingGoalsScreen()));
+              })),
+              const SizedBox(width: 10),
+              Expanded(child: _statTile(context, isDark, '🔔', '$overdue', 'Overdue', overdue > 0 ? TC.wn(context) : TC.text3(context), () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const PlannerScreen()));
+              })),
+              const SizedBox(width: 10),
+              Expanded(child: _statTile(context, isDark, '🧾', spentStr, 'Spent', TC.er(context), () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityScreen()));
+              })),
+            ],
+          ),
         ],
       ),
     ).animate().fade().slideY(begin: 0.1, end: 0, curve: Curves.easeOutBack, duration: 600.ms);
@@ -711,193 +867,246 @@ class _MoneyTabState extends State<MoneyTab> {
     );
   }
 
-  Widget _buildUpcomingImportant(BuildContext context, bool isDark, AppState state, String sym) {
-    final cardColor = isDark ? const Color(0xFF1E1E1E) : _kWhite;
-    final textColor = isDark ? Colors.white : _kText;
-
-    // First reminder
-    final uncompletedReminders = state.reminders.where((r) => !r.isCompleted).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
-    final firstReminder = uncompletedReminders.isNotEmpty ? uncompletedReminders.first : null;
-
-    // First subscription
-    final activeSubs = state.subscriptions.where((s) => s.isActive).toList()
-      ..sort((a, b) => a.daysUntilBilling.compareTo(b.daysUntilBilling));
-    final firstSub = activeSubs.isNotEmpty ? activeSubs.first : null;
-
-    // First goal
-    final ongoingGoals = state.savingGoals.where((g) => g.savedAmount < g.targetAmount).toList()
-      ..sort((a, b) {
-        final aProgress = a.targetAmount > 0 ? (a.savedAmount / a.targetAmount) : 0;
-        final bProgress = b.targetAmount > 0 ? (b.savedAmount / b.targetAmount) : 0;
-        return bProgress.compareTo(aProgress); // Highest progress first
-      });
-    final firstGoal = ongoingGoals.isNotEmpty ? ongoingGoals.first : null;
-
-    final hasAny = firstReminder != null || firstSub != null || firstGoal != null;
-
-    return Column(
-      children: [
-        _buildSectionHeader('Coming Up', 'View all', () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlannerScreen()));
-        }, isDark),
-        Container(
-          margin: const EdgeInsets.fromLTRB(16, 6, 16, 14),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: !hasAny 
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    'Nothing upcoming right now',
-                    style: TextStyle(color: _kTextMuted, fontSize: 14),
-                  ),
-                ),
-              )
-            : Column(
-                children: [
-                  if (firstReminder != null) ...[
-                    _buildUpItem(
-                      icon: '🔔', iconBg: const Color(0xFFFFF7ED),
-                      name: firstReminder.title,
-                      sub: _formatDaysDiff(firstReminder.date),
-                      rightWidget: firstReminder.amountStr.isNotEmpty
-                          ? Text(firstReminder.amountStr, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor))
-                          : null,
-                      textColor: textColor,
-                    ),
-                  ],
-                  if (firstReminder != null && (firstSub != null || firstGoal != null))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      child: Divider(height: 1, thickness: 1, color: isDark ? Colors.white10 : _kBorder),
-                    ),
-                  if (firstSub != null) ...[
-                    _buildUpItem(
-                      icon: firstSub.emoji,
-                      iconBg: Color(int.tryParse(firstSub.colorHex.replaceFirst('#', 'FF')) ?? 0xFF1E88E5).withValues(alpha: 0.15),
-                      name: firstSub.name,
-                      sub: firstSub.daysUntilBilling == 0 ? 'Today' : firstSub.daysUntilBilling == 1 ? 'Tomorrow' : 'In ${firstSub.daysUntilBilling} days',
-                      rightWidget: Text('${firstSub.sym}${AppCurrencyUtils.formatAmount(firstSub.amount, 2)}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
-                      textColor: textColor,
-                    ),
-                  ],
-                  if (firstSub != null && firstGoal != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      child: Divider(height: 1, thickness: 1, color: isDark ? Colors.white10 : _kBorder),
-                    ),
-                  if (firstGoal != null) ...[
-                    Builder(
-                      builder: (ctx) {
-                        final pct = firstGoal.targetAmount > 0 ? (firstGoal.savedAmount / firstGoal.targetAmount) : 0.0;
-                        final left = firstGoal.targetAmount - firstGoal.savedAmount;
-                        return _buildUpItem(
-                          icon: '🎯', iconBg: const Color(0xFFE0F2F1),
-                          name: firstGoal.title,
-                          sub: '${(pct * 100).toStringAsFixed(0)}% completed',
-                          hasBar: true,
-                          barPct: pct,
-                          rightWidget: Text('$sym${AppCurrencyUtils.formatAmount(left, 0)} left', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
-                          textColor: textColor,
-                        );
-                      }
-                    ),
-                  ],
-                ],
-              ),
-        ),
-      ],
-    ).animate().fade().slideY(begin: 0.1, end: 0, curve: Curves.easeOutBack, duration: 600.ms);
-  }
-
-  String _formatDaysDiff(DateTime date) {
+  Widget _buildMonthlyDonut(BuildContext context, bool isDark, AppState state, String sym, String? activeCur) {
     final now = _spendingMonth;
-    final today = DateTime(now.year, now.month, now.day);
-    final target = DateTime(date.year, date.month, date.day);
-    final diff = target.difference(today).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Tomorrow';
-    if (diff == -1) return 'Yesterday';
-    if (diff > 0) return 'In $diff days';
-    return '${diff.abs()} days ago';
-  }
-
-  Widget _buildUpItem({required String icon, required Color iconBg, bool isTextIcon = false, Color? iconColor, required String name, required String sub, bool hasBar = false, double barPct = 0.0, Widget? rightWidget, required Color textColor}) {
-    return Row(
-      children: [
-        Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(
-            color: iconBg,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: isTextIcon 
-              ? Text(icon, style: TextStyle(color: iconColor, fontSize: 20, fontWeight: FontWeight.w900, fontFamily: 'Georgia'))
-              : Text(icon, style: const TextStyle(fontSize: 20)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
-              const SizedBox(height: 2),
-              Text(sub, style: TextStyle(fontSize: 12, color: _kTextMuted)),
-              if (hasBar) ...[
-                const SizedBox(height: 6),
-                Container(
-                  height: 4, width: double.infinity,
-                  decoration: BoxDecoration(color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(2)),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: barPct.clamp(0.0, 1.0),
-                    child: Container(decoration: BoxDecoration(color: _kGreen, borderRadius: BorderRadius.circular(2))),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (rightWidget != null) ...[
-          const SizedBox(width: 8),
-          Row(
-            children: [
-              rightWidget,
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, color: Color(0xFFCCCCCC), size: 16),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildSmartInsight(BuildContext context, bool isDark, AppState state, String sym, String? activeCur) {
-    // Calculate real insight: highest spending category this month
-    final now = _spendingMonth;
+    // Categories the app knows about; anything else collapses into "Other" so
+    // non-standard emojis don't each become their own mystery slice.
+    final knownCats = <String>{
+      for (final c in AppState.expenseCategories) c.icon,
+      for (final c in AppState.incomeCategories) c.icon,
+    };
     final catSpends = <String, double>{};
     for (var tx in state.allTransactionsWithGroupShares) {
       if (tx.currency == activeCur && tx.type == 'expense') {
         final d = DateTime.tryParse(tx.date);
         if (d != null && d.year == now.year && d.month == now.month) {
-          catSpends[tx.cat] = (catSpends[tx.cat] ?? 0) + tx.amount;
+          final cat = knownCats.contains(tx.cat) ? tx.cat : '💰'; // 💰 = Other
+          catSpends[cat] = (catSpends[cat] ?? 0) + tx.amount;
         }
       }
     }
-    
-    String insightText = 'No spending insights yet this month.';
-    
-    if (catSpends.isNotEmpty) {
+    final total = catSpends.values.fold(0.0, (a, b) => a + b);
+    if (total <= 0) return const SizedBox.shrink();
+
+    final sorted = catSpends.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = sorted.take(5).toList();
+    final otherSum = sorted.skip(5).fold(0.0, (a, b) => a + b.value);
+
+    final slices = <_HomeDonutSlice>[];
+    final legend = <Widget>[];
+    String catLabel(String emoji) => AppState.expenseCategories
+        .firstWhere((c) => c.icon == emoji,
+            orElse: () => CategoryItem(emoji, emoji, '#9E9E9E'))
+        .label;
+
+    for (final e in top) {
+      final c = AppState.getCategoryColor(e.key);
+      final lbl = catLabel(e.key);
+      // Unknown/legacy categories with no proper label render as "Other".
+      final display = lbl == e.key ? 'Other' : lbl;
+      slices.add(_HomeDonutSlice(e.value / total, c));
+      legend.add(_donutLegendRow(context, c, iconForEmoji(e.key), display,
+          '$sym${AppCurrencyUtils.formatAmount(e.value, 0)}',
+          '${(e.value / total * 100).round()}%'));
+    }
+    if (otherSum > 0) {
+      // Keep the ring honest with a neutral remainder slice, but instead of a
+      // growing "Other" line, offer "See all" → full breakdown of EVERY category.
+      const c = Color(0xFF9BB5B0);
+      slices.add(_HomeDonutSlice(otherSum / total, c));
+      legend.add(
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MoneyChartsScreen(initialCurrency: activeCur),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.more_horiz_rounded, size: 16, color: c),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('See all categories',
+                      style: TC.geist(context,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: TC.primary(context))),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16, color: TC.primary(context)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.0 : 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 4)),
+        ],
+        border: isDark ? Border.all(color: TC.border(context)) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('This Month',
+                      style: TC.gloock(context, fontSize: 17, color: TC.text(context))),
+                  Text(_monthName(now),
+                      style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
+                ],
+              ),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const ActivityScreen()));
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('See all',
+                        style: TC.geist(context, fontSize: 12, fontWeight: FontWeight.w600, color: TC.primaryMd(context))),
+                    Icon(Icons.chevron_right, size: 16, color: TC.primaryMd(context)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              SizedBox(
+                width: 116, height: 116,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(116, 116),
+                      painter: _HomeDonutPainter(slices, TC.bg2(context)),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$sym${AppCurrencyUtils.formatAmount(total, 0)}',
+                            style: TC.gloock(context, fontSize: 18, color: TC.text(context)),
+                          ),
+                        ),
+                        Text('spent',
+                            style: TC.geist(context, fontSize: 10, color: TC.text3(context))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(child: Column(children: legend)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _donutLegendRow(BuildContext context, Color color, IconData icon, String label, String amount, String pct) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TC.geist(context,
+                    fontSize: 12, fontWeight: FontWeight.w500, color: TC.text(context))),
+          ),
+          const SizedBox(width: 6),
+          Text(pct,
+              style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
+          const SizedBox(width: 8),
+          Text(amount,
+              style: TC.gloock(context, fontSize: 13, color: TC.text(context))),
+        ],
+      ),
+    );
+  }
+
+  String _monthName(DateTime d) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${months[d.month - 1]} ${d.year}';
+  }
+
+  Widget _buildSmartInsight(BuildContext context, bool isDark, AppState state, String sym, String? activeCur) {
+    final now = _spendingMonth;
+    final lastMonth = DateTime(now.year, now.month - 1, 1);
+    double thisTotal = 0, lastTotal = 0;
+    final catSpends = <String, double>{};
+    for (var tx in state.allTransactionsWithGroupShares) {
+      if (tx.currency != activeCur || tx.type != 'expense') continue;
+      final d = tx.rawDate ?? DateTime.tryParse(tx.date);
+      if (d == null) continue;
+      if (d.year == now.year && d.month == now.month) {
+        thisTotal += tx.amount;
+        catSpends[tx.cat] = (catSpends[tx.cat] ?? 0) + tx.amount;
+      } else if (d.year == lastMonth.year && d.month == lastMonth.month) {
+        lastTotal += tx.amount;
+      }
+    }
+
+    // Priority: month-over-month trend > top category > onboarding nudge.
+    String insightText;
+    final overdue = state.reminders.where((r) =>
+        !r.isCompleted &&
+        DateTime(r.date.year, r.date.month, r.date.day)
+            .isBefore(DateTime(now.year, now.month, now.day))).length;
+
+    if (thisTotal <= 0 && lastTotal <= 0) {
+      insightText = 'Add an expense and I’ll start spotting trends for you.';
+    } else if (overdue > 0) {
+      insightText = 'You have $overdue overdue ${overdue == 1 ? 'bill' : 'bills'}. Tap Overdue to settle them.';
+    } else if (lastTotal > 0 && thisTotal > 0) {
+      final diff = ((thisTotal - lastTotal) / lastTotal * 100).round();
+      if (diff <= -5) {
+        insightText = 'You’re spending ${diff.abs()}% less than last month. Nice work! 🎉';
+      } else if (diff >= 5) {
+        insightText = 'You’re spending $diff% more than last month so far.';
+      } else {
+        insightText = 'Your spending is about the same as last month.';
+      }
+    } else if (catSpends.isNotEmpty && thisTotal > 0) {
       final topCat = catSpends.entries.reduce((a, b) => a.value > b.value ? a : b);
-      final topSpend = topCat.value;
       final catData = AppState.expenseCategories.firstWhere((c) => c.icon == topCat.key, orElse: () => const CategoryItem('💰', 'Other', '#9E9E9E'));
-      insightText = 'You spent $sym${AppCurrencyUtils.formatAmount(topSpend, 0)} on ${catData.label} this month.';
+      final pct = (topCat.value / thisTotal * 100).round();
+      insightText = '${catData.label} is your top category — $pct% of spending.';
+    } else {
+      insightText = 'No spending yet this month.';
     }
 
     return Container(
@@ -1018,7 +1227,13 @@ class _MoneyTabState extends State<MoneyTab> {
     );
 
     final String amtStr = '${isInc ? '+' : '-'}${t.sym}${AppCurrencyUtils.formatAmount(t.amount, 2)}';
-    
+
+    // Short, clean date (the stored value can be a full ISO timestamp).
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final dateStr = t.rawDate != null
+        ? '${months[t.rawDate!.month - 1]} ${t.rawDate!.day}'
+        : t.date;
+
     return Row(
       children: [
         Container(
@@ -1028,28 +1243,38 @@ class _MoneyTabState extends State<MoneyTab> {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: Text(t.cat, style: const TextStyle(fontSize: 20)),
+          child: Icon(iconForEmoji(t.cat), size: 20,
+              color: isInc ? const Color(0xFF4CAF50) : const Color(0xFFE57373)),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(catData.label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
+              Text(t.desc.trim().isNotEmpty ? t.desc : catData.label,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Text(t.isGroupShare ? 'Group Expense • ${t.date}' : t.date, style: TextStyle(fontSize: 12, color: _kTextMuted)),
+                  Flexible(
+                    child: Text(
+                      t.isGroupShare ? 'Group • $dateStr' : dateStr,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: _kTextMuted),
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2DCE98).withValues(alpha: 0.12),
+                      color: TC.primaryPale(context),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
                       t.currency,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF2DCE98)),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TC.primaryMd(context)),
                     ),
                   ),
                 ],
@@ -1160,7 +1385,7 @@ class _MoneyTabState extends State<MoneyTab> {
                                     title: Text('Delete ${curData.code} account?',
                                         style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(parentCtx))),
                                     content: Text(
-                                        'This removes your ${curData.code} wallet and its transactions. Your other accounts stay. This cannot be undone.',
+                                        'This removes your ${curData.code} account. Your other accounts stay, and past records are kept. This cannot be undone.',
                                         style: TextStyle(color: TC.text2(parentCtx))),
                                     actions: [
                                       TextButton(
@@ -1409,4 +1634,48 @@ class _MoneyTabState extends State<MoneyTab> {
       );
     });
   }
+}
+
+// ─── Home monthly-spending donut ──────────────────────────────────────────────
+class _HomeDonutSlice {
+  final double fraction; // 0..1
+  final Color color;
+  _HomeDonutSlice(this.fraction, this.color);
+}
+
+class _HomeDonutPainter extends CustomPainter {
+  final List<_HomeDonutSlice> slices;
+  final Color trackColor;
+  _HomeDonutPainter(this.slices, this.trackColor);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    const stroke = 16.0;
+    final inner = rect.deflate(stroke / 2);
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = trackColor;
+    canvas.drawArc(inner, 0, 6.28318, false, track);
+
+    double start = -1.5708; // -90°
+    const gap = 0.04;
+    for (final s in slices) {
+      final sweep = s.fraction * 6.28318;
+      if (sweep <= 0) continue;
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..color = s.color;
+      final drawSweep = (sweep - gap).clamp(0.02, 6.28318);
+      canvas.drawArc(inner, start + gap / 2, drawSweep, false, paint);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeDonutPainter old) =>
+      old.slices != slices || old.trackColor != trackColor;
 }
