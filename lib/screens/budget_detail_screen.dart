@@ -62,11 +62,7 @@ class BudgetDetailScreen extends StatelessWidget {
     for (final t in state.allTransactionsWithGroupShares) {
       if (t.type.toLowerCase() != 'expense') continue;
       if (t.currency != b.currency) continue;
-      if (b.categories.isNotEmpty) {
-        final matchesParent = b.categories.contains(t.cat);
-        final matchesSub = t.subcat != null && b.categories.contains(t.subcat);
-        if (!matchesParent && !matchesSub) continue;
-      }
+      if (!b.coversCategoryOf(t)) continue;
       final d = t.rawDate ?? DateTime.tryParse(t.date);
       if (d == null) continue;
       final day = DateTime(d.year, d.month, d.day);

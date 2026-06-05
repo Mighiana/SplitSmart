@@ -1965,13 +1965,7 @@ class AppState extends ChangeNotifier {
     for (final t in allTransactionsWithGroupShares) {
       if (t.type.toLowerCase() != 'expense') continue;
       if (t.currency != b.currency) continue;
-      if (b.categories.isNotEmpty) {
-        // Match a budget's targets against either the transaction's parent
-        // category emoji OR its specific sub-category key.
-        final matchesParent = b.categories.contains(t.cat);
-        final matchesSub = t.subcat != null && b.categories.contains(t.subcat);
-        if (!matchesParent && !matchesSub) continue;
-      }
+      if (!b.coversCategoryOf(t)) continue;
       final d = t.rawDate ?? DateTime.tryParse(t.date);
       if (d == null || d.isBefore(start)) continue;
       total += t.amount;
@@ -2621,6 +2615,17 @@ class Budget {
     List<String>? categories,
     this.notifyOverspent = true,
   }) : categories = categories ?? const [];
+
+  /// Single source of truth for whether this budget targets a transaction by
+  /// category. Empty [categories] = "all categories" (matches everything);
+  /// otherwise matches the transaction's parent category emoji OR its specific
+  /// `sub:` key. Used by both [AppState.budgetSpent] and the budget detail
+  /// chart so the matching rule can never drift between the two.
+  bool coversCategoryOf(TransactionData t) {
+    if (categories.isEmpty) return true;
+    return categories.contains(t.cat) ||
+        (t.subcat != null && categories.contains(t.subcat));
+  }
 
   factory Budget.fromMap(Map<String, dynamic> m) {
     final catRaw = (m['categories'] as String?) ?? '';
