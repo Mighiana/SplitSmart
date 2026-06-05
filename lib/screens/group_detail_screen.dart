@@ -1047,8 +1047,38 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                                       GestureDetector(
                                         onTap: () async {
                                           HapticFeedback.lightImpact();
-                                          await state.removeMember(g, rm);
-                                          setSheetState(() {});
+                                          final memBal =
+                                              (state.getBalancesById(g)[rm.id] ?? 0.0);
+                                          final unsettled = memBal.abs() >= 0.01;
+                                          final confirmed = await showDialog<bool>(
+                                            context: context,
+                                            builder: (dctx) => AlertDialog(
+                                              backgroundColor: TC.card(context),
+                                              title: Text('Remove $name?',
+                                                  style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(context))),
+                                              content: Text(
+                                                unsettled
+                                                    ? '$name still has an unsettled balance of ${g.sym}${memBal.abs().toStringAsFixed(2)} in this group. Removing them now may throw off everyone\'s totals. Remove anyway?'
+                                                    : 'Remove $name from "${g.name}"? They\'ll lose access to this group.',
+                                                style: TextStyle(color: TC.text2(context)),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(dctx, false),
+                                                  child: Text(l.cancel, style: TextStyle(color: TC.text3(context))),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(dctx, true),
+                                                  child: const Text('Remove',
+                                                      style: TextStyle(color: AppColors.red, fontWeight: FontWeight.w700)),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirmed == true) {
+                                            await state.removeMember(g, rm);
+                                            setSheetState(() {});
+                                          }
                                         },
                                         child: Container(
                                           width: 28, height: 28,
@@ -1097,6 +1127,29 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                     GestureDetector(
                       onTap: () {
                         HapticFeedback.heavyImpact();
+                        // Can't leave with an outstanding balance — it would
+                        // corrupt everyone's totals. Require settle-up first.
+                        final myBal = state.getMyBalance(g);
+                        if (myBal.abs() >= 0.01) {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              backgroundColor: TC.card(context),
+                              title: Text('Settle up first', style: TextStyle(fontWeight: FontWeight.w700, color: TC.text(context))),
+                              content: Text(
+                                '${myBal > 0 ? 'You\'re owed' : 'You owe'} ${g.sym}${myBal.abs().toStringAsFixed(2)} in this group. Please settle up before leaving so everyone\'s balances stay correct.',
+                                style: TextStyle(color: TC.text2(context)),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: Text('OK', style: TextStyle(color: TC.primary(context), fontWeight: FontWeight.w700)),
+                                ),
+                              ],
+                            ),
+                          );
+                          return;
+                        }
                         showDialog(
                           context: context,
                           builder: (_) => AlertDialog(

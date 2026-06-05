@@ -1281,10 +1281,17 @@ class AppState extends ChangeNotifier {
     ExpenseData oldExp,
     ExpenseData newExp,
   ) async {
+    // Local-first: write SQLite immediately, sync the cloud in the background
+    // so editing an expense doesn't hang on the network.
+    await DatabaseService.instance.updateExpense(g.id, newExp);
     if (_useCloud) {
-      await FirestoreService.instance.updateExpense(g.id, newExp);
-    } else {
-      await DatabaseService.instance.updateExpense(g.id, newExp);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.updateExpense(g.id, newExp);
+        } catch (e) {
+          debugPrint('[cloud] expense edit sync deferred: $e');
+        }
+      }());
     }
     final idx = g.expenses.indexOf(oldExp);
     if (idx >= 0) {
@@ -1320,10 +1327,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> recordSettlement(GroupData g, SettlementData s) async {
+    // Local-first: SQLite write is instant; the cloud sync runs in the
+    // background so "Settle up" never spins on the network.
+    await DatabaseService.instance.insertSettlement(g.id, s);
     if (_useCloud) {
-      await FirestoreService.instance.insertSettlement(g.id, s);
-    } else {
-      await DatabaseService.instance.insertSettlement(g.id, s);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.insertSettlement(g.id, s);
+        } catch (e) {
+          debugPrint('[cloud] settlement sync deferred: $e');
+        }
+      }());
     }
     g.settlements = [...g.settlements, s];
     groups = List.of(groups);
@@ -1507,14 +1521,19 @@ class AppState extends ChangeNotifier {
           .toStringAsFixed(2),
     );
 
+    // Local-first: SQLite (source of truth) is instant; the cloud txn + both
+    // wallet balances sync in the background so editing never spins on network.
+    await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
     if (_useCloud) {
-      await FirestoreService.instance.updateTransaction(updated);
-      await FirestoreService.instance.upsertWallet(old.currency, reversedOld);
-      await FirestoreService.instance.upsertWallet(updated.currency, newBal);
-      // FIX: also persist wallet changes to SQLite cache so balance survives restart
-      await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
-    } else {
-      await DatabaseService.instance.updateTransactionAtomic(updated, old.currency, reversedOld, newBal);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.updateTransaction(updated);
+          await FirestoreService.instance.upsertWallet(old.currency, reversedOld);
+          await FirestoreService.instance.upsertWallet(updated.currency, newBal);
+        } catch (e) {
+          debugPrint('[cloud] transaction edit sync deferred: $e');
+        }
+      }());
     }
 
     if (idx >= 0) {
