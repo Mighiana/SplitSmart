@@ -85,6 +85,7 @@ class DatabaseService {
         created_by     TEXT,
         updated_by     TEXT,
         subcat         TEXT,
+        added_by       TEXT,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
       )''');
 
@@ -375,6 +376,8 @@ class DatabaseService {
         }
       }
       await addCol('ALTER TABLE expenses ADD COLUMN subcat TEXT');
+      // Author uid (authorship gate; createdBy stores the display string).
+      await addCol('ALTER TABLE expenses ADD COLUMN added_by TEXT');
       await addCol('ALTER TABLE budgets ADD COLUMN icon TEXT');
       await addCol('ALTER TABLE budgets ADD COLUMN color TEXT');
     }
@@ -440,6 +443,7 @@ class DatabaseService {
           splitIds:    splitIds,
           createdBy:   r['created_by'] as String?,
           updatedBy:   r['updated_by'] as String?,
+          addedBy:     r['added_by']   as String?,
           subcat:      r['subcat']     as String?,
         );
       }).toList();
@@ -507,6 +511,7 @@ class DatabaseService {
         'split_ids_json': e.splitIdsJson,
         'created_by': e.createdBy,
         'updated_by': e.updatedBy,
+        'added_by': e.addedBy,
         'subcat': e.subcat,
       };
 

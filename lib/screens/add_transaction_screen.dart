@@ -567,72 +567,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  /// Optional sub-category chips for the currently selected expense category.
+  /// Optional sub-category dropdown for the selected expense category.
   /// Hidden for income or categories without sub-categories.
   Widget _subcategorySection() {
     if (_type == 'income') return const SizedBox.shrink();
-    final subs = AppState.subsFor(_cat);
-    if (subs.isEmpty) return const SizedBox.shrink();
-    final parentColor = Color(int.tryParse(
-            _cats
-                .firstWhere((c) => c.icon == _cat,
-                    orElse: () => AppState.expenseCategories.last)
-                .color
-                .replaceAll('#', '0xFF')) ??
-        0xFF1E7D4F);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 18),
-        Row(children: [
-          _label('Subcategory'),
-          const SizedBox(width: 6),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('· optional',
-                style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
-          ),
-        ]),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: subs.map((s) {
-            final active = _subcat == s.icon;
-            return GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _subcat = active ? null : s.icon);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                decoration: BoxDecoration(
-                  color: active
-                      ? parentColor.withValues(alpha: 0.15)
-                      : TC.card(context),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: active ? parentColor : TC.border(context),
-                      width: 1.5),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(s.materialIcon ?? Icons.category_rounded,
-                      size: 13,
-                      color: active ? parentColor : TC.text3(context)),
-                  const SizedBox(width: 6),
-                  Text(s.label,
-                      style: TC.geist(context,
-                          fontSize: 12.5,
-                          fontWeight:
-                              active ? FontWeight.w700 : FontWeight.w500,
-                          color: active ? parentColor : TC.text2(context))),
-                ]),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+    return SubcategoryDropdown(
+      parentCat: _cat,
+      value: _subcat,
+      onChanged: (v) => setState(() => _subcat = v),
     );
   }
 

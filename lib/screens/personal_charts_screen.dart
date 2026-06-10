@@ -123,8 +123,14 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
     }).toList();
 
     final Map<String, double> catTotals = {};
+    // Per-category sub-category totals (only sub-tagged transactions).
+    final Map<String, Map<String, double>> subTotals = {};
     for (final t in periodTxns) {
       catTotals[t.cat] = (catTotals[t.cat] ?? 0) + t.amount;
+      if (t.subcat != null) {
+        final m = subTotals.putIfAbsent(t.cat, () => {});
+        m[t.subcat!] = (m[t.subcat!] ?? 0) + t.amount;
+      }
     }
     final sortedCats = catTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -597,65 +603,141 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                                       : TC.border(context),
                                 ),
                               ),
-                              child: Row(
+                              child: Column(
                                 children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: color.withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Icon(iconForEmoji(cat.key), size: 18, color: color),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(catInfo.label,
-                                            style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: TC.text(context))),
-                                        const SizedBox(height: 3),
-                                        // Mini progress bar
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(3),
-                                          child: LinearProgressIndicator(
-                                            value:
-                                                (catPct / 100).clamp(0.0, 1.0),
-                                            backgroundColor: TC.border(context),
-                                            valueColor:
-                                                AlwaysStoppedAnimation(color),
-                                            minHeight: 4,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                  Row(
                                     children: [
-                                      Text(
-                                        '${catPct.toStringAsFixed(0)}%',
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w800,
-                                            color: color),
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: color.withValues(alpha: 0.15),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Icon(iconForEmoji(cat.key), size: 18, color: color),
                                       ),
-                                      Text(
-                                        '$sym${AppCurrencyUtils.formatAmount(cat.value, 0)}',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: TC.text2(context)),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(catInfo.label,
+                                                style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: TC.text(context))),
+                                            const SizedBox(height: 3),
+                                            // Mini progress bar
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                              child: LinearProgressIndicator(
+                                                value:
+                                                    (catPct / 100).clamp(0.0, 1.0),
+                                                backgroundColor: TC.border(context),
+                                                valueColor:
+                                                    AlwaysStoppedAnimation(color),
+                                                minHeight: 4,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            '${catPct.toStringAsFixed(0)}%',
+                                            style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w800,
+                                                color: color),
+                                          ),
+                                          Text(
+                                            '$sym${AppCurrencyUtils.formatAmount(cat.value, 0)}',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: TC.text2(context)),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
+                                  // Sub-category breakdown — shown when this
+                                  // category is selected and has sub-tagged spend.
+                                  if (_touchedDonutIndex == i &&
+                                      (subTotals[cat.key]?.isNotEmpty ?? false)) ...[
+                                    const SizedBox(height: 10),
+                                    ...() {
+                                      final subs = subTotals[cat.key]!
+                                          .entries
+                                          .toList()
+                                        ..sort((a, b) =>
+                                            b.value.compareTo(a.value));
+                                      final tagged = subs.fold(
+                                          0.0, (s, e) => s + e.value);
+                                      final rest = cat.value - tagged;
+                                      return [
+                                        ...subs.map((s) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  left: 48, bottom: 6),
+                                              child: Row(children: [
+                                                Icon(iconForEmoji(s.key),
+                                                    size: 13, color: color),
+                                                const SizedBox(width: 7),
+                                                Expanded(
+                                                  child: Text(
+                                                      AppState.labelForKey(
+                                                          s.key),
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          color: TC.text2(
+                                                              context))),
+                                                ),
+                                                Text(
+                                                    '$sym${AppCurrencyUtils.formatAmount(s.value, 0)}',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: TC.text(
+                                                            context))),
+                                              ]),
+                                            )),
+                                        if (rest > 0.005)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                left: 48, bottom: 2),
+                                            child: Row(children: [
+                                              Icon(Icons.more_horiz_rounded,
+                                                  size: 13,
+                                                  color: TC.text3(context)),
+                                              const SizedBox(width: 7),
+                                              Expanded(
+                                                child: Text('General',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: TC.text3(
+                                                            context))),
+                                              ),
+                                              Text(
+                                                  '$sym${AppCurrencyUtils.formatAmount(rest, 0)}',
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: TC.text2(
+                                                          context))),
+                                            ]),
+                                          ),
+                                      ];
+                                    }(),
+                                  ],
                                 ],
                               ),
                             ),

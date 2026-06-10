@@ -169,6 +169,12 @@ class ExpenseData {
   final String? createdBy;
   final String? updatedBy;
 
+  /// Firebase uid of the member who added this expense (mirrors the Firestore
+  /// `addedBy` field). The ONLY reliable authorship signal — `createdBy`
+  /// stores the display string 'You' on every author's device, so after sync
+  /// it reads 'You' for everyone. null on legacy/offline rows.
+  final String? addedBy;
+
   /// Optional sub-category key (`sub:...`) for finer-grained reporting/budgets.
   final String? subcat;
 
@@ -209,6 +215,7 @@ class ExpenseData {
     this.splitIds,
     this.createdBy,
     this.updatedBy,
+    this.addedBy,
     this.subcat,
   });
 }

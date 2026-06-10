@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
+import '../services/auth_service.dart';
 import '../services/analytics_service.dart';
 import '../services/voice_input_service.dart';
 import '../services/smart_suggestions_service.dart';
@@ -1043,70 +1044,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     );
   }
 
-  /// Optional sub-category chips for the selected category (mirrors the
-  /// personal Add Transaction screen). Hidden when the category has no subs.
+  /// Optional sub-category dropdown for the selected category (shared widget
+  /// with the personal Add Transaction screen).
   Widget _subcategorySection() {
-    final subs = AppState.subsFor(_cat);
-    if (subs.isEmpty) return const SizedBox.shrink();
-    final parentColor = Color(int.tryParse(AppState.expenseCategories
-            .firstWhere((c) => c.icon == _cat,
-                orElse: () => AppState.expenseCategories.last)
-            .color
-            .replaceAll('#', '0xFF')) ??
-        0xFF1E7D4F);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 18),
-        Row(children: [
-          _label('Subcategory'),
-          const SizedBox(width: 6),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('· optional',
-                style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
-          ),
-        ]),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: subs.map((s) {
-            final active = _subcat == s.icon;
-            return GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _subcat = active ? null : s.icon);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                decoration: BoxDecoration(
-                  color: active
-                      ? parentColor.withValues(alpha: 0.15)
-                      : TC.card(context),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: active ? parentColor : TC.border(context),
-                      width: 1.5),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(s.materialIcon ?? Icons.category_rounded,
-                      size: 13,
-                      color: active ? parentColor : TC.text3(context)),
-                  const SizedBox(width: 6),
-                  Text(s.label,
-                      style: TC.geist(context,
-                          fontSize: 12.5,
-                          fontWeight:
-                              active ? FontWeight.w700 : FontWeight.w500,
-                          color: active ? parentColor : TC.text2(context))),
-                ]),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+    return SubcategoryDropdown(
+      parentCat: _cat,
+      value: _subcat,
+      onChanged: (v) => setState(() => _subcat = v),
     );
   }
 
@@ -1275,6 +1219,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       subcat: _subcat,
       createdBy: _isEdit ? widget.existing?.createdBy : 'You',
       updatedBy: _isEdit ? 'You' : null,
+      // Authorship uid: preserved on edit, stamped on create. This is what
+      // gates the Edit option for other members.
+      addedBy: _isEdit
+          ? widget.existing?.addedBy
+          : AuthService.instance.uid,
     );
 
     try {

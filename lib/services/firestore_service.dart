@@ -217,6 +217,7 @@ class FirestoreService {
         splitIds: splitIds,
         createdBy: ed['createdBy'],
         updatedBy: ed['updatedBy'],
+        addedBy: ed['addedBy'],
         subcat: ed['subcat'],
       );
     }).toList();
@@ -580,6 +581,7 @@ class FirestoreService {
                 splitIds: splitIds,
                 createdBy: ed['createdBy'],
                 updatedBy: ed['updatedBy'],
+                addedBy: ed['addedBy'],
                 subcat: ed['subcat'],
               );
             }).toList());

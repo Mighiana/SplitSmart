@@ -3,9 +3,156 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../main.dart';
+import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../utils/theme_utils.dart';
 import '../utils/icon_map.dart';
+
+// ─── Subcategory dropdown ────────────────────────────────────────────────────
+/// Dropdown-style picker for an optional sub-category of [parentCat].
+/// Renders nothing when the category has no sub-categories. Shared by the
+/// personal Add Transaction and group Add Expense forms.
+class SubcategoryDropdown extends StatelessWidget {
+  final String parentCat;     // parent category emoji key
+  final String? value;        // selected `sub:...` key (null = none)
+  final ValueChanged<String?> onChanged;
+  const SubcategoryDropdown({
+    super.key,
+    required this.parentCat,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final subs = AppState.subsFor(parentCat);
+    if (subs.isEmpty) return const SizedBox.shrink();
+    final sel = value == null ? null : AppState.subByKey(value!);
+    final accent = colorForEmoji(parentCat, fallback: TC.primary(context));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text('SUBCATEGORY · OPTIONAL',
+              style: TC.geist(context,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: TC.text3(context),
+                  letterSpacing: 1.5)),
+        ),
+        GestureDetector(
+          onTap: () => _pick(context, subs, accent),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: TC.card(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: sel != null ? accent : TC.border(context),
+                  width: sel != null ? 1.5 : 1),
+            ),
+            child: Row(
+              children: [
+                Icon(sel?.materialIcon ?? Icons.segment_rounded,
+                    size: 18,
+                    color: sel != null ? accent : TC.text3(context)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(sel?.label ?? 'None',
+                      style: TC.geist(context,
+                          fontSize: 14,
+                          fontWeight:
+                              sel != null ? FontWeight.w600 : FontWeight.w500,
+                          color: sel != null
+                              ? TC.text(context)
+                              : TC.text3(context))),
+                ),
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18, color: TC.text3(context)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _pick(BuildContext context, List<CategoryItem> subs, Color accent) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: TC.border(context),
+                      borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Subcategory',
+                      style: TC.gloock(context,
+                          fontSize: 18, color: TC.text(context))),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.not_interested_rounded,
+                    size: 20, color: TC.text3(context)),
+                title: Text('None',
+                    style: TC.geist(context,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: TC.text(context))),
+                trailing: value == null
+                    ? Icon(Icons.check_circle_rounded,
+                        size: 20, color: accent)
+                    : null,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onChanged(null);
+                  Navigator.pop(sheetCtx);
+                },
+              ),
+              ...subs.map((s) => ListTile(
+                    leading: Icon(s.materialIcon ?? Icons.category_rounded,
+                        size: 20, color: accent),
+                    title: Text(s.label,
+                        style: TC.geist(context,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: TC.text(context))),
+                    trailing: value == s.icon
+                        ? Icon(Icons.check_circle_rounded,
+                            size: 20, color: accent)
+                        : null,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      onChanged(s.icon);
+                      Navigator.pop(sheetCtx);
+                    },
+                  )),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 // ─── Pill Badge ──────────────────────────────────────────────────────────────
 class PillBadge extends StatelessWidget {

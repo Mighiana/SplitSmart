@@ -1269,6 +1269,8 @@ class AppState extends ChangeNotifier {
             splitIds: e.splitIds,
             createdBy: e.createdBy, // preserve audit/edit metadata
             updatedBy: e.updatedBy,
+            addedBy: e.addedBy,
+            subcat: e.subcat,
           );
         }
       } catch (err) {

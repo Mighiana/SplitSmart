@@ -405,8 +405,14 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
     final total = g.expenses.fold(0.0, (s, e) => s + e.amount);
 
     final Map<String, double> catTotals = {};
+    // Per-category sub-category totals (only sub-tagged expenses).
+    final Map<String, Map<String, double>> subTotals = {};
     for (final e in g.expenses) {
       catTotals[e.cat] = (catTotals[e.cat] ?? 0) + e.amount;
+      if (e.subcat != null) {
+        final m = subTotals.putIfAbsent(e.cat, () => {});
+        m[e.subcat!] = (m[e.subcat!] ?? 0) + e.amount;
+      }
     }
     final sortedCats = catTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -683,7 +689,7 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
                     children: [
                       Row(
                         children: [
-                          Text(entry.key, style: const TextStyle(fontSize: 20)),
+                          Icon(iconForEmoji(entry.key), size: 20, color: barColor),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -723,6 +729,36 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
                           minHeight: 7,
                         ),
                       ),
+                      // Sub-category breakdown for this category (if tagged).
+                      if (subTotals[entry.key]?.isNotEmpty ?? false) ...[
+                        const SizedBox(height: 8),
+                        ...(() {
+                          final subs = subTotals[entry.key]!.entries.toList()
+                            ..sort((a, b) => b.value.compareTo(a.value));
+                          return subs.map((s) => Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 28, top: 4),
+                                child: Row(children: [
+                                  Icon(iconForEmoji(s.key),
+                                      size: 12, color: barColor),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(AppState.labelForKey(s.key),
+                                        style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: TC.text2(context))),
+                                  ),
+                                  Text(
+                                      '${g.sym}${s.value.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: TC.text(context))),
+                                ]),
+                              ));
+                        })(),
+                      ],
                     ],
                   ),
                 );

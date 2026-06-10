@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/app_state.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../utils/app_utils.dart';
 import '../../utils/icon_map.dart';
@@ -168,7 +169,17 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
     HapticFeedback.mediumImpact();
     final e = widget.e;
     final g = widget.g;
-    final isAuthor = e.createdBy == null || e.createdBy == 'You' || e.createdBy == widget.state.userName || (e.createdBy?.toLowerCase() == 'you');
+    // Authorship by uid (`addedBy`). The old check compared `createdBy` which
+    // stores the display string 'You' on EVERY author's device — after sync it
+    // read 'You' for everyone, so all members saw Edit. Legacy rows without an
+    // addedBy uid fall back to that heuristic so old local data stays editable.
+    final myUid = AuthService.instance.uid;
+    final isAuthor = e.addedBy != null
+        ? (myUid != null && e.addedBy == myUid)
+        : (e.createdBy == null ||
+            e.createdBy == 'You' ||
+            e.createdBy == widget.state.userName ||
+            (e.createdBy?.toLowerCase() == 'you'));
     final memberAmounts = <String, double>{};
     for (final m in g.members) {
       memberAmounts[m] = (e.splits != null && e.splits!.containsKey(m))
@@ -252,7 +263,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
               )
             else ...[
               ListTile(
-                leading: const Text('✏️', style: TextStyle(fontSize: 22)),
+                leading: Icon(Icons.edit_rounded, size: 22, color: TC.text2(context)),
                 title: const Text('Edit Expense', style: TextStyle(fontWeight: FontWeight.w600)),
                 onTap: () {
                   HapticFeedback.lightImpact();
@@ -262,7 +273,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
                 },
               ),
               ListTile(
-                leading: const Text('🗑', style: TextStyle(fontSize: 22)),
+                leading: const Icon(Icons.delete_outline_rounded, size: 22, color: AppColors.red),
                 title: const Text('Delete Expense', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.red)),
                 onTap: () { HapticFeedback.heavyImpact(); Navigator.pop(context); _confirmDelete(context); },
               ),
