@@ -198,7 +198,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     // and stat chips — replaces the flat beige card.
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      padding: const EdgeInsets.all(20),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: TC.cardGradient(context),
         borderRadius: BorderRadius.circular(24),
@@ -210,113 +210,142 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Text(
-            '${dateLabel.toUpperCase()} · TOTAL SPENT',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: 0.55),
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: CountUpText(
-                  value: totalExpense,
-                  builder: (ctx, v) => Text(
-                    '$sym${AppCurrencyUtils.formatAmount(v, 0)}',
-                    style: TC.gloock(ctx,
-                        fontSize: 42, letterSpacing: -1.4, color: Colors.white),
-                  ),
+          // Soft radial sheen in the corner — echoes the Money tab hero.
+          Positioned(
+            top: -30,
+            right: -30,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.65],
                 ),
               ),
-              if (diffPct != null)
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${dateLabel.toUpperCase()} · TOTAL SPENT',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.55),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: CountUpText(
+                        value: totalExpense,
+                        builder: (ctx, v) => Text(
+                          '$sym${AppCurrencyUtils.formatAmount(v, 0)}',
+                          style: TC.gloock(ctx,
+                              fontSize: 42,
+                              letterSpacing: -1.4,
+                              color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    if (diffPct != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              diffPct >= 0
+                                  ? Icons.trending_up_rounded
+                                  : Icons.trending_down_rounded,
+                              size: 13,
+                              color: diffPct >= 0
+                                  ? const Color(0xFFFCA5A5)
+                                  : const Color(0xFF86EFAC),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: diffPct >= 0
+                                    ? const Color(0xFFFCA5A5)
+                                    : const Color(0xFF86EFAC),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.white.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(13),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        diffPct >= 0
-                            ? Icons.trending_up_rounded
-                            : Icons.trending_down_rounded,
-                        size: 13,
-                        color: diffPct >= 0
-                            ? const Color(0xFFFCA5A5)
-                            : const Color(0xFF86EFAC),
+                        totalExpense > 0
+                            ? Icons.lightbulb_rounded
+                            : Icons.info_outline_rounded,
+                        color: const Color(0xFF86EFAC),
+                        size: 16,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: diffPct >= 0
-                              ? const Color(0xFFFCA5A5)
-                              : const Color(0xFF86EFAC),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          story,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.92),
+                            height: 1.35,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  totalExpense > 0
-                      ? Icons.lightbulb_rounded
-                      : Icons.info_outline_rounded,
-                  color: const Color(0xFF86EFAC),
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    story,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.92),
-                      height: 1.35,
-                    ),
-                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _storyMeta(context, Icons.history_rounded, 'Previous',
+                        '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
+                    const SizedBox(width: 10),
+                    _storyMeta(
+                        context,
+                        topCat == null
+                            ? Icons.category_rounded
+                            : iconForEmoji(topCat.icon),
+                        'Top Category',
+                        topCat == null ? 'None' : topCat.label),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _storyMeta(context, Icons.history_rounded, 'Previous',
-                  '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
-              const SizedBox(width: 10),
-              _storyMeta(
-                  context,
-                  topCat == null
-                      ? Icons.category_rounded
-                      : iconForEmoji(topCat.icon),
-                  'Top Category',
-                  topCat == null ? 'None' : topCat.label),
-            ],
           ),
         ],
       ),
@@ -383,7 +412,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.green, width: 1.5),
+                  color: TC.primaryPale(context),
+                  border: Border.all(
+                      color: TC.primary(context).withValues(alpha: 0.45),
+                      width: 1.5),
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -402,11 +434,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
+                    color: TC.bg(context),
                     border: Border.all(color: TC.border(context), width: 1.5),
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.calendar_today_outlined, size: 13, color: TC.text(context)),
+                    Icon(Icons.calendar_today_outlined, size: 13, color: TC.primary(context)),
                     const SizedBox(width: 5),
                     Flexible(child: Text(dateLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context)), overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 3),
@@ -421,11 +454,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               child: Container(
                 width: 38, height: 38,
                 decoration: BoxDecoration(
+                  color: TC.bg(context),
                   border: Border.all(color: TC.border(context), width: 1.5),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.tune_rounded, size: 16, color: TC.text(context)),
+                child: Icon(Icons.tune_rounded, size: 16, color: TC.primary(context)),
               ),
             ),
           ]),

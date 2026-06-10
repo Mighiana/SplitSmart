@@ -3,7 +3,7 @@
 > **Purpose of this file:** a complete, self-contained brief so **any AI model or developer** can understand the project and continue work without prior context.
 > **RULE: Keep this file updated.** After *every* meaningful change, update the relevant section and add an entry to the **Changelog** at the bottom (newest first). Treat this as the single source of truth.
 
-_Last updated: 2026-06-02_
+_Last updated: 2026-06-10_
 
 ---
 
@@ -163,6 +163,11 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 ---
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
+
+### 2026-06-10 — Premium Overview hero + onboarding tour redesign
+- **Overview hero** (`overview_tab.dart`): flat "Total spent" card → **teal gradient hero** (`TC.cardGradient` + primary glow + corner radial sheen, matching the Money tab's Net Position card). Count-up total (`CountUpText`), trend-arrow **delta chip vs previous period** (light coral/mint tints `0xFFFCA5A5`/`0xFF86EFAC` for on-gradient legibility), frosted insight pill, and icon stat chips for Previous / Top Category — **Top Category now renders `iconForEmoji(...)` instead of a raw emoji**. Header filter pills get fills (currency = `primaryPale` + teal border, month/filter = `TC.bg`) and teal icons.
+- **Onboarding** (`onboarding_screen.dart`): rebuilt as a **4-page premium tour** on the design system (TC tokens, Gloock headline + Geist body on `TC.bg`; old off-brand green/white discarded). Pages: track money / split bills / budgets & goals / privacy. Layered icon illustrations (color blob + ring + gradient core + 2 floating mini chips — Material icons only), **flutter_animate entrances**: staggered chip pop-in that replays per page (`target:` on `isCurrent`), perpetual chip float, fade/slide-in title + body; elastic hero re-pop per page kept on the manual controller. Brand wordmark + Skip top bar, glowing page dots, gradient CTA with arrow→rocket icon. **Theme-aware status bar** (was hardcoded dark icons on the now theme-aware bg). `onDone` contract + completed/skipped analytics preserved — the `onboarding_done` SharedPreferences flag lives in `_AppGate` (`main.dart`) and is untouched.
+- `flutter analyze` clean; 67/67 tests pass.
 
 ### 2026-06-03 — Competitive gaps: smart insights, faster entry, CSV import
 - **Smart Insight** rewritten to be genuinely useful (priority: overdue bills → month-over-month spend trend → top-category share → onboarding nudge) instead of echoing the donut. (`personal_finance_tab.dart`)

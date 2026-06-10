@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../services/analytics_service.dart';
 import '../utils/app_utils.dart';
 
@@ -41,7 +42,7 @@ const List<_PageData> _pages = [
   ),
   _PageData(
     icon: Icons.track_changes_rounded,
-    iconColor: Color(0xFF5C6BC0),
+    iconColor: Color(0xFF8B5CF6), // TC.purple (light) token value
     miniIcons: [Icons.donut_small_rounded, Icons.savings_rounded],
     title: 'Budgets & goals\nthat keep up.',
     subtitle: 'Set spending limits, save toward goals\nand watch your progress grow.',
@@ -120,10 +121,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
         backgroundColor: TC.bg(context),
@@ -187,6 +190,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ? TC.primary(context)
                             : TC.border(context),
                         borderRadius: BorderRadius.circular(6),
+                        boxShadow: i == _current
+                            ? [
+                                BoxShadow(
+                                    color: TC.primaryGlow(context),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2)),
+                              ]
+                            : null,
                       ),
                     ),
                   ),
@@ -219,15 +230,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     alignment: Alignment.center,
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
-                      child: Text(
-                        _pages[_current].buttonLabel,
+                      child: Row(
                         key: ValueKey(_pages[_current].buttonLabel),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
-                        ),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _pages[_current].buttonLabel,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Icon(
+                            _current == _pages.length - 1
+                                ? Icons.rocket_launch_rounded
+                                : Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 17,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -253,26 +277,38 @@ class _PageContent extends StatelessWidget {
     required this.isCurrent,
   });
 
-  Widget _miniChip(BuildContext context, IconData icon) {
-    return ScaleTransition(
-      scale: iconAnim,
-      child: Container(
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          color: TC.surface(context),
-          shape: BoxShape.circle,
-          border: Border.all(color: TC.border(context)),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Icon(icon, size: 20, color: page.iconColor),
+  Widget _miniChip(BuildContext context, IconData icon, int slot) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: TC.surface(context),
+        shape: BoxShape.circle,
+        border: Border.all(color: TC.border(context)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
+        ],
       ),
-    );
+      child: Icon(icon, size: 20, color: page.iconColor),
+    )
+        // Gentle perpetual float so the illustration never feels static.
+        .animate(onPlay: (c) => c.repeat(reverse: true))
+        .moveY(
+            begin: slot.isEven ? -3.5 : 3.5,
+            end: slot.isEven ? 3.5 : -3.5,
+            duration: (1900 + slot * 400).ms,
+            curve: Curves.easeInOut)
+        // Staggered pop-in that replays each time this page becomes current.
+        .animate(target: isCurrent ? 1 : 0, delay: (140 + slot * 130).ms)
+        .fadeIn(duration: 260.ms)
+        .scale(
+            begin: const Offset(0.4, 0.4),
+            end: const Offset(1, 1),
+            duration: 420.ms,
+            curve: Curves.easeOutBack);
   }
 
   @override
@@ -333,9 +369,13 @@ class _PageContent extends StatelessWidget {
                   ),
                 ),
                 Positioned(
-                    top: 18, right: 22, child: _miniChip(context, page.miniIcons.first)),
+                    top: 18,
+                    right: 22,
+                    child: _miniChip(context, page.miniIcons.first, 0)),
                 Positioned(
-                    bottom: 26, left: 16, child: _miniChip(context, page.miniIcons.last)),
+                    bottom: 26,
+                    left: 16,
+                    child: _miniChip(context, page.miniIcons.last, 1)),
               ],
             ),
           ),
@@ -345,14 +385,30 @@ class _PageContent extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TC.gloock(context,
                 fontSize: 30, letterSpacing: -0.6, color: TC.text(context)),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 340.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(
+                  begin: 0.18,
+                  end: 0,
+                  duration: 440.ms,
+                  delay: 60.ms,
+                  curve: Curves.easeOutCubic),
           const SizedBox(height: 14),
           Text(
             page.subtitle,
             textAlign: TextAlign.center,
             style: TC.geist(context,
                 fontSize: 14.5, color: TC.text2(context), height: 1.55),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 340.ms, delay: 170.ms, curve: Curves.easeOut)
+              .slideY(
+                  begin: 0.18,
+                  end: 0,
+                  duration: 440.ms,
+                  delay: 170.ms,
+                  curve: Curves.easeOutCubic),
         ],
       ),
     );
