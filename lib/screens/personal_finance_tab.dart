@@ -44,7 +44,8 @@ class _MoneyTabState extends State<MoneyTab> {
   String _userName = 'User';
   String? _localPhotoPath;
   bool _hideBalance = false;
-  bool _balanceCollapsed = false;
+  // Start collapsed when the app opens — the user can tap to expand.
+  bool _balanceCollapsed = true;
   bool _emailVerifyDismissed = false;
 
   @override

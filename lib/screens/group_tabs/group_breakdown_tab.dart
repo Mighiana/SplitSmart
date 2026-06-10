@@ -436,15 +436,10 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
     }
     if (maxExp == 0) maxExp = 1;
 
-    final springCtrl = AnimationController(
-      vsync: Navigator.of(context),
-      duration: const Duration(milliseconds: 500),
-    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: TC.surface(context),
-      transitionAnimationController: springCtrl,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -849,7 +844,7 @@ class _GroupBreakdownTabState extends State<GroupBreakdownTab> with TickerProvid
           ],
         ),
       ),
-    ).whenComplete(() => springCtrl.dispose());
+    );
   }
 
   // _calcRow: was dead code — never called, removed to eliminate analyzer warning.

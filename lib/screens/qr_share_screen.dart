@@ -12,6 +12,7 @@ import '../main.dart';
 import '../providers/app_state.dart';
 import '../utils/app_utils.dart';
 import '../utils/theme_utils.dart';
+import '../utils/icon_map.dart';
 import '../services/analytics_service.dart';
 import '../services/firestore_service.dart';
 import 'paywall_screen.dart';
@@ -303,6 +304,42 @@ class _QRShareScreenState extends State<QRShareScreen>
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+            // Group identity — so the shared QR image says what it's for.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: TC.primaryPale(context),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(iconForEmoji(widget.group.emoji),
+                      size: 20, color: TC.primary(context)),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.group.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TC.gloock(context,
+                              fontSize: 18, color: TC.text(context))),
+                      Text(
+                          '${widget.group.members.length} ${widget.group.members.length == 1 ? 'member' : 'members'} · ${widget.group.currency}',
+                          style: TC.geist(context,
+                              fontSize: 11, color: TC.text3(context))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             // QR code with animated glow ring
             AnimatedBuilder(
               animation: _glowAnim,
@@ -330,14 +367,16 @@ class _QRShareScreenState extends State<QRShareScreen>
                   version: QrVersions.auto,
                   size: 190,
                   gapless: true,
-                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  // Higher correction (Q = 25%) keeps the styled/rounded code
+                  // reliably scannable.
+                  errorCorrectionLevel: QrErrorCorrectLevel.Q,
                   eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Color(0xFF0A0A0A),
+                    eyeShape: QrEyeShape.circle,
+                    color: Color(0xFF0D7377), // brand teal eyes
                   ),
                   dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Color(0xFF111111),
+                    dataModuleShape: QrDataModuleShape.circle,
+                    color: Color(0xFF0A1A1C), // near-black for contrast
                   ),
                 ),
               ),
@@ -400,6 +439,26 @@ class _QRShareScreenState extends State<QRShareScreen>
                 fontWeight: FontWeight.w500,
                 color: _copied ? TC.primary(context) : TC.text3(context),
               ),
+            ),
+            const SizedBox(height: 16),
+            Container(height: 1, color: TC.border(context)),
+            const SizedBox(height: 12),
+            // How-to-join hint.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.qr_code_scanner_rounded,
+                    size: 14, color: TC.text3(context)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Scan in SplitSmart, or enter the code to join',
+                    textAlign: TextAlign.center,
+                    style: TC.geist(context,
+                        fontSize: 11, color: TC.text3(context)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
