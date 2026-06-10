@@ -10,6 +10,8 @@ import 'reminders_screen.dart';
 import 'subscriptions_screen.dart';
 import 'saving_goals_screen.dart';
 import 'budget_screen.dart';
+import 'new_budget_screen.dart';
+import 'personal_charts_screen.dart';
 
 class PlannerScreen extends StatelessWidget {
   const PlannerScreen({super.key});
@@ -78,6 +80,19 @@ class PlannerScreen extends StatelessWidget {
     final reminders = state.reminders;
     final budgets = state.budgets;
 
+    // Mini spending trend (last 6 months, dominant currency) for the bento
+    // performance tile.
+    final trendCur = state.homeCurrency ??
+        (state.wallets.keys.isNotEmpty ? state.wallets.keys.first : 'USD');
+    final trendVals = List<double>.filled(6, 0);
+    for (final t in state.allTransactionsWithGroupShares) {
+      if (t.type.toLowerCase() != 'expense' || t.currency != trendCur) continue;
+      final d = t.rawDate;
+      if (d == null) continue;
+      final diff = (now.year - d.year) * 12 + (now.month - d.month);
+      if (diff >= 0 && diff < 6) trendVals[5 - diff] += t.amount;
+    }
+
     // Monthly subscription cost — dominant currency.
     final monthlyCosts = state.subscriptionMonthlyCostByCurrency;
     final subsPrimary = monthlyCosts.entries.isEmpty
@@ -104,7 +119,12 @@ class PlannerScreen extends StatelessWidget {
                 .animate()
                 .fade(duration: 280.ms)
                 .slideY(begin: -0.12, end: 0, curve: Curves.easeOutBack),
-            _bentoRow(context, state, budgets, upcoming, overdue.length)
+            _quickActions(context)
+                .animate(delay: 40.ms)
+                .fade(duration: 320.ms)
+                .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic),
+            _bentoRow(context, state, budgets, upcoming, overdue.length,
+                    trendVals, trendCur)
                 .animate(delay: 80.ms)
                 .fade(duration: 340.ms)
                 .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
@@ -123,18 +143,85 @@ class PlannerScreen extends StatelessWidget {
   }
 
   // ─── Bento tiles: Budgets + Reminders ────────────────────────────────────
-  Widget _bentoRow(BuildContext context, AppState state, List<Budget> budgets,
-      List<ReminderData> upcoming, int overdueCount) {
+  Widget _bentoRow(
+      BuildContext context,
+      AppState state,
+      List<Budget> budgets,
+      List<ReminderData> upcoming,
+      int overdueCount,
+      List<double> trendVals,
+      String trendCur) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: _budgetBentoTile(context, state, budgets)),
-          const SizedBox(width: 12),
+          Expanded(flex: 5, child: _budgetBentoTile(context, state, budgets)),
+          const SizedBox(width: 10),
           Expanded(
+              flex: 5,
               child: _reminderBentoTile(context, upcoming, overdueCount)),
+          const SizedBox(width: 10),
+          Expanded(
+              flex: 4, child: _trendTile(context, trendVals, trendCur)),
         ],
+      ),
+    );
+  }
+
+  // Dark "performance" tile — 6-month spending sparkline → full charts screen.
+  Widget _trendTile(
+      BuildContext context, List<double> vals, String cur) {
+    final thisMonth = vals.isEmpty ? 0.0 : vals.last;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => MoneyChartsScreen(initialCurrency: cur)));
+      },
+      child: Container(
+        height: 128,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          gradient: TC.cardGradient(context),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: TC.primaryGlow(context),
+                blurRadius: 14,
+                offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('SPENDING',
+                style: TC.geist(context,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.55),
+                    letterSpacing: 1.1)),
+            const SizedBox(height: 2),
+            Text('Trend',
+                style: TC.gloock(context, fontSize: 15, color: Colors.white)),
+            const Spacer(),
+            SizedBox(
+              height: 34,
+              width: double.infinity,
+              child: CustomPaint(painter: _SparklinePainter(vals)),
+            ),
+            const SizedBox(height: 6),
+            Text('${_sym(cur)}${AppCurrencyUtils.formatAmount(thisMonth, 0)} this mo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TC.geist(context,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.75))),
+          ],
+        ),
       ),
     );
   }
@@ -184,26 +271,33 @@ class PlannerScreen extends StatelessWidget {
                   size: 17, color: TC.primary(context)),
             ),
             const Spacer(),
-            Icon(Icons.chevron_right_rounded,
-                size: 18, color: TC.text3(context)),
+            if (top == null)
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: TC.text3(context))
+            else
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  value: frac,
+                  strokeWidth: 4.5,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: TC.bg2(context),
+                  valueColor: AlwaysStoppedAnimation(barColor),
+                ),
+              ),
           ]),
           const Spacer(),
           Text('Budgets',
               style: TC.gloock(context, fontSize: 16, color: TC.text(context))),
           const SizedBox(height: 3),
-          if (top == null)
-            Text('Set spending limits',
-                style: TC.geist(context, fontSize: 11, color: TC.text3(context)))
-          else ...[
-            Text(
-                '${budgets.length} ${budgets.length == 1 ? 'budget' : 'budgets'} · ${top.name}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    TC.geist(context, fontSize: 11, color: TC.text3(context))),
-            const SizedBox(height: 7),
-            _progressBar(context, frac, barColor),
-          ],
+          Text(
+              top == null
+                  ? 'Set spending limits'
+                  : '${budgets.length} active · ${(frac * 100).round()}% used',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
         ],
       ),
     );
@@ -289,37 +383,66 @@ class PlannerScreen extends StatelessWidget {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () => _showAddSheet(context),
-            child: Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              decoration: BoxDecoration(
-                color: TC.primary(context),
-                borderRadius: BorderRadius.circular(13),
-                boxShadow: [
-                  BoxShadow(
-                    color: TC.primaryGlow(context),
-                    blurRadius: 16,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.add, color: Colors.white, size: 16),
-                  const SizedBox(width: 4),
-                  Text('Add',
-                      style: TC.geist(context,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
-                ],
-              ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Quick actions pill bar ──────────────────────────────────────────────
+  Widget _quickActions(BuildContext context) {
+    Widget action(IconData icon, String label, VoidCallback onTap) {
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: Colors.white),
+                const SizedBox(width: 7),
+                Text(label,
+                    style: TC.geist(context,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ],
             ),
           ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      decoration: BoxDecoration(
+        color: TC.primary(context),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: TC.primaryGlow(context),
+              blurRadius: 16,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Row(
+        children: [
+          action(Icons.donut_small_rounded, 'New Budget', () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const NewBudgetScreen()));
+          }),
+          Container(
+              width: 1,
+              height: 22,
+              color: Colors.white.withValues(alpha: 0.25)),
+          action(Icons.notifications_rounded, 'New Reminder', () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const RemindersScreen()));
+          }),
         ],
       ),
     );
@@ -385,8 +508,18 @@ class PlannerScreen extends StatelessWidget {
           if (goals.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              child:
-                  _emptyTile(context, '🎯', 'No saving goals yet', openGoals),
+              child: _illustratedEmpty(
+                context,
+                icons: const [
+                  Icons.home_rounded,
+                  Icons.track_changes_rounded,
+                  Icons.directions_car_rounded,
+                  Icons.park_rounded,
+                ],
+                message: 'Create your first goal to track your savings',
+                cta: 'Create Goal →',
+                onTap: openGoals,
+              ),
             )
           else
             SizedBox(
@@ -483,21 +616,6 @@ class PlannerScreen extends StatelessWidget {
     );
   }
 
-  Widget _progressBar(BuildContext context, double frac, Color color) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        height: 6,
-        color: TC.bg2(context),
-        child: FractionallySizedBox(
-          alignment: Alignment.centerLeft,
-          widthFactor: frac.clamp(0.0, 1.0),
-          child: Container(color: color),
-        ),
-      ),
-    );
-  }
-
   // ─── Subscriptions — next renewals ───────────────────────────────────────
   Widget _subsSection(BuildContext context, List<SubscriptionData> subs,
       MapEntry<String, double>? subsPrimary) {
@@ -552,7 +670,20 @@ class PlannerScreen extends StatelessWidget {
             ),
           ),
           if (preview.isEmpty)
-            _emptyTile(context, '💳', 'No subscriptions yet', openSubs)
+            _illustratedEmpty(
+              context,
+              icons: const [
+                Icons.tv_rounded,
+                Icons.music_note_rounded,
+                Icons.credit_card_rounded,
+                Icons.cloud_rounded,
+                Icons.sports_esports_rounded,
+              ],
+              title: 'Discover & Centralize',
+              message: 'Manage all your subscriptions in one place',
+              cta: 'Add Subscription',
+              onTap: openSubs,
+            )
           else
             Container(
               decoration: _cardDeco(context),
@@ -637,103 +768,135 @@ class PlannerScreen extends StatelessWidget {
   }
 
   // ─── Shared atoms ────────────────────────────────────────────────────────
-  Widget _emptyTile(
-      BuildContext context, String emoji, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 26),
-        decoration: _cardDeco(context),
-        child: Column(
-          children: [
-            Icon(iconForEmoji(emoji), size: 30, color: TC.text3(context)),
-            const SizedBox(height: 8),
-            Text(label,
-                style: TC.geist(context,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: TC.text3(context))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── "+ Add" picker ──────────────────────────────────────────────────────
-  void _showAddSheet(BuildContext context) {
-    HapticFeedback.mediumImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: TC.surface(context),
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+  /// Illustrated empty state: a row of muted icons (the middle one accented),
+  /// optional title, message, and a primary CTA.
+  Widget _illustratedEmpty(
+    BuildContext context, {
+    required List<IconData> icons,
+    String? title,
+    required String message,
+    required String cta,
+    required VoidCallback onTap,
+  }) {
+    final mid = icons.length ~/ 2;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 26, 20, 22),
+      decoration: _cardDeco(context),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 18),
-                decoration: BoxDecoration(
-                  color: TC.border(context),
-                  borderRadius: BorderRadius.circular(20),
+              for (var i = 0; i < icons.length; i++) ...[
+                if (i > 0) const SizedBox(width: 14),
+                Icon(
+                  icons[i],
+                  size: i == mid ? 42 : 30,
+                  color: i == mid
+                      ? TC.primary(context)
+                      : TC.primary(context).withValues(alpha: 0.30),
                 ),
-              ),
-              Text('Add to Planner',
-                  style: TC.gloock(context, fontSize: 20)),
-              const SizedBox(height: 16),
-              _addOption(context, sheetCtx, '🎯', 'New Saving Goal',
-                  () => const SavingGoalsScreen()),
-              const SizedBox(height: 10),
-              _addOption(context, sheetCtx, '🔄', 'New Subscription',
-                  () => const SubscriptionsScreen()),
-              const SizedBox(height: 10),
-              _addOption(context, sheetCtx, '🔔', 'New Reminder',
-                  () => const RemindersScreen()),
+              ],
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          if (title != null) ...[
+            Text(title,
+                style:
+                    TC.gloock(context, fontSize: 17, color: TC.text(context))),
+            const SizedBox(height: 4),
+          ],
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TC.geist(context,
+                  fontSize: 13, color: TC.text2(context), height: 1.4)),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              onTap();
+            },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+              decoration: BoxDecoration(
+                color: TC.primary(context),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                      color: TC.primaryGlow(context),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5)),
+                ],
+              ),
+              child: Text(cta,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _addOption(BuildContext context, BuildContext sheetCtx, String emoji,
-      String label, Widget Function() builder) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        Navigator.pop(sheetCtx);
-        Navigator.push(
-            context, MaterialPageRoute(builder: (_) => builder()));
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        decoration: BoxDecoration(
-          color: TC.card2(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: TC.border(context)),
-        ),
-        child: Row(
-          children: [
-            Icon(iconForEmoji(emoji), size: 22, color: TC.primary(context)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(label,
-                  style: TC.geist(context,
-                      fontSize: 15, fontWeight: FontWeight.w600)),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                color: TC.text3(context), size: 22),
+}
+
+// ─── Mini sparkline for the bento trend tile ─────────────────────────────────
+class _SparklinePainter extends CustomPainter {
+  final List<double> values;
+  _SparklinePainter(this.values);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final maxV = values.reduce((a, b) => a > b ? a : b);
+    final span = maxV <= 0 ? 1.0 : maxV;
+    final dx = size.width / (values.length - 1);
+
+    Offset pt(int i) => Offset(
+        i * dx,
+        size.height - (values[i] / span).clamp(0.0, 1.0) * size.height * 0.9 -
+            size.height * 0.05);
+
+    final path = Path()..moveTo(pt(0).dx, pt(0).dy);
+    for (var i = 1; i < values.length; i++) {
+      final p0 = pt(i - 1), p1 = pt(i);
+      final mid = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
+      path.quadraticBezierTo(p0.dx, p0.dy, mid.dx, mid.dy);
+      if (i == values.length - 1) path.lineTo(p1.dx, p1.dy);
+    }
+
+    // Soft fill under the line.
+    final fill = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF2ED4B0).withValues(alpha: 0.30),
+            const Color(0xFF2ED4B0).withValues(alpha: 0.0),
           ],
-        ),
-      ),
+        ).createShader(Offset.zero & size),
+    );
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF2ED4B0)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round,
     );
   }
+
+  @override
+  bool shouldRepaint(_SparklinePainter old) => old.values != values;
 }
