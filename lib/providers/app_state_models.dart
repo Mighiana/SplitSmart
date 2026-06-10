@@ -169,6 +169,9 @@ class ExpenseData {
   final String? createdBy;
   final String? updatedBy;
 
+  /// Optional sub-category key (`sub:...`) for finer-grained reporting/budgets.
+  final String? subcat;
+
   /// Custom per-member split amounts. null = equal split.
   /// Key = member name, value = amount that member owes.
   final Map<String, double>? splits;
@@ -206,6 +209,7 @@ class ExpenseData {
     this.splitIds,
     this.createdBy,
     this.updatedBy,
+    this.subcat,
   });
 }
 
@@ -608,6 +612,10 @@ class Budget {
   final String currency;
   final List<String> categories; // category emojis; empty = All
   final bool notifyOverspent;
+  /// Optional custom icon (emoji key rendered via iconForEmoji) and hex color.
+  /// null = derive from categories (legacy behavior).
+  final String? icon;
+  final String? color;
 
   Budget({
     required this.id,
@@ -617,6 +625,8 @@ class Budget {
     this.period = 'monthly',
     List<String>? categories,
     this.notifyOverspent = true,
+    this.icon,
+    this.color,
   }) : categories = categories ?? const [];
 
   /// Single source of truth for whether this budget targets a transaction by
@@ -640,6 +650,8 @@ class Budget {
       currency: (m['currency'] as String?) ?? 'USD',
       categories: catRaw.isEmpty ? const [] : catRaw.split('||'),
       notifyOverspent: ((m['notify_overspent'] as num?)?.toInt() ?? 1) == 1,
+      icon: m['icon'] as String?,
+      color: m['color'] as String?,
     );
   }
 
@@ -650,6 +662,8 @@ class Budget {
         'currency': currency,
         'categories': categories.join('||'),
         'notify_overspent': notifyOverspent ? 1 : 0,
+        'icon': icon,
+        'color': color,
       };
 
   Budget copyWith({
@@ -659,6 +673,8 @@ class Budget {
     String? currency,
     List<String>? categories,
     bool? notifyOverspent,
+    String? icon,
+    String? color,
   }) {
     return Budget(
       id: id,
@@ -668,6 +684,8 @@ class Budget {
       currency: currency ?? this.currency,
       categories: categories ?? this.categories,
       notifyOverspent: notifyOverspent ?? this.notifyOverspent,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
     );
   }
 }

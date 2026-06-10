@@ -32,9 +32,13 @@ void main() {
     expect(find.text('Weekly'), findsOneWidget);
     expect(find.text('Monthly'), findsOneWidget);
     expect(find.text('Yearly'), findsOneWidget);
-    expect(find.text('Create Budget'), findsOneWidget);
     // Categories field defaults to "All categories".
     expect(find.text('All categories'), findsOneWidget);
+    // The submit button sits below the fold in the test viewport (the form
+    // ListView builds lazily) — scroll it into view before asserting.
+    await tester.scrollUntilVisible(find.text('Create Budget'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Create Budget'), findsOneWidget);
   });
 
   testWidgets('Category picker: expand a parent and select a subcategory',

@@ -27,6 +27,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   String _amount = '0';
   String _cat = '🍽️';
+  String? _subcat;
   String _payer = 'You';
   String _split = 'equal';
   String _date = '';
@@ -56,6 +57,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           e.amount.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
       _descCtrl.text = e.desc;
       _cat = e.cat;
+      _subcat = e.subcat;
       _payer = e.paidBy;
       _date = e.date;
       _receipt = e.receipt;
@@ -393,6 +395,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                 _descCtrl.text = s.description;
                                 _amount = s.amount.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
                                 _cat = s.category;
+                                _subcat = null;
                               });
                             },
                             child: Container(
@@ -428,6 +431,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             _descCtrl.text = s.description;
                             _amount = s.amount.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
                             _cat = s.category;
+                            _subcat = null;
                           });
                         },
                         child: Container(
@@ -466,7 +470,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       return GestureDetector(
                         onTap: () {
                           HapticFeedback.selectionClick();
-                          setState(() => _cat = c.icon);
+                          setState(() { _cat = c.icon; _subcat = null; });
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
@@ -515,6 +519,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   )
                   .toList(),
             ),
+            _subcategorySection(),
             const SizedBox(height: 20),
 
             // Paid by
@@ -1038,6 +1043,73 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     );
   }
 
+  /// Optional sub-category chips for the selected category (mirrors the
+  /// personal Add Transaction screen). Hidden when the category has no subs.
+  Widget _subcategorySection() {
+    final subs = AppState.subsFor(_cat);
+    if (subs.isEmpty) return const SizedBox.shrink();
+    final parentColor = Color(int.tryParse(AppState.expenseCategories
+            .firstWhere((c) => c.icon == _cat,
+                orElse: () => AppState.expenseCategories.last)
+            .color
+            .replaceAll('#', '0xFF')) ??
+        0xFF1E7D4F);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Row(children: [
+          _label('Subcategory'),
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('· optional',
+                style: TC.geist(context, fontSize: 11, color: TC.text3(context))),
+          ),
+        ]),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: subs.map((s) {
+            final active = _subcat == s.icon;
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _subcat = active ? null : s.icon);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                decoration: BoxDecoration(
+                  color: active
+                      ? parentColor.withValues(alpha: 0.15)
+                      : TC.card(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: active ? parentColor : TC.border(context),
+                      width: 1.5),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(s.materialIcon ?? Icons.category_rounded,
+                      size: 13,
+                      color: active ? parentColor : TC.text3(context)),
+                  const SizedBox(width: 6),
+                  Text(s.label,
+                      style: TC.geist(context,
+                          fontSize: 12.5,
+                          fontWeight:
+                              active ? FontWeight.w700 : FontWeight.w500,
+                          color: active ? parentColor : TC.text2(context))),
+                ]),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
@@ -1200,6 +1272,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       receiptPath: _receiptPath,
       splits: splits,
       splitIds: splitIds,
+      subcat: _subcat,
       createdBy: _isEdit ? widget.existing?.createdBy : 'You',
       updatedBy: _isEdit ? 'You' : null,
     );

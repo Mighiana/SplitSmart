@@ -564,9 +564,12 @@ class _QRShareScreenState extends State<QRShareScreen>
 
   // ── Action buttons ──────────────────────────────────────────────────────────
   Widget _buildActionButtons(BuildContext context) {
+    // Premium "guest join" isn't being sold yet — only the owner sees this
+    // control; regular users don't see any premium option.
+    final isOwner = context.read<AppState>().isOwner;
     return Column(
       children: [
-        _buildGuestAccessCard(context),
+        if (isOwner) _buildGuestAccessCard(context),
         // Primary: Share QR
         GestureDetector(
           onTap: _sharing ? null : _shareQRImage,

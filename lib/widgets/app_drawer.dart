@@ -56,7 +56,7 @@ class AppDrawer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('SplitSmart', style: TextStyle(color: TC.text(context), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                    const Text('Premium Edition', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                    const Text('Track · Split · Settle', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
                   ],
                 ),
               ],

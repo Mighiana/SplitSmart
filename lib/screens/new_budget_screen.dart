@@ -21,7 +21,27 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
   late String _currency;
   late List<String> _categories; // empty = All
   late bool _notify;
+  String? _icon;  // emoji key rendered via iconForEmoji; null = auto
+  String? _color; // hex like '#0D7377'; null = auto
   bool _saving = false;
+
+  /// Icon choices (emoji keys — all resolvable by iconForEmoji).
+  static const List<String> _iconOptions = [
+    '💰','🛒','🍽️','☕','🛍️','✈️','🏠','🚗','🚌','🎬','🎮','🎵',
+    '💪','💊','📚','🎓','🎁','🎉','💳','📈','🐾','💻','📱','🏖️',
+  ];
+
+  /// Color palette for budgets (matches the app's category hues).
+  static const List<String> _colorOptions = [
+    '#0D7377','#14A085','#00C853','#448AFF','#5C6BC0','#7C4DFF',
+    '#EC407A','#EF5350','#FF9800','#FFC107','#8D6E63','#00B8D4',
+  ];
+
+  Color _hex(String? h, Color fallback) {
+    if (h == null || h.isEmpty) return fallback;
+    final v = int.tryParse(h.replaceAll('#', '0xFF'));
+    return v == null ? fallback : Color(v);
+  }
 
   @override
   void initState() {
@@ -33,6 +53,8 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
     _period = e?.period ?? 'monthly';
     _categories = List<String>.from(e?.categories ?? const []);
     _notify = e?.notifyOverspent ?? true;
+    _icon = e?.icon;
+    _color = e?.color;
     final state = context.read<AppState>();
     _currency = e?.currency ??
         state.homeCurrency ??
@@ -68,7 +90,9 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
             currency: _currency,
             period: _period,
             categories: _categories,
-            notifyOverspent: _notify);
+            notifyOverspent: _notify,
+            icon: _icon,
+            color: _color);
       } else {
         await state.updateBudget(widget.existing!.copyWith(
             name: name,
@@ -76,7 +100,9 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
             currency: _currency,
             period: _period,
             categories: _categories,
-            notifyOverspent: _notify));
+            notifyOverspent: _notify,
+            icon: _icon,
+            color: _color));
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -295,6 +321,113 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
     );
   }
 
+  void _pickIcon() {
+    HapticFeedback.lightImpact();
+    final accent = _hex(_color, TC.primary(context));
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Budget icon', style: TC.gloock(context, fontSize: 18, color: TC.text(context))),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                // Auto = derive from the selected categories.
+                GestureDetector(
+                  onTap: () { HapticFeedback.selectionClick(); setState(() => _icon = null); Navigator.pop(sheetCtx); },
+                  child: Container(
+                    width: 46, height: 46,
+                    decoration: BoxDecoration(
+                      color: TC.card(context),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _icon == null ? accent : TC.border(context), width: _icon == null ? 2 : 1),
+                    ),
+                    child: Icon(Icons.auto_awesome_rounded, size: 20, color: _icon == null ? accent : TC.text3(context)),
+                  ),
+                ),
+                ..._iconOptions.map((em) {
+                  final sel = _icon == em;
+                  return GestureDetector(
+                    onTap: () { HapticFeedback.selectionClick(); setState(() => _icon = em); Navigator.pop(sheetCtx); },
+                    child: Container(
+                      width: 46, height: 46,
+                      decoration: BoxDecoration(
+                        color: sel ? accent.withValues(alpha: 0.14) : TC.card(context),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: sel ? accent : TC.border(context), width: sel ? 2 : 1),
+                      ),
+                      child: Icon(iconForEmoji(em), size: 20, color: sel ? accent : TC.text2(context)),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _pickColor() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Budget color', style: TC.gloock(context, fontSize: 18, color: TC.text(context))),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                GestureDetector(
+                  onTap: () { HapticFeedback.selectionClick(); setState(() => _color = null); Navigator.pop(sheetCtx); },
+                  child: Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      color: TC.card(context),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _color == null ? TC.primary(context) : TC.border(context), width: _color == null ? 2 : 1),
+                    ),
+                    child: Icon(Icons.auto_awesome_rounded, size: 18, color: _color == null ? TC.primary(context) : TC.text3(context)),
+                  ),
+                ),
+                ..._colorOptions.map((hex) {
+                  final c = _hex(hex, TC.primary(context));
+                  final sel = _color == hex;
+                  return GestureDetector(
+                    onTap: () { HapticFeedback.selectionClick(); setState(() => _color = hex); Navigator.pop(sheetCtx); },
+                    child: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: c,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: sel ? TC.text(context) : Colors.transparent, width: 2.5),
+                      ),
+                      child: sel ? const Icon(Icons.check_rounded, size: 18, color: Colors.white) : null,
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
@@ -337,7 +470,17 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
                   _fieldBox(TextField(
                     controller: _nameCtrl,
                     style: TC.geist(context, fontSize: 15, color: TC.text(context)),
-                    decoration: InputDecoration(border: InputBorder.none, isDense: true, hintText: 'e.g. Monthly spending', hintStyle: TC.geist(context, color: TC.text3(context))),
+                    // filled/enabledBorder must be explicitly disabled or the
+                    // global InputDecorationTheme paints a second box inside
+                    // this screen's own field container (box-in-box look).
+                    decoration: InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        isDense: true,
+                        hintText: 'e.g. Monthly spending',
+                        hintStyle: TC.geist(context, color: TC.text3(context))),
                   )),
                   const SizedBox(height: 16),
                   _label('Period'),
@@ -356,7 +499,14 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
                         controller: _amountCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         style: TC.gloock(context, fontSize: 20, color: TC.text(context)),
-                        decoration: InputDecoration(border: InputBorder.none, isDense: true, hintText: '0', hintStyle: TC.gloock(context, fontSize: 20, color: TC.text3(context))),
+                        decoration: InputDecoration(
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                            isDense: true,
+                            hintText: '0',
+                            hintStyle: TC.gloock(context, fontSize: 20, color: TC.text3(context))),
                       )),
                     ])),
                     const SizedBox(width: 12),
@@ -397,6 +547,55 @@ class _NewBudgetScreenState extends State<NewBudgetScreen> {
                       ]),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  // Icon + Color (wallet-style customization)
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _label('Icon'),
+                      GestureDetector(
+                        onTap: _pickIcon,
+                        child: _boxDeco(full: true, child: Row(children: [
+                          Container(
+                            width: 30, height: 30,
+                            decoration: BoxDecoration(
+                              color: _hex(_color, TC.primary(context)).withValues(alpha: 0.14),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _icon == null ? Icons.auto_awesome_rounded : iconForEmoji(_icon),
+                              size: 16,
+                              color: _hex(_color, TC.primary(context)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(_icon == null ? 'Auto' : 'Custom',
+                              style: TC.geist(context, fontSize: 14, fontWeight: FontWeight.w600, color: TC.text(context)))),
+                          Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: TC.text3(context)),
+                        ])),
+                      ),
+                    ])),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _label('Color'),
+                      GestureDetector(
+                        onTap: _pickColor,
+                        child: _boxDeco(full: true, child: Row(children: [
+                          Container(
+                            width: 30, height: 30,
+                            decoration: BoxDecoration(
+                              color: _hex(_color, TC.primary(context)),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: TC.border(context)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(_color == null ? 'Auto' : 'Custom',
+                              style: TC.geist(context, fontSize: 14, fontWeight: FontWeight.w600, color: TC.text(context)))),
+                          Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: TC.text3(context)),
+                        ])),
+                      ),
+                    ])),
+                  ]),
                   const SizedBox(height: 16),
                   _boxDeco(
                     full: true,

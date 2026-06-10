@@ -25,6 +25,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String _periodLabel(String p) =>
       p == 'weekly' ? 'Weekly' : p == 'yearly' ? 'Yearly' : 'Monthly';
 
+  Color _hexOr(String? h, Color fallback) {
+    if (h == null || h.isEmpty) return fallback;
+    final v = int.tryParse(h.replaceAll('#', '0xFF'));
+    return v == null ? fallback : Color(v);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -183,6 +189,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Custom icon/color (falls back to first category, then a coin)
+                  Builder(builder: (context) {
+                    final accent = _hexOr(b.color, TC.primary(context));
+                    final iconKey = b.icon ??
+                        (b.categories.isNotEmpty ? b.categories.first : '💰');
+                    return Container(
+                      width: 40, height: 40,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.13),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(iconForEmoji(iconKey), size: 19, color: accent),
+                    );
+                  }),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

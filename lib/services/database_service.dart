@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 18,
+      version: 19,
       onCreate: _create,
       onUpgrade: _upgrade,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
@@ -84,6 +84,7 @@ class DatabaseService {
         split_ids_json TEXT,
         created_by     TEXT,
         updated_by     TEXT,
+        subcat         TEXT,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
       )''');
 
@@ -188,7 +189,9 @@ class DatabaseService {
         amount           REAL    NOT NULL,
         currency         TEXT    NOT NULL,
         categories       TEXT,
-        notify_overspent INTEGER NOT NULL DEFAULT 1
+        notify_overspent INTEGER NOT NULL DEFAULT 1,
+        icon             TEXT,
+        color            TEXT
       )''');
 
     await batch.commit(noResult: true);
@@ -362,6 +365,19 @@ class DatabaseService {
         debugPrint('[DB] migration v18 transactions.subcat failed: $e');
       }
     }
+    if (oldVersion < 19) {
+      // Group-expense sub-category + budget icon/color. All additive+nullable.
+      Future<void> addCol(String sql) async {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          debugPrint('[DB] migration v19 "$sql" failed: $e');
+        }
+      }
+      await addCol('ALTER TABLE expenses ADD COLUMN subcat TEXT');
+      await addCol('ALTER TABLE budgets ADD COLUMN icon TEXT');
+      await addCol('ALTER TABLE budgets ADD COLUMN color TEXT');
+    }
   }
 
   // ─── Groups ───────────────────────────────────────────────────────────────
@@ -424,6 +440,7 @@ class DatabaseService {
           splitIds:    splitIds,
           createdBy:   r['created_by'] as String?,
           updatedBy:   r['updated_by'] as String?,
+          subcat:      r['subcat']     as String?,
         );
       }).toList();
 
@@ -490,6 +507,7 @@ class DatabaseService {
         'split_ids_json': e.splitIdsJson,
         'created_by': e.createdBy,
         'updated_by': e.updatedBy,
+        'subcat': e.subcat,
       };
 
   Future<void> insertGroup(GroupData g) async {

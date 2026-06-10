@@ -217,6 +217,7 @@ class FirestoreService {
         splitIds: splitIds,
         createdBy: ed['createdBy'],
         updatedBy: ed['updatedBy'],
+        subcat: ed['subcat'],
       );
     }).toList();
 
@@ -431,6 +432,7 @@ class FirestoreService {
       'receiptUrl': e.receiptPath,
       'splits': e.splits,
       'splitIds': e.splitIds,
+      'subcat': e.subcat,
       'addedBy': _uid,
       'createdBy': e.createdBy,
       'updatedBy': e.updatedBy,
@@ -456,6 +458,7 @@ class FirestoreService {
         'receiptUrl': e.receiptPath,
         'splits': e.splits,
         'splitIds': e.splitIds,
+        'subcat': e.subcat,
         'updatedBy': e.updatedBy,
       });
       return;
@@ -476,6 +479,7 @@ class FirestoreService {
           'receiptUrl': e.receiptPath,
           'splits': e.splits,
           'splitIds': e.splitIds,
+          'subcat': e.subcat,
           'updatedBy': e.updatedBy,
         });
         return;
@@ -576,6 +580,7 @@ class FirestoreService {
                 splitIds: splitIds,
                 createdBy: ed['createdBy'],
                 updatedBy: ed['updatedBy'],
+                subcat: ed['subcat'],
               );
             }).toList());
   }

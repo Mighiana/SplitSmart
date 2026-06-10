@@ -44,6 +44,18 @@ class AppState extends ChangeNotifier {
   bool get hasPremium => _entitlement.isActive;
   StreamSubscription<Map<String, dynamic>?>? _entitlementSub;
 
+  /// Owner/developer accounts allowed to see in-progress premium controls
+  /// (e.g. the guest-join toggle). Premium isn't being sold yet, so it stays
+  /// hidden from everyone else until it ships. Add your dev-project uid here to
+  /// see these controls on the dev build too.
+  static const Set<String> _ownerUids = {
+    'qgrU1tc4FCh8mAiF9Pz9D6nEG7Z2', // prod owner
+  };
+  bool get isOwner {
+    final uid = AuthService.instance.uid;
+    return uid != null && _ownerUids.contains(uid);
+  }
+
   /// Cache key for offline entitlement mirror.
   static const _kEntitlementPrefsKey = 'entitlement_cache';
 
@@ -268,6 +280,12 @@ class AppState extends ChangeNotifier {
       CategoryItem('sub:shopping:home',        'Home & Garden', '#FFC107', Icons.chair_rounded),
       CategoryItem('sub:shopping:gifts',       'Gifts',         '#FFC107', Icons.card_giftcard_rounded),
       CategoryItem('sub:shopping:beauty',      'Personal Care', '#FFC107', Icons.spa_rounded),
+      CategoryItem('sub:shopping:salon',       'Salon & Hair',  '#FFC107', Icons.content_cut_rounded),
+      CategoryItem('sub:shopping:cosmetics',   'Cosmetics',     '#FFC107', Icons.brush_rounded),
+      CategoryItem('sub:shopping:skincare',    'Skincare',      '#FFC107', Icons.face_retouching_natural_rounded),
+      CategoryItem('sub:shopping:nails',       'Nails',         '#FFC107', Icons.back_hand_rounded),
+      CategoryItem('sub:shopping:spa',         'Spa & Massage', '#FFC107', Icons.self_improvement_rounded),
+      CategoryItem('sub:shopping:jewelry',     'Jewelry',       '#FFC107', Icons.diamond_rounded),
     ],
     '🎫': [
       CategoryItem('sub:activity:movies',  'Movies',  '#E040FB', Icons.movie_rounded),
@@ -1737,6 +1755,7 @@ class AppState extends ChangeNotifier {
             currency: g.currency,
             sym: g.sym,
             date: e.date,
+            subcat: e.subcat,
             isGroupShare: true,
             groupId: g.id,
           ));
@@ -1943,14 +1962,18 @@ class AppState extends ChangeNotifier {
     String period = 'monthly',
     List<String> categories = const [],
     bool notifyOverspent = true,
+    String? icon,
+    String? color,
   }) async {
     final tmp = Budget(
         id: 0, name: name, amount: amount, currency: currency,
-        period: period, categories: categories, notifyOverspent: notifyOverspent);
+        period: period, categories: categories, notifyOverspent: notifyOverspent,
+        icon: icon, color: color);
     final id = await DatabaseService.instance.insertBudget(tmp.toMap());
     budgets.insert(0, Budget(
         id: id, name: name, amount: amount, currency: currency,
-        period: period, categories: categories, notifyOverspent: notifyOverspent));
+        period: period, categories: categories, notifyOverspent: notifyOverspent,
+        icon: icon, color: color));
     notifyListeners();
   }
 
