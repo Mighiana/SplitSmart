@@ -595,16 +595,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void _save() async {
     if (_isSaving) return;
     final amt = double.tryParse(_amount) ?? 0;
-    final desc = _descCtrl.text.trim();
+    var desc = _descCtrl.text.trim();
 
     if (amt <= 0) {
       AmountDisplay.shake(_amtKey);
       _showToast('Enter an amount!');
       return;
     }
+    // Description is optional — fall back to the category (or subcategory)
+    // label so rows still read naturally.
     if (desc.isEmpty) {
-      _showToast('Add a description!');
-      return;
+      desc = _subcat != null
+          ? AppState.labelForKey(_subcat!)
+          : AppState.labelForKey(_cat);
     }
 
     setState(() => _isSaving = true);

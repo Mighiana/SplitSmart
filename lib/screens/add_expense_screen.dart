@@ -1107,7 +1107,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   void _save() async {
     if (_isSaving) return;
     final amt = double.tryParse(_amount) ?? 0;
-    final desc = _descCtrl.text.trim();
+    var desc = _descCtrl.text.trim();
 
     if (amt <= 0) {
       AmountDisplay.shake(_amtKey);
@@ -1121,9 +1121,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
+    // Description is optional — default to the category/subcategory label.
     if (desc.isEmpty) {
-      _showToast('Add a description!');
-      return;
+      desc = _subcat != null
+          ? AppState.labelForKey(_subcat!)
+          : AppState.labelForKey(_cat);
     }
 
     if (desc.length > 200) {

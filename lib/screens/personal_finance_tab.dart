@@ -982,8 +982,13 @@ class _MoneyTabState extends State<MoneyTab> {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const ActivityScreen()));
+                  // Donut "See all" → the full charts/analysis screen.
+                  final cur = context.read<AppState>().homeCurrency;
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              MoneyChartsScreen(initialCurrency: cur)));
                 },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

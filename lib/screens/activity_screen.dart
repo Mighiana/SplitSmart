@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
 import '../providers/app_state.dart';
+import '../services/auth_service.dart';
 import '../utils/app_utils.dart';
 import '../utils/icon_map.dart';
 import '../widgets/common_widgets.dart';
 import '../l10n/app_localizations.dart';
 import 'group_detail_screen.dart';
+import 'add_transaction_screen.dart';
 
 enum _Kind { personal, groupExpense, settlement }
 
@@ -20,11 +23,14 @@ class _Item {
   final DateTime? date;
   final GroupData? group;
   final TransactionData? txn; // set for personal transactions (enables swipe-delete)
+  final ExpenseData? expense; // set for group expense rows (detail sheet)
+  final SettlementData? settlement; // set for settlement rows (detail sheet)
   const _Item({
     required this.kind, required this.emoji, required this.title,
     required this.subtitle, required this.sub2, required this.amount,
     required this.isPositive, required this.sym,
     this.receiptPath, this.date, this.group, this.txn,
+    this.expense, this.settlement,
   });
 }
 
@@ -69,47 +75,65 @@ class _ActivityScreenState extends State<ActivityScreen> {
       ));
     }
     final myName = state.userName.trim().toLowerCase();
+    final myUid = AuthService.instance.uid;
     for (final g in state.groups) {
       for (final e in g.expenses) {
         final payer = e.paidBy.trim().toLowerCase();
-        final isYou = payer == 'you' || (myName.isNotEmpty && payer == myName);
+        final isYou = (myUid != null && e.paidById == myUid) ||
+            payer == 'you' ||
+            (myName.isNotEmpty && payer == myName);
+        // My share: prefer uid-keyed splits, then name-keyed ('You' or my
+        // display name), then equal split.
         double share;
+        double? raw;
+        if (myUid != null && e.splitIds != null) raw = e.splitIds![myUid];
+        if (raw == null && e.splits != null) {
+          raw = e.splits!['You'];
+          final nm = state.userName.trim();
+          if (raw == null && nm.isNotEmpty) raw = e.splits![nm];
+        }
         if (e.splits != null && e.splits!.isNotEmpty) {
           final rawTotal = e.splits!.values.fold(0.0, (s, v) => s + v);
           final scale = (rawTotal > 0 && (rawTotal - e.amount).abs() > 0.01)
               ? e.amount / rawTotal
               : 1.0;
-          share = (e.splits!['You'] ?? (e.amount / g.members.length)) * scale;
+          share = (raw ?? (e.amount / g.members.length)) * scale;
         } else {
-          share = g.members.isEmpty ? 0 : e.amount / g.members.length;
+          share = raw ??
+              (g.members.isEmpty ? 0 : e.amount / g.members.length);
         }
         final net = isYou ? (e.amount - share) : -share;
+        // Solo group / payer covers everything: net receivable is 0, which
+        // rendered as a useless "+$0.00". Show the real cost instead.
+        final showCost = isYou && net.abs() < 0.005;
         items.add(_Item(
-          kind: _Kind.groupExpense, 
-          emoji: e.cat, 
+          kind: _Kind.groupExpense,
+          emoji: e.cat,
           title: e.desc,
-          subtitle: '${g.emoji} ${g.name}', 
+          subtitle: '${g.emoji} ${g.name}',
           sub2: e.paidBy,
-          amount: net.abs(), 
-          isPositive: net >= 0, 
+          amount: showCost ? e.amount : net.abs(),
+          isPositive: showCost ? false : net >= 0,
           sym: g.sym,
-          receiptPath: e.receiptPath, 
-          date: TransactionData.parseDate(e.date), 
+          receiptPath: e.receiptPath,
+          date: TransactionData.parseDate(e.date),
           group: g,
+          expense: e,
         ));
       }
       for (final s in g.settlements) {
         items.add(_Item(
-          kind: _Kind.settlement, 
-          emoji: '🤝', 
-          title: '${s.from} → ${s.to}', 
+          kind: _Kind.settlement,
+          emoji: '🤝',
+          title: '${s.from} → ${s.to}',
           subtitle: l.settled,
           sub2: s.method,
-          amount: s.amount, 
-          isPositive: true, 
+          amount: s.amount,
+          isPositive: true,
           sym: g.sym,
-          date: TransactionData.parseDate(s.date), 
+          date: TransactionData.parseDate(s.date),
           group: g,
+          settlement: s,
         ));
       }
     }
@@ -650,6 +674,209 @@ class _ActivityScreenState extends State<ActivityScreen> {
     );
   }
 
+  /// Transaction detail sheet: full info incl. the exact moment it was added
+  /// (derived from the epoch-ms id) and who paid / who was paid (recipient).
+  void _showTxDetail(_Item item, AppLocalizations l) {
+    // ids are DateTime.now().millisecondsSinceEpoch at creation → recover the
+    // creation timestamp. Guard against legacy non-epoch ids.
+    DateTime? added;
+    final rawId = item.txn?.id ?? item.expense?.id;
+    if (rawId != null && rawId > 1000000000000 && rawId < 4102444800000) {
+      added = DateTime.fromMillisecondsSinceEpoch(rawId);
+    }
+    final cat = item.txn?.cat ?? item.expense?.cat;
+    final sub = item.txn?.subcat ?? item.expense?.subcat;
+    final catLabel = cat == null
+        ? null
+        : AppState.labelForKey(cat) +
+            (sub != null ? ' · ${AppState.labelForKey(sub)}' : '');
+
+    Widget detailRow(IconData icon, String label, String value,
+        {Color? valueColor}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(children: [
+          Icon(icon, size: 16, color: TC.text3(context)),
+          const SizedBox(width: 10),
+          Text(label,
+              style: TC.geist(context, fontSize: 12, color: TC.text3(context))),
+          const Spacer(),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TC.geist(context,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? TC.text(context))),
+          ),
+        ]),
+      );
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: TC.border(context),
+                      borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Row(children: [
+                Container(
+                  width: 48, height: 48,
+                  decoration: BoxDecoration(
+                      color: TC.primaryPale(context), shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Icon(iconForEmoji(item.emoji),
+                      size: 22,
+                      color: colorForEmoji(item.emoji,
+                          fallback: TC.primary(context))),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TC.geist(context,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: TC.text(context))),
+                      const SizedBox(height: 2),
+                      Text(item.subtitle,
+                          style: TC.geist(context,
+                              fontSize: 12, color: TC.text3(context))),
+                    ],
+                  ),
+                ),
+                Text(
+                    '${item.isPositive ? '+' : '-'}${item.sym}${AppCurrencyUtils.formatAmount(item.amount, 2)}',
+                    style: TC.gloock(context,
+                        fontSize: 20,
+                        color: item.isPositive
+                            ? TC.ok(context)
+                            : TC.er(context))),
+              ]),
+              const SizedBox(height: 14),
+              Divider(color: TC.border(context), height: 1),
+              const SizedBox(height: 6),
+              if (catLabel != null)
+                detailRow(Icons.category_rounded, 'Category', catLabel),
+              if (item.kind == _Kind.groupExpense)
+                detailRow(Icons.person_rounded, 'Paid by', item.sub2),
+              if (item.kind == _Kind.settlement &&
+                  item.settlement != null) ...[
+                detailRow(Icons.call_made_rounded, 'From',
+                    item.settlement!.from),
+                detailRow(Icons.call_received_rounded, 'Recipient',
+                    item.settlement!.to),
+                detailRow(
+                    Icons.payments_rounded, 'Method', item.settlement!.method),
+              ],
+              if (item.group != null)
+                detailRow(Icons.group_rounded, 'Group', item.group!.name),
+              if (item.date != null)
+                detailRow(Icons.event_rounded, 'Date',
+                    DateFormat('EEE, MMM d yyyy').format(item.date!)),
+              if (added != null)
+                detailRow(Icons.schedule_rounded, 'Added',
+                    DateFormat('MMM d, yyyy · h:mm a').format(added)),
+              if (item.kind == _Kind.personal && item.txn != null)
+                detailRow(
+                    Icons.swap_vert_rounded,
+                    'Type',
+                    item.txn!.type == 'income' ? l.income : l.expenses,
+                    valueColor: item.txn!.type == 'income'
+                        ? TC.ok(context)
+                        : TC.er(context)),
+              const SizedBox(height: 10),
+              if (item.receiptPath != null)
+                _detailAction(sheetCtx, Icons.receipt_long_rounded,
+                    'View Receipt', () {
+                  Navigator.pop(sheetCtx);
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => ReceiptViewer(
+                              imagePath: item.receiptPath!,
+                              title: item.title)));
+                }),
+              if (item.kind == _Kind.personal &&
+                  item.txn != null &&
+                  !item.txn!.isGroupShare)
+                _detailAction(sheetCtx, Icons.edit_rounded, 'Edit Transaction',
+                    () {
+                  Navigator.pop(sheetCtx);
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              AddTransactionScreen(existing: item.txn)));
+                }),
+              if (item.kind != _Kind.personal && item.group != null)
+                _detailAction(sheetCtx, Icons.group_rounded, 'Open Group', () {
+                  Navigator.pop(sheetCtx);
+                  final state = context.read<AppState>();
+                  state.currentGroup = item.group;
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const GroupDetailScreen()));
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailAction(
+      BuildContext sheetCtx, IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          color: TC.card(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: TC.border(context)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 17, color: TC.primary(context)),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TC.geist(context,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: TC.text(context))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTransactionRow(_Item item, bool isLast, AppLocalizations l) {
     Color dotColor, tagBg, tagText;
     Color iconBg = TC.bg(context);
@@ -683,16 +910,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       child: InkWell(
         onTap: () {
           HapticFeedback.lightImpact();
-          if (item.receiptPath != null) {
-            Navigator.push(context, MaterialPageRoute(
-              builder: (_) => ReceiptViewer(imagePath: item.receiptPath!, title: item.title)));
-            return;
-          }
-          if (item.kind == _Kind.groupExpense && item.group != null) {
-            final state = context.read<AppState>();
-            state.currentGroup = item.group;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupDetailScreen()));
-          }
+          _showTxDetail(item, l);
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

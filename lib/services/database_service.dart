@@ -178,7 +178,8 @@ class DatabaseService {
         saved_amount  REAL    NOT NULL DEFAULT 0,
         target_date   TEXT,
         icon          TEXT,
-        color         TEXT
+        color         TEXT,
+        deposits      TEXT
       )''');
 
     // named budgets (Phase A)
@@ -380,6 +381,9 @@ class DatabaseService {
       await addCol('ALTER TABLE expenses ADD COLUMN added_by TEXT');
       await addCol('ALTER TABLE budgets ADD COLUMN icon TEXT');
       await addCol('ALTER TABLE budgets ADD COLUMN color TEXT');
+      // Itemized goal deposit history — without this column local saves of
+      // deposits failed and history collapsed into one collective entry.
+      await addCol('ALTER TABLE saving_goals ADD COLUMN deposits TEXT');
     }
   }
 

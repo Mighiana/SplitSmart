@@ -11,7 +11,6 @@ import 'subscriptions_screen.dart';
 import 'saving_goals_screen.dart';
 import 'budget_screen.dart';
 import 'new_budget_screen.dart';
-import 'personal_charts_screen.dart';
 
 class PlannerScreen extends StatelessWidget {
   const PlannerScreen({super.key});
@@ -80,25 +79,6 @@ class PlannerScreen extends StatelessWidget {
     final reminders = state.reminders;
     final budgets = state.budgets;
 
-    // Mini spending trend (last 6 months, dominant currency) for the bento
-    // performance tile.
-    final trendCur = state.homeCurrency ??
-        (state.wallets.keys.isNotEmpty ? state.wallets.keys.first : 'USD');
-    final trendVals = List<double>.filled(6, 0);
-    for (final t in state.allTransactionsWithGroupShares) {
-      if (t.type.toLowerCase() != 'expense' || t.currency != trendCur) continue;
-      final d = t.rawDate;
-      if (d == null) continue;
-      final diff = (now.year - d.year) * 12 + (now.month - d.month);
-      if (diff >= 0 && diff < 6) trendVals[5 - diff] += t.amount;
-    }
-
-    // Monthly subscription cost — dominant currency.
-    final monthlyCosts = state.subscriptionMonthlyCostByCurrency;
-    final subsPrimary = monthlyCosts.entries.isEmpty
-        ? null
-        : monthlyCosts.entries.reduce((a, b) => a.value >= b.value ? a : b);
-
     final overdue = reminders
         .where((r) =>
             !r.isCompleted &&
@@ -106,6 +86,12 @@ class PlannerScreen extends StatelessWidget {
         .toList();
     final upcoming = reminders.where((r) => !r.isCompleted).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
+
+    // Monthly subscription cost — dominant currency.
+    final monthlyCosts = state.subscriptionMonthlyCostByCurrency;
+    final subsPrimary = monthlyCosts.entries.isEmpty
+        ? null
+        : monthlyCosts.entries.reduce((a, b) => a.value >= b.value ? a : b);
 
     return Scaffold(
       backgroundColor: TC.bg(context),
@@ -123,8 +109,7 @@ class PlannerScreen extends StatelessWidget {
                 .animate(delay: 40.ms)
                 .fade(duration: 320.ms)
                 .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic),
-            _bentoRow(context, state, budgets, upcoming, overdue.length,
-                    trendVals, trendCur)
+            _bentoRow(context, state, budgets, upcoming, overdue.length)
                 .animate(delay: 80.ms)
                 .fade(duration: 340.ms)
                 .slideY(begin: 0.10, end: 0, curve: Curves.easeOutCubic),
@@ -148,80 +133,16 @@ class PlannerScreen extends StatelessWidget {
       AppState state,
       List<Budget> budgets,
       List<ReminderData> upcoming,
-      int overdueCount,
-      List<double> trendVals,
-      String trendCur) {
+      int overdueCount) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 5, child: _budgetBentoTile(context, state, budgets)),
-          const SizedBox(width: 10),
-          Expanded(
-              flex: 5,
-              child: _reminderBentoTile(context, upcoming, overdueCount)),
-          const SizedBox(width: 10),
-          Expanded(
-              flex: 4, child: _trendTile(context, trendVals, trendCur)),
+          Expanded(child: _budgetBentoTile(context, state, budgets)),
+          const SizedBox(width: 12),
+          Expanded(child: _reminderBentoTile(context, upcoming, overdueCount)),
         ],
-      ),
-    );
-  }
-
-  // Dark "performance" tile — 6-month spending sparkline → full charts screen.
-  Widget _trendTile(
-      BuildContext context, List<double> vals, String cur) {
-    final thisMonth = vals.isEmpty ? 0.0 : vals.last;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => MoneyChartsScreen(initialCurrency: cur)));
-      },
-      child: Container(
-        height: 128,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: TC.cardGradient(context),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-                color: TC.primaryGlow(context),
-                blurRadius: 14,
-                offset: const Offset(0, 5)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('SPENDING',
-                style: TC.geist(context,
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white.withValues(alpha: 0.55),
-                    letterSpacing: 1.1)),
-            const SizedBox(height: 2),
-            Text('Trend',
-                style: TC.gloock(context, fontSize: 15, color: Colors.white)),
-            const Spacer(),
-            SizedBox(
-              height: 34,
-              width: double.infinity,
-              child: CustomPaint(painter: _SparklinePainter(vals)),
-            ),
-            const SizedBox(height: 6),
-            Text('${_sym(cur)}${AppCurrencyUtils.formatAmount(thisMonth, 0)} this mo',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TC.geist(context,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.75))),
-          ],
-        ),
       ),
     );
   }
@@ -325,17 +246,22 @@ class PlannerScreen extends StatelessWidget {
             ),
             const Spacer(),
             if (overdueCount > 0)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                    color: TC.erPale(context),
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text('$overdueCount overdue',
-                    style: TC.geist(context,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: TC.er(context))),
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                      color: TC.erPale(context),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('$overdueCount overdue',
+                        style: TC.geist(context,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: TC.er(context))),
+                  ),
+                ),
               )
             else
               Icon(Icons.chevron_right_rounded,
@@ -844,59 +770,3 @@ class PlannerScreen extends StatelessWidget {
 
 }
 
-// ─── Mini sparkline for the bento trend tile ─────────────────────────────────
-class _SparklinePainter extends CustomPainter {
-  final List<double> values;
-  _SparklinePainter(this.values);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
-    final maxV = values.reduce((a, b) => a > b ? a : b);
-    final span = maxV <= 0 ? 1.0 : maxV;
-    final dx = size.width / (values.length - 1);
-
-    Offset pt(int i) => Offset(
-        i * dx,
-        size.height - (values[i] / span).clamp(0.0, 1.0) * size.height * 0.9 -
-            size.height * 0.05);
-
-    final path = Path()..moveTo(pt(0).dx, pt(0).dy);
-    for (var i = 1; i < values.length; i++) {
-      final p0 = pt(i - 1), p1 = pt(i);
-      final mid = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
-      path.quadraticBezierTo(p0.dx, p0.dy, mid.dx, mid.dy);
-      if (i == values.length - 1) path.lineTo(p1.dx, p1.dy);
-    }
-
-    // Soft fill under the line.
-    final fill = Path.from(path)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(
-      fill,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF2ED4B0).withValues(alpha: 0.30),
-            const Color(0xFF2ED4B0).withValues(alpha: 0.0),
-          ],
-        ).createShader(Offset.zero & size),
-    );
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xFF2ED4B0)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_SparklinePainter old) => old.values != values;
-}

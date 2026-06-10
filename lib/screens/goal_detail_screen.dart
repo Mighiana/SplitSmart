@@ -51,17 +51,6 @@ class GoalDetailScreen extends StatelessWidget {
           ],
         ),
         centerTitle: true,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            width: 34, height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.green, width: 1.5),
-            ),
-            child: const Icon(Icons.add, color: AppColors.green, size: 18),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),

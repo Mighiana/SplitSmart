@@ -71,8 +71,6 @@ class _RemindersScreenState extends State<RemindersScreen> {
     done.sort((a, b) => b.date.compareTo(a.date));
 
     final sym = _symOf(reminders);
-    final totalOverdue = overdue.fold<double>(0, (s, r) => s + _amountOf(r));
-    final totalUpcoming = upcoming.fold<double>(0, (s, r) => s + _amountOf(r));
 
     return Scaffold(
       backgroundColor: TC.bg(context),
@@ -88,8 +86,6 @@ class _RemindersScreenState extends State<RemindersScreen> {
               parent: BouncingScrollPhysics()),
           children: [
             _header(context, state),
-            _summaryStrip(context, sym, overdue.length, totalOverdue, upcoming.length, totalUpcoming)
-                .animate().fadeIn(duration: 360.ms).slideY(begin: 0.1, curve: Curves.easeOut),
             _neverMissBanner(context).animate().fadeIn(delay: 60.ms, duration: 360.ms),
             _tabs(context, upcoming.length, overdue.length, done.length),
             if (_tab == 'Upcoming') _upcomingTab(context, state, upcoming, today),
@@ -142,59 +138,6 @@ class _RemindersScreenState extends State<RemindersScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ─── Summary strip ──────────────────────────────────────────────────────────
-  Widget _summaryStrip(BuildContext context, String sym, int overCount, double overTotal, int upCount, double upTotal) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      decoration: BoxDecoration(
-        color: TC.surface(context),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 3, offset: const Offset(0, 1))],
-        border: isDark ? Border.all(color: TC.border(context)) : null,
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
-                decoration: BoxDecoration(
-                  color: overCount > 0 ? TC.erPale(context) : Colors.transparent,
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-                ),
-                child: Column(
-                  children: [
-                    Text('⚠️ OVERDUE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: overCount > 0 ? TC.er(context) : TC.text3(context))),
-                    const SizedBox(height: 3),
-                    Text('$overCount', style: TC.gloock(context, fontSize: 20, color: overCount > 0 ? TC.er(context) : TC.text3(context))),
-                    const SizedBox(height: 2),
-                    Text('$sym${overTotal.toStringAsFixed(0)} total', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                  ],
-                ),
-              ),
-            ),
-            Container(width: 1, color: TC.border(context)),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
-                child: Column(
-                  children: [
-                    Text('📅 UPCOMING', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TC.text3(context))),
-                    const SizedBox(height: 3),
-                    Text('$upCount', style: TC.gloock(context, fontSize: 20, color: TC.text(context))),
-                    const SizedBox(height: 2),
-                    Text('$sym${upTotal.toStringAsFixed(0)} total', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1884,6 +1884,11 @@ class AppState extends ChangeNotifier {
   // ─── Saving Goals ─────────────────────────────────────────────────────────
 
   Future<void> addSavingGoal(String currency, String title, double targetAmount, {DateTime? targetDate, double savedAmount = 0.0, String? icon, String? color}) async {
+    // Record any starting balance as a real deposit so the history stays
+    // itemized from day one instead of one collective lump.
+    final seed = savedAmount > 0
+        ? [GoalDeposit(amount: savedAmount, date: DateTime.now(), note: 'Starting balance')]
+        : <GoalDeposit>[];
     final data = {
       'currency': currency,
       'title': title,
@@ -1892,6 +1897,10 @@ class AppState extends ChangeNotifier {
       'target_date': targetDate?.toIso8601String(),
       'icon': icon,
       'color': color,
+      if (seed.isNotEmpty)
+        'deposits': seed
+            .map((d) => '${d.amount}|${d.date.toIso8601String()}|${d.note}')
+            .join('||'),
     };
     int id;
     if (_useCloud) {
@@ -1899,7 +1908,7 @@ class AppState extends ChangeNotifier {
     } else {
       id = await DatabaseService.instance.insertSavingGoal(data);
     }
-    savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, savedAmount: savedAmount, targetDate: targetDate, icon: icon, color: color));
+    savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, savedAmount: savedAmount, targetDate: targetDate, icon: icon, color: color, deposits: seed));
     notifyListeners();
   }
 

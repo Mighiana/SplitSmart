@@ -369,11 +369,17 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                     final amt = double.tryParse(amtStr) ?? 0;
                     if (amt <= 0) return;
                     final newSaved = goal.savedAmount + amt;
+                    final justCompleted = newSaved >= goal.targetAmount &&
+                        goal.savedAmount < goal.targetAmount;
                     state.depositToGoal(goal, amt);
-                    if (newSaved >= goal.targetAmount && goal.savedAmount < goal.targetAmount) {
-                      _confettiController.play();
-                    }
                     Navigator.pop(context);
+                    if (justCompleted) {
+                      _confettiController.play();
+                      // Dialog renders in the ROOT overlay, so it's visible
+                      // even when the deposit came from the detail screen
+                      // (the confetti widget lives under it and was hidden).
+                      _showGoalCelebration(goal);
+                    }
                   },
                   child: Container(
                     width: double.infinity,
@@ -386,6 +392,75 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                 const SizedBox(height: 24),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Animated "goal reached" celebration — elastic trophy + shimmer.
+  void _showGoalCelebration(SavingGoal goal) {
+    if (!mounted) return;
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (dctx) => Dialog(
+        backgroundColor: TC.surface(dctx),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 84,
+                height: 84,
+                decoration: const BoxDecoration(
+                    color: AppColors.greenDim, shape: BoxShape.circle),
+                child: const Icon(Icons.emoji_events_rounded,
+                    size: 44, color: AppColors.green),
+              )
+                  .animate()
+                  .scale(
+                      begin: const Offset(0.2, 0.2),
+                      end: const Offset(1, 1),
+                      duration: 700.ms,
+                      curve: Curves.elasticOut)
+                  .then()
+                  .shimmer(duration: 1200.ms),
+              const SizedBox(height: 18),
+              Text('Goal Reached!',
+                      style: TC.gloock(dctx, fontSize: 24, color: TC.text(dctx)))
+                  .animate(delay: 150.ms)
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.3, curve: Curves.easeOutBack),
+              const SizedBox(height: 6),
+              Text('"${goal.title}" is fully funded. Amazing work!',
+                      textAlign: TextAlign.center,
+                      style: TC.geist(dctx, fontSize: 13, color: TC.text2(dctx)))
+                  .animate(delay: 250.ms)
+                  .fadeIn(duration: 300.ms),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.pop(dctx);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                      color: TC.primary(dctx),
+                      borderRadius: BorderRadius.circular(14)),
+                  alignment: Alignment.center,
+                  child: const Text('Awesome',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ).animate(delay: 400.ms).fadeIn(duration: 300.ms),
+            ],
           ),
         ),
       ),
@@ -609,53 +684,70 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
       child: GestureDetector(
         onTap: () => _navigateToDetail(context, state, g),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-          padding: const EdgeInsets.all(18),
+          margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
           decoration: BoxDecoration(
             color: TC.surface(context),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 14, offset: const Offset(0, 4)),
             ],
             border: isDark ? Border.all(color: TC.border(context)) : null,
           ),
-          child: Column(
+          // Compact horizontal layout: icon · title/date/amounts · progress.
+          child: Row(
             children: [
-              // Centered category icon
               Container(
-                width: 56, height: 56,
+                width: 42, height: 42,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Icon(iconForEmoji(g.icon ?? _emojiFor(g.title)), size: 26, color: Colors.white),
+                child: Icon(iconForEmoji(g.icon ?? _emojiFor(g.title)), size: 20, color: Colors.white),
               ),
-              const SizedBox(height: 10),
-              Text(
-                g.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TC.gloock(context, fontSize: 19, color: TC.text(context)),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Target date: ${_deadlineLabel(g)}',
-                style: TextStyle(fontSize: 12, color: TC.text3(context)),
-              ),
-              const SizedBox(height: 16),
-              // Progress bar with % inside the coloured fill
-              _goalProgressBar(context, pct, color),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Saved: ${_money(g.currency, g.savedAmount)}',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
-                  ),
-                  Text(
-                    'Goal: ${_money(g.currency, g.targetAmount)}',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context)),
-                  ),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            g.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TC.gloock(context, fontSize: 16, color: TC.text(context)),
+                          ),
+                        ),
+                        Text('$pct%',
+                            style: TC.gloock(context, fontSize: 16, color: color)),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: progress.toDouble(),
+                        minHeight: 6,
+                        backgroundColor: TC.bg2(context),
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${_money(g.currency, g.savedAmount)} of ${_money(g.currency, g.targetAmount)}',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: TC.text2(context)),
+                        ),
+                        Text(
+                          _deadlineLabel(g),
+                          style: TextStyle(fontSize: 11, color: TC.text3(context)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -664,32 +756,4 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
     );
   }
 
-  // Slim progress bar with the percentage shown inside the coloured fill.
-  Widget _goalProgressBar(BuildContext context, int pct, Color color) {
-    final clamped = pct.clamp(0, 100);
-    return Row(
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: clamped / 100,
-              minHeight: 8,
-              backgroundColor: TC.bg2(context),
-              valueColor: AlwaysStoppedAnimation(color),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          '$clamped%',
-          style: TextStyle(
-            color: color,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
 }
