@@ -25,7 +25,7 @@ A cross-platform **Flutter** mobile app (Android + iOS) that is two things in on
 |---|---|
 | Framework | Flutter (Dart SDK `>=3.0.0 <4.0.0`) |
 | State management | **Provider** — `AppState extends ChangeNotifier` (`lib/providers/app_state.dart`) |
-| Local DB (offline source of truth) | **SQLite** via `sqflite` — file `splitsmart_v3.db`, **schema version 18** |
+| Local DB (offline source of truth) | **SQLite** via `sqflite` — file `splitsmart_v3.db`, **schema version 19** |
 | Cloud backend | **Firebase**: Auth, Cloud Firestore, Storage, Cloud Functions, Messaging, Analytics, Crashlytics |
 | Auth | Firebase Auth + Google Sign-In |
 | Fonts | `google_fonts` — **Gloock** (serif display) + **Geist** (sans body). Loaded at runtime, not bundled. |
@@ -199,6 +199,14 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 - **Pentest pass (grey-box).** Verdict: trust model is genuinely server-side (auth + `premium` custom claim + validated rules + server-verified IAP). Fixes: **IAP replay protection** — `verifyPurchase` binds each receipt to one uid via hashed `purchaseTokens/{sha256}` in a transaction (`firebase/functions/index.js`); **settlement tamper fix** — settlement update/delete restricted to `addedBy`/creator (firestore.rules); **PII out of logs** — removed uid/email from auth `debugPrint`s. CSV formula-injection = **N/A** (no CSV export path; export is PDF/zip only).
 - **Firestore rules DEPLOYED TO PRODUCTION** (`splitsmart-3898`) — all hardening is live for real users.
 - **Known prod gaps (cost-gated, by owner choice):** (1) **Storage not enabled** on prod → receipt uploads fall back to local-only (no bucket = nothing exposed; `storage.rules` ready for when Storage is enabled, needs Blaze). (2) **Cloud Functions staged, not deployed** (need Blaze) → server-side IAP verification + replay protection live only once deployed. (3) **App Check** activated client-side, enforcement = console toggle (do after verifying live app). (4) data-at-rest encryption (SQLCipher) deferred.
+
+### 2026-06-05 — Subcats for group expenses, budget icon/color, premium hidden, planner bento (DB v19)
+- **Premium hidden from users.** `AppState.isOwner` (uid allowlist `_ownerUids`) gates the guest-access card on the QR screen; drawer tagline "Premium Edition" → "Track · Split · Settle". Premium ships later (needs Blaze); owner still sees the toggle for testing.
+- **Sub-categories on GROUP expenses** (parity with personal): `ExpenseData.subcat` — **DB v18 → v19** (`expenses.subcat`) + Firestore round-trip (insert/update/2 parses) + optional chips in `add_expense_screen` + carried into `allTransactionsWithGroupShares` so group shares roll into sub-budgets.
+- **Beauty/personal-care subs** under Shopping: Salon & Hair, Cosmetics, Skincare, Nails, Spa & Massage, Jewelry.
+- **Budget icon + color** (wallet-style): `Budget.icon/color` (v19 cols `budgets.icon/color`), Icon+Color pickers in the form (Auto = derive from categories), budget card shows tinted leading icon. Goals + subscriptions already had pickers.
+- **New Budget form fix:** global `inputDecorationTheme` (filled + enabledBorder) painted a second box inside the form's field containers → `filled:false` + border overrides on Name/Amount (the "imbalanced" look).
+- **Planner redesigned (bento):** removed the dark hero + flat budgets link + stacked reminders list; now 2 bento tiles (Budgets w/ top-budget progress; Reminders w/ next-due + overdue chip), horizontal **goal carousel** with progress rings, and **Upcoming renewals** (subs sorted by next billing, "≈ X/mo" chip, urgency tinting). All navigation preserved; icons-only (`_emptyTile`/add-sheet emojis → icons).
 
 ### 2026-06-04 — Budget sub-categories, Phase 1 (DB v18)
 - **Sub-categories** (Wallet-style) keyed by parent category emoji: `AppState.subcategories` map + helpers `subsFor`/`subByKey`/`parentOfSub`/`labelForKey`. Sub keys are stable `sub:<group>:<name>` strings (no emoji-collision, storable on tx/budgets).
