@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import 'transaction_type_screen.dart';
 import 'personal_charts_screen.dart';
 import '../utils/icon_map.dart';
+import '../widgets/common_widgets.dart';
 
 // ─── Filter enum ────────────────────────────────────────────────────────────
 enum _OvTab { all, personal, groups }
@@ -193,17 +194,19 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ? 'Tip: set a category on your expenses to see where your money goes.'
                 : '$topLabel is your top category at ${(top.value / totalExpense * 100).round()}% of spending.';
 
+    // Premium gradient hero: count-up total, delta chip, frosted insight pill
+    // and stat chips — replaces the flat beige card.
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: TC.card(context),
-        borderRadius: BorderRadius.circular(22),
+        gradient: TC.cardGradient(context),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+            color: TC.primaryGlow(context),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -211,54 +214,78 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$dateLabel · Total spent',
+            '${dateLabel.toUpperCase()} · TOTAL SPENT',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: TC.text3(context),
-              letterSpacing: 0.8,
+              color: Colors.white.withValues(alpha: 0.55),
+              letterSpacing: 1.2,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  '$sym${AppCurrencyUtils.formatAmount(totalExpense, 0)}',
-                  style: TC.gloock(context, fontSize: 40, letterSpacing: -1.4),
+                child: CountUpText(
+                  value: totalExpense,
+                  builder: (ctx, v) => Text(
+                    '$sym${AppCurrencyUtils.formatAmount(v, 0)}',
+                    style: TC.gloock(ctx,
+                        fontSize: 42, letterSpacing: -1.4, color: Colors.white),
+                  ),
                 ),
               ),
               if (diffPct != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: diffPct >= 0 ? AppColors.red.withValues(alpha: 0.10) : AppColors.greenDim,
+                    color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
-                    '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: diffPct >= 0 ? AppColors.red : AppColors.green,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        diffPct >= 0
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        size: 13,
+                        color: diffPct >= 0
+                            ? const Color(0xFFFCA5A5)
+                            : const Color(0xFF86EFAC),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: diffPct >= 0
+                              ? const Color(0xFFFCA5A5)
+                              : const Color(0xFF86EFAC),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: totalExpense > 0 ? AppColors.greenDim : TC.card2(context),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(13),
             ),
             child: Row(
               children: [
                 Icon(
-                  totalExpense > 0 ? Icons.lightbulb_rounded : Icons.info_outline_rounded,
-                  color: AppColors.green,
+                  totalExpense > 0
+                      ? Icons.lightbulb_rounded
+                      : Icons.info_outline_rounded,
+                  color: const Color(0xFF86EFAC),
                   size: 16,
                 ),
                 const SizedBox(width: 8),
@@ -268,7 +295,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: TC.text2(context),
+                      color: Colors.white.withValues(alpha: 0.92),
                       height: 1.35,
                     ),
                   ),
@@ -279,9 +306,16 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           const SizedBox(height: 12),
           Row(
             children: [
-              _storyMeta(context, 'Previous', '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
-              const SizedBox(width: 18),
-              _storyMeta(context, 'Top Category', topCat == null ? 'None' : '${topCat.icon} ${topCat.label}'),
+              _storyMeta(context, Icons.history_rounded, 'Previous',
+                  '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
+              const SizedBox(width: 10),
+              _storyMeta(
+                  context,
+                  topCat == null
+                      ? Icons.category_rounded
+                      : iconForEmoji(topCat.icon),
+                  'Top Category',
+                  topCat == null ? 'None' : topCat.label),
             ],
           ),
         ],
@@ -289,15 +323,42 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _storyMeta(BuildContext context, String label, String value) {
+  Widget _storyMeta(
+      BuildContext context, IconData icon, String label, String value) {
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: TC.text(context), fontWeight: FontWeight.w800)),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.7)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 9.5,
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4)),
+                  const SizedBox(height: 1),
+                  Text(value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 13.5,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
