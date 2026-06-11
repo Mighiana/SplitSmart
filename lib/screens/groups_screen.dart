@@ -10,6 +10,7 @@ import '../utils/app_utils.dart';
 import '../utils/icon_map.dart';
 import '../widgets/common_widgets.dart';
 import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import 'group_detail_screen.dart';
 import 'new_group_screen.dart';
@@ -461,9 +462,17 @@ class _GroupsTabState extends State<GroupsTab> {
 
   void _showInviteCodeDialog(BuildContext context) {
     final ctrl = TextEditingController();
-    final nameCtrl = TextEditingController();
     bool isLoading = false;
     String? error;
+    // Join with the ACCOUNT name (set at signup) — asking for a name here let
+    // people enter something different from their profile, which split their
+    // identity across groups.
+    final appState = context.read<AppState>();
+    final accountName = appState.userName.trim().isNotEmpty
+        ? appState.userName.trim()
+        : ((AuthService.instance.currentUser?.displayName ?? '').trim().isNotEmpty
+            ? AuthService.instance.currentUser!.displayName!.trim()
+            : 'Member');
 
     showModalBottomSheet(
       context: context,
@@ -509,18 +518,19 @@ class _GroupsTabState extends State<GroupsTab> {
                           if (error != null) setModalState(() => error = null);
                         },
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: nameCtrl,
-                        textCapitalization: TextCapitalization.words,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: TC.text(context)),
-                        decoration: InputDecoration(
-                          hintText: 'Your Name in Group',
-                          filled: true,
-                          fillColor: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        ),
+                      const SizedBox(height: 14),
+                      // Identity comes from the account — no name re-entry.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_rounded, size: 15, color: TC.text3(context)),
+                          const SizedBox(width: 6),
+                          Text('Joining as $accountName',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: TC.text2(context))),
+                        ],
                       ),
                       
                       if (error != null)
@@ -537,16 +547,12 @@ class _GroupsTabState extends State<GroupsTab> {
                             setModalState(() => error = 'Please enter a valid code');
                             return;
                           }
-                          if (nameCtrl.text.trim().isEmpty) {
-                            setModalState(() => error = 'Please enter your name');
-                            return;
-                          }
-                          
+
                           setModalState(() => isLoading = true);
                           HapticFeedback.mediumImpact();
-                          
+
                           final state = context.read<AppState>();
-                          final group = await FirestoreService.instance.joinGroupByInviteCode(ctrl.text.trim(), nameCtrl.text.trim());
+                          final group = await FirestoreService.instance.joinGroupByInviteCode(ctrl.text.trim(), accountName);
                           
                           if (group == null) {
                             if (ctx.mounted) {
