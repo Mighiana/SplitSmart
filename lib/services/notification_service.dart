@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -69,6 +70,39 @@ class NotificationService {
     _initialized = true;
   }
 
+  /// Schedule a notification, preferring an EXACT alarm but gracefully
+  /// degrading to INEXACT when the OS refuses (Android 13+ where
+  /// SCHEDULE_EXACT_ALARM isn't granted — we dropped the Play-restricted
+  /// USE_EXACT_ALARM permission). Inexact reminders fire within an OS batching
+  /// window, which is fine for bill/subscription reminders.
+  static Future<void> _zonedSchedule({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+    required NotificationDetails notificationDetails,
+    DateTimeComponents? matchDateTimeComponents,
+  }) async {
+    Future<void> run(AndroidScheduleMode mode) => _plugin.zonedSchedule(
+          id: id,
+          title: title,
+          body: body,
+          scheduledDate: scheduledDate,
+          notificationDetails: notificationDetails,
+          androidScheduleMode: mode,
+          matchDateTimeComponents: matchDateTimeComponents,
+        );
+    try {
+      await run(AndroidScheduleMode.exactAllowWhileIdle);
+    } on PlatformException catch (e) {
+      if (e.code == 'exact_alarms_not_permitted') {
+        await run(AndroidScheduleMode.inexactAllowWhileIdle);
+      } else {
+        rethrow;
+      }
+    }
+  }
+
   // ─── Schedule notifications for one subscription ───────────────────────────
   static Future<void> scheduleForSub(SubscriptionData sub) async {
     if (!_initialized) await init();
@@ -97,14 +131,13 @@ class NotificationService {
     if (threeDayWarn.isAfter(now)) {
       final tzWarn = tz.TZDateTime.from(threeDayWarn, tz.local);
       // v21: zonedSchedule() uses named params; no uiLocalNotificationDateInterpretation on Android
-      await _plugin.zonedSchedule(
+      await _zonedSchedule(
         id:                   _safeSubId(sub.id) + 1,
         title:                '⚠️ ${sub.name} — due in 3 days',
         body:                 '${sub.sym}${sub.amount.toStringAsFixed(2)} will be '
                               'charged on ${_fmtDate(nextBilling)}',
         scheduledDate:        tzWarn,
         notificationDetails:  details,
-        androidScheduleMode:  AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: _repeatComponents(sub.cycle),
       );
     }
@@ -112,13 +145,12 @@ class NotificationService {
     // ── Billing day ───────────────────────────────────────────────────────
     if (nextBilling.isAfter(now)) {
       final tzBilling = tz.TZDateTime.from(nextBilling, tz.local);
-      await _plugin.zonedSchedule(
+      await _zonedSchedule(
         id:                   _safeSubId(sub.id),
         title:                '💳 ${sub.name} — ${sub.sym}${sub.amount.toStringAsFixed(2)} due today',
         body:                 'Your ${sub.name} subscription renews today',
         scheduledDate:        tzBilling,
         notificationDetails:  details,
-        androidScheduleMode:  AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: _repeatComponents(sub.cycle),
       );
     }
@@ -171,13 +203,12 @@ class NotificationService {
       );
       const details = NotificationDetails(android: androidDetails);
 
-      await _plugin.zonedSchedule(
+      await _zonedSchedule(
         id:                   _safeRemId(r.id),
         title:                '🔔 Reminder: ${r.title}',
         body:                 r.amountStr.isNotEmpty ? 'Amount: ${r.amountStr}' : 'You have a scheduled reminder today.',
         scheduledDate:        tzTime,
         notificationDetails:  details,
-        androidScheduleMode:  AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: null, // one-shot
       );
     }

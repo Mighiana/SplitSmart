@@ -1224,8 +1224,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       // Authorship uid: preserved on edit, stamped on create. This is what
       // gates the Edit option for other members.
       addedBy: _isEdit
-          ? widget.existing?.addedBy
-          : AuthService.instance.uid,
+          ? (widget.existing?.addedBy ?? 'local')
+          : (AuthService.instance.uid ?? 'local'),
     );
 
     try {

@@ -67,7 +67,7 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
     super.dispose();
   }
 
-  Color _goalColor(SavingGoal g) => _palette[g.id % _palette.length];
+  Color _goalColor(SavingGoal g) => _palette[(g.id + g.title.hashCode).abs() % _palette.length];
 
   String _money(String code, double amt) {
     final sym = AppState.currencies
@@ -101,7 +101,10 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
     final savedController = TextEditingController(text: existing?.savedAmount.toString() ?? '');
     DateTime? localTargetDate = existing?.targetDate;
     String localIcon = existing?.icon ?? _emojiFor(existing?.title ?? '');
-    String localColor = existing?.color ?? _hex(_goalColor(existing ?? SavingGoal(id: 0, currency: 'USD', title: '', targetAmount: 1)));
+    String localColor = existing?.color ??
+        (existing != null
+            ? _hex(_goalColor(existing))
+            : _hex(_palette[state.savingGoals.length % _palette.length]));
 
     showModalBottomSheet(
       context: context,

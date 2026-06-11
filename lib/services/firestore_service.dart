@@ -1051,6 +1051,9 @@ class FirestoreService {
           'target_amount': (data['targetAmount'] as num?)?.toDouble() ?? 0,
           'saved_amount': (data['savedAmount'] as num?)?.toDouble() ?? 0,
           'target_date': data['targetDate'],
+          'icon': data['icon'],
+          'color': data['color'],
+          'deposits': data['deposits'],
         };
       }).toList();
     } catch (e) {
@@ -1066,6 +1069,9 @@ class FirestoreService {
       'targetAmount': data['target_amount'],
       'savedAmount': data['saved_amount'] ?? 0.0,
       'targetDate': data['target_date'],
+      'icon': data['icon'],
+      'color': data['color'],
+      'deposits': data['deposits'],
       'createdAt': FieldValue.serverTimestamp(),
     });
     final id = doc.id.hashCode;
@@ -1083,6 +1089,9 @@ class FirestoreService {
         'targetAmount': data['target_amount'],
         'savedAmount': data['saved_amount'],
         'targetDate': data['target_date'],
+        'icon': data['icon'],
+        'color': data['color'],
+        'deposits': data['deposits'],
       });
       return;
     }
@@ -1097,6 +1106,9 @@ class FirestoreService {
           'targetAmount': data['target_amount'],
           'savedAmount': data['saved_amount'],
           'targetDate': data['target_date'],
+          'icon': data['icon'],
+          'color': data['color'],
+          'deposits': data['deposits'],
         });
         return;
       }

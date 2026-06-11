@@ -175,7 +175,7 @@ class _TappableExpenseCardState extends State<_TappableExpenseCard> {
     // addedBy uid fall back to that heuristic so old local data stays editable.
     final myUid = AuthService.instance.uid;
     final isAuthor = e.addedBy != null
-        ? (myUid != null && e.addedBy == myUid)
+        ? ((myUid != null && e.addedBy == myUid) || (myUid == null && e.addedBy == 'local'))
         : (e.createdBy == null ||
             e.createdBy == 'You' ||
             e.createdBy == widget.state.userName ||

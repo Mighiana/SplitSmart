@@ -113,7 +113,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           subtitle: '${g.emoji} ${g.name}',
           sub2: e.paidBy,
           amount: showCost ? e.amount : net.abs(),
-          isPositive: showCost ? false : net >= 0,
+          isPositive: showCost ? false : (net >= 0 || net.abs() < 0.005),
           sym: g.sym,
           receiptPath: e.receiptPath,
           date: TransactionData.parseDate(e.date),
@@ -681,8 +681,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
     // creation timestamp. Guard against legacy non-epoch ids.
     DateTime? added;
     final rawId = item.txn?.id ?? item.expense?.id;
-    if (rawId != null && rawId > 1000000000000 && rawId < 4102444800000) {
-      added = DateTime.fromMillisecondsSinceEpoch(rawId);
+    final int? parsedId = rawId;
+    if (parsedId != null && parsedId > 1000000000000 && parsedId < 4102444800000) {
+      added = DateTime.fromMillisecondsSinceEpoch(parsedId);
     }
     final cat = item.txn?.cat ?? item.expense?.cat;
     final sub = item.txn?.subcat ?? item.expense?.subcat;
@@ -777,7 +778,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
               const SizedBox(height: 6),
               if (catLabel != null)
                 detailRow(Icons.category_rounded, 'Category', catLabel),
-              if (item.kind == _Kind.groupExpense)
+              if (item.kind == _Kind.groupExpense && item.sub2.isNotEmpty)
                 detailRow(Icons.person_rounded, 'Paid by', item.sub2),
               if (item.kind == _Kind.settlement &&
                   item.settlement != null) ...[
@@ -956,18 +957,20 @@ class _ActivityScreenState extends State<ActivityScreen> {
                           item.subtitle,
                           style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w500, color: TC.text3(context)),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text('·', style: TextStyle(fontSize: 10, color: TC.text3(context))),
-                        ),
-                        Expanded(
-                          child: Text(
-                            item.sub2,
-                            style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w500, color: TC.text3(context)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        if (item.sub2.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text('·', style: TextStyle(fontSize: 10, color: TC.text3(context))),
                           ),
-                        ),
+                          Expanded(
+                            child: Text(
+                              item.sub2,
+                              style: TC.geist(context, fontSize: 10, fontWeight: FontWeight.w500, color: TC.text3(context)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

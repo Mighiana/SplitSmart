@@ -123,8 +123,8 @@ class SubcategoryDropdown extends StatelessWidget {
                     : null,
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  onChanged(null);
                   Navigator.pop(sheetCtx);
+                  onChanged(null);
                 },
               ),
               ...subs.map((s) => ListTile(
@@ -141,8 +141,8 @@ class SubcategoryDropdown extends StatelessWidget {
                         : null,
                     onTap: () {
                       HapticFeedback.selectionClick();
-                      onChanged(s.icon);
                       Navigator.pop(sheetCtx);
+                      onChanged(s.icon);
                     },
                   )),
               const SizedBox(height: 12),

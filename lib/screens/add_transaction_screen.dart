@@ -602,8 +602,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _showToast('Enter an amount!');
       return;
     }
-    // Description is optional — fall back to the category (or subcategory)
-    // label so rows still read naturally.
+    // Description is optional — fall back to the category/subcategory label.
     if (desc.isEmpty) {
       desc = _subcat != null
           ? AppState.labelForKey(_subcat!)

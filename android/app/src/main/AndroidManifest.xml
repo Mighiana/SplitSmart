@@ -6,7 +6,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- SCHEDULE_EXACT_ALARM is requestable + Play-declarable. USE_EXACT_ALARM is
+         restricted by Play to alarm-clock/calendar apps, so it's removed; the
+         notification service falls back to inexact alarms when exact isn't granted. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- Voice input (speech_to_text) -->

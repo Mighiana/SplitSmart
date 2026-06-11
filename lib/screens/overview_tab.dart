@@ -109,15 +109,18 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
     // Pace comparison: previous month up to the SAME day-of-month, so the chip
     // is honest mid-month (full-month comparisons always read "under" early).
-    // Custom ranges fall back to the full previous period (-1 sentinel).
-    double pacePrev = -1;
+    // Custom ranges fall back to the full previous period (null sentinel).
+    double? pacePrev;
     final bool isDefaultMonth =
         state.overviewStartDate == null && state.overviewEndDate == null;
     if (isDefaultMonth) {
-      final prevStart = DateTime(now.year, now.month - 1, 1);
-      final prevLen = DateTime(now.year, now.month, 0).day;
+      // BUG-2 fix: handle January boundary (month-1 == 0)
+      final int prevMonth = now.month == 1 ? 12 : now.month - 1;
+      final int prevYear = now.month == 1 ? now.year - 1 : now.year;
+      final prevStart = DateTime(prevYear, prevMonth, 1);
+      final prevLen = DateTime(prevYear, prevMonth + 1, 0).day;
       final cutDay = now.day > prevLen ? prevLen : now.day;
-      final prevCut = DateTime(now.year, now.month - 1, cutDay, 23, 59, 59);
+      final prevCut = DateTime(prevYear, prevMonth, cutDay, 23, 59, 59);
       pacePrev = allTxs.where((t) {
         if (t.currency != selectedCur) return false;
         if (t.type.toLowerCase() != 'expense') return false;
@@ -125,7 +128,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         if (_ovTab == _OvTab.groups && !t.isGroupShare) return false;
         final d = t.rawDate;
         return d != null && !d.isBefore(prevStart) && !d.isAfter(prevCut);
-      }).fold(0.0, (s, t) => s + t.amount);
+      }).fold<double>(0.0, (s, t) => s + t.amount);
     }
     final int currentSeg =
         isDefaultMonth ? ((now.day - 1) ~/ (segmentDays > 0 ? segmentDays : 8)).clamp(0, 3) : 3;
@@ -202,15 +205,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     DateTime end,
     List<MapEntry<String, double>> sortedCats,
     List<double> weekBars,
-    double pacePrev,
+    double? pacePrev,
     bool isDefaultMonth,
     int currentSeg,
   ) {
     // Pace-aware delta: same-point-last-month for the default view, full
     // previous period for custom ranges.
-    final prev = pacePrev >= 0
-        ? pacePrev
-        : _prevPeriodExpense(state, start, end, selectedCur);
+    final prev = pacePrev ?? _prevPeriodExpense(state, start, end, selectedCur);
     final diffPct = prev > 0 ? ((totalExpense - prev) / prev * 100) : null;
     final paceLabel =
         isDefaultMonth ? 'vs this time last month' : 'vs previous period';
