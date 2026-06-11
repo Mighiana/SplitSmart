@@ -95,7 +95,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       monthLabels.add('W');
       final segTxs = allTxs.where((t) {
         final d = t.rawDate;
-        return d != null && d.compareTo(sDate) >= 0 && d.compareTo(eDate.add(const Duration(days: 1))) < 0 && t.currency == selectedCur;
+        if (d == null || t.currency != selectedCur) return false;
+        // Respect the All / Personal / Groups tab, same as monthTxs.
+        if (_ovTab == _OvTab.personal && t.isGroupShare) return false;
+        if (_ovTab == _OvTab.groups && !t.isGroupShare) return false;
+        return d.compareTo(sDate) >= 0 &&
+            d.compareTo(eDate.add(const Duration(days: 1))) < 0;
       });
       incomeData.add(segTxs.where((t) => t.type.toLowerCase() == 'income').fold(0.0, (s,t) => s+t.amount));
       expenseData.add(segTxs.where((t) => t.type.toLowerCase() == 'expense').fold(0.0, (s,t) => s+t.amount));
@@ -116,6 +121,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       pacePrev = allTxs.where((t) {
         if (t.currency != selectedCur) return false;
         if (t.type.toLowerCase() != 'expense') return false;
+        if (_ovTab == _OvTab.personal && t.isGroupShare) return false;
+        if (_ovTab == _OvTab.groups && !t.isGroupShare) return false;
         final d = t.rawDate;
         return d != null && !d.isBefore(prevStart) && !d.isAfter(prevCut);
       }).fold(0.0, (s, t) => s + t.amount);

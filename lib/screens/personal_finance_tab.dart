@@ -1073,6 +1073,7 @@ class _MoneyTabState extends State<MoneyTab> {
     final now = _spendingMonth;
     final lastMonth = DateTime(now.year, now.month - 1, 1);
     double thisTotal = 0, lastTotal = 0;
+    int thisCount = 0, lastCount = 0;
     final catSpends = <String, double>{};
     for (var tx in state.allTransactionsWithGroupShares) {
       if (tx.currency != activeCur || tx.type != 'expense') continue;
@@ -1080,9 +1081,11 @@ class _MoneyTabState extends State<MoneyTab> {
       if (d == null) continue;
       if (d.year == now.year && d.month == now.month) {
         thisTotal += tx.amount;
+        thisCount++;
         catSpends[tx.cat] = (catSpends[tx.cat] ?? 0) + tx.amount;
       } else if (d.year == lastMonth.year && d.month == lastMonth.month) {
         lastTotal += tx.amount;
+        lastCount++;
       }
     }
 
@@ -1115,7 +1118,13 @@ class _MoneyTabState extends State<MoneyTab> {
       insightText = 'No spending yet this month.';
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _showInsightProof(context, state, sym, now, lastMonth, thisTotal,
+            lastTotal, thisCount, lastCount, catSpends, insightText);
+      },
+      child: Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
@@ -1164,7 +1173,134 @@ class _MoneyTabState extends State<MoneyTab> {
           ),
         ],
       ),
+      ),
     ).animate().fade().slideY(begin: 0.1, end: 0, curve: Curves.easeOutBack, duration: 600.ms);
+  }
+
+  /// "Show your work" sheet for the Smart Insight — the raw numbers behind
+  /// the sentence so the user can verify the calculation.
+  void _showInsightProof(
+      BuildContext context,
+      AppState state,
+      String sym,
+      DateTime thisMonth,
+      DateTime lastMonth,
+      double thisTotal,
+      double lastTotal,
+      int thisCount,
+      int lastCount,
+      Map<String, double> catSpends,
+      String insightText) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final diff = lastTotal > 0
+        ? ((thisTotal - lastTotal) / lastTotal * 100)
+        : null;
+    final topCats = catSpends.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    Widget row(String label, String value, {Color? color}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Text(label,
+                style: TC.geist(context,
+                    fontSize: 12.5, color: TC.text3(context))),
+            const Spacer(),
+            Text(value,
+                style: TC.geist(context,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: color ?? TC.text(context))),
+          ]),
+        );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: TC.border(context),
+                        borderRadius: BorderRadius.circular(2))),
+              ),
+              const SizedBox(height: 16),
+              Row(children: [
+                Icon(Icons.insights_rounded,
+                    size: 20, color: TC.primary(context)),
+                const SizedBox(width: 8),
+                Text('How this was calculated',
+                    style: TC.gloock(context,
+                        fontSize: 18, color: TC.text(context))),
+              ]),
+              const SizedBox(height: 6),
+              Text(insightText,
+                  style: TC.geist(context,
+                      fontSize: 12.5, color: TC.text2(context), height: 1.4)),
+              const SizedBox(height: 12),
+              Divider(color: TC.border(context), height: 1),
+              const SizedBox(height: 6),
+              row('${months[thisMonth.month - 1]} spending ($thisCount txns)',
+                  '$sym${AppCurrencyUtils.formatAmount(thisTotal, 2)}'),
+              row('${months[lastMonth.month - 1]} spending ($lastCount txns)',
+                  '$sym${AppCurrencyUtils.formatAmount(lastTotal, 2)}'),
+              if (diff != null)
+                row(
+                    'Change: ($sym${AppCurrencyUtils.formatAmount(thisTotal, 0)} − $sym${AppCurrencyUtils.formatAmount(lastTotal, 0)}) ÷ $sym${AppCurrencyUtils.formatAmount(lastTotal, 0)}',
+                    '${diff >= 0 ? '+' : ''}${diff.round()}%',
+                    color: diff >= 0 ? TC.er(context) : TC.ok(context)),
+              if (topCats.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('TOP CATEGORIES THIS MONTH',
+                    style: TC.geist(context,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: TC.text3(context))),
+                const SizedBox(height: 4),
+                ...topCats.take(4).map((e) {
+                  final pct = thisTotal > 0
+                      ? (e.value / thisTotal * 100).round()
+                      : 0;
+                  final label = AppState.labelForKey(e.key);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(children: [
+                      Icon(iconForEmoji(e.key),
+                          size: 15,
+                          color: colorForEmoji(e.key,
+                              fallback: TC.primary(context))),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(label,
+                            style: TC.geist(context,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: TC.text(context))),
+                      ),
+                      Text(
+                          '$sym${AppCurrencyUtils.formatAmount(e.value, 2)} · $pct%',
+                          style: TC.geist(context,
+                              fontSize: 12.5, color: TC.text2(context))),
+                    ]),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildRecentTransactions(BuildContext context, bool isDark, AppState state, String sym, String? activeCur) {

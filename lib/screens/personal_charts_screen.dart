@@ -77,12 +77,11 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
     }
 
     final typeStr = _showIncome ? 'income' : 'expense';
-    final primaryColor =
-        _showIncome ? const Color(0xFF00D68F) : const Color(0xFFFF4D6D);
-    final gradientStart =
-        _showIncome ? const Color(0xFF00D68F) : const Color(0xFFFF6B8A);
-    final gradientEnd =
-        _showIncome ? const Color(0xFF00B377) : const Color(0xFFD90429);
+    // App palette: emerald for income, coral for expense (was neon green /
+    // hot pink — clashed with the teal/cream design system).
+    final primaryColor = _showIncome ? TC.ok(context) : TC.er(context);
+    final gradientStart = primaryColor.withValues(alpha: 0.85);
+    final gradientEnd = primaryColor;
 
     // ── Monthly data ──────────────────────────────────────────────────────────
     final actuals = <double>[];
@@ -136,12 +135,21 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
     final sortedCats = catTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // Budget
+    // Budget — prefer the NAMED budgets (the Planner feature) for this
+    // currency; the legacy single all-categories limit is the fallback.
     final budgetKey = _showIncome ? 'all_income' : 'all';
-    final monthlyBudget = state.getBudgetLimit(budgetKey, _currency!);
-    final pct = monthlyBudget > 0
-        ? (currentMonthActual / monthlyBudget * 100)
-        : 0.0;
+    final legacyBudget = state.getBudgetLimit(budgetKey, _currency!);
+    double namedLimit = 0, namedSpent = 0;
+    if (!_showIncome) {
+      for (final b in state.budgets.where((b) => b.currency == _currency)) {
+        namedLimit += b.amount;
+        namedSpent += state.budgetSpent(b);
+      }
+    }
+    final monthlyBudget = namedLimit > 0 ? namedLimit : legacyBudget;
+    final pct = namedLimit > 0
+        ? (namedSpent / namedLimit * 100)
+        : (legacyBudget > 0 ? (currentMonthActual / legacyBudget * 100) : 0.0);
 
     // Change %
     final changePct = previousMonthActual > 0
@@ -162,8 +170,8 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: isDark
-                      ? [const Color(0xFF1a1a2e), const Color(0xFF0c0c0e)]
-                      : [const Color(0xFFf0f4f8), const Color(0xFFe8ecf4)],
+                      ? [const Color(0xFF0D2226), const Color(0xFF0A1A1C)]
+                      : [const Color(0xFFF7F5F0), const Color(0xFFEDE9E1)],
                 ),
               ),
               child: SafeArea(
@@ -265,7 +273,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                           _TogglePill(
                             label: AppLocalizations.of(context).expenses,
                             active: !_showIncome,
-                            color: const Color(0xFFFF4D6D),
+                            color: TC.er(context),
                             onTap: () {
                               HapticFeedback.lightImpact();
                               setState(() => _showIncome = false);
@@ -276,7 +284,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                           _TogglePill(
                             label: AppLocalizations.of(context).income,
                             active: _showIncome,
-                            color: const Color(0xFF00D68F),
+                            color: TC.ok(context),
                             onTap: () {
                               HapticFeedback.lightImpact();
                               setState(() => _showIncome = true);
@@ -383,7 +391,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                         label: '${AppLocalizations.of(context).periodMonth} -1',
                         value: '$sym${AppCurrencyUtils.formatAmount(previousMonthActual, 0)}',
                         icon: Icons.calendar_month,
-                        color: const Color(0xFF4D9EFF),
+                        color: TC.blue(context),
                         isDark: isDark,
                       ),
                       const SizedBox(width: 10),
@@ -888,8 +896,20 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                           !state.budgets
                               .any((b) => b.currency == _currency)))
                     GestureDetector(
-                      onTap: () => _openBudgetSheet(
-                          context, state, budgetKey, _currency!, sym),
+                      onTap: () {
+                        // Expenses → the named Budgets feature (same as the
+                        // Planner); income goals keep the legacy limit sheet.
+                        if (_showIncome) {
+                          _openBudgetSheet(
+                              context, state, budgetKey, _currency!, sym);
+                        } else {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const BudgetScreen()));
+                        }
+                      },
                       child: Container(
                         margin: const EdgeInsets.only(top: 20),
                         padding: const EdgeInsets.all(16),
@@ -939,7 +959,7 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                         .fade(delay: 450.ms)
                         .slideY(begin: 0.05),
 
-                  if (monthlyBudget > 0)
+                  if (namedLimit == 0 && monthlyBudget > 0)
                     GestureDetector(
                       onTap: () => _openBudgetSheet(
                           context, state, budgetKey, _currency!, sym),
@@ -1666,9 +1686,9 @@ class _TrendHistogram extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _LegendDot(color: AppColors.green, label: l.income),
+                  _LegendDot(color: TC.ok(context), label: l.income),
                   const SizedBox(width: 12),
-                  _LegendDot(color: const Color(0xFFFF4D6D), label: l.expense),
+                  _LegendDot(color: TC.er(context), label: l.expense),
                 ],
               ),
             ],
