@@ -10,7 +10,6 @@ import '../l10n/app_localizations.dart';
 import 'transaction_type_screen.dart';
 import 'personal_charts_screen.dart';
 import '../utils/icon_map.dart';
-import '../widgets/common_widgets.dart';
 
 // ─── Filter enum ────────────────────────────────────────────────────────────
 enum _OvTab { all, personal, groups }
@@ -194,200 +193,111 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ? 'Tip: set a category on your expenses to see where your money goes.'
                 : '$topLabel is your top category at ${(top.value / totalExpense * 100).round()}% of spending.';
 
-    // Premium gradient hero: count-up total, delta chip, frosted insight pill
-    // and stat chips — replaces the flat beige card.
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: TC.cardGradient(context),
-        borderRadius: BorderRadius.circular(24),
+        color: TC.card(context),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: TC.primaryGlow(context),
-            blurRadius: 28,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Soft radial sheen in the corner — echoes the Money tab hero.
-          Positioned(
-            top: -30,
-            right: -30,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0.10),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.65],
-                ),
-              ),
+          Text(
+            '$dateLabel · Total spent',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: TC.text3(context),
+              letterSpacing: 0.8,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${dateLabel.toUpperCase()} · TOTAL SPENT',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white.withValues(alpha: 0.55),
-                    letterSpacing: 1.2,
-                  ),
+          const SizedBox(height: 5),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  '$sym${AppCurrencyUtils.formatAmount(totalExpense, 0)}',
+                  style: TC.gloock(context, fontSize: 40, letterSpacing: -1.4),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: CountUpText(
-                        value: totalExpense,
-                        builder: (ctx, v) => Text(
-                          '$sym${AppCurrencyUtils.formatAmount(v, 0)}',
-                          style: TC.gloock(ctx,
-                              fontSize: 42,
-                              letterSpacing: -1.4,
-                              color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    if (diffPct != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              diffPct >= 0
-                                  ? Icons.trending_up_rounded
-                                  : Icons.trending_down_rounded,
-                              size: 13,
-                              color: diffPct >= 0
-                                  ? const Color(0xFFFCA5A5)
-                                  : const Color(0xFF86EFAC),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: diffPct >= 0
-                                    ? const Color(0xFFFCA5A5)
-                                    : const Color(0xFF86EFAC),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
+              ),
+              if (diffPct != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(13),
+                    color: diffPct >= 0 ? AppColors.red.withValues(alpha: 0.10) : AppColors.greenDim,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        totalExpense > 0
-                            ? Icons.lightbulb_rounded
-                            : Icons.info_outline_rounded,
-                        color: const Color(0xFF86EFAC),
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          story,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.92),
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: diffPct >= 0 ? AppColors.red : AppColors.green,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _storyMeta(context, Icons.history_rounded, 'Previous',
-                        '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
-                    const SizedBox(width: 10),
-                    _storyMeta(
-                        context,
-                        topCat == null
-                            ? Icons.category_rounded
-                            : iconForEmoji(topCat.icon),
-                        'Top Category',
-                        topCat == null ? 'None' : topCat.label),
-                  ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: totalExpense > 0 ? AppColors.greenDim : TC.card2(context),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  totalExpense > 0 ? Icons.lightbulb_rounded : Icons.info_outline_rounded,
+                  color: AppColors.green,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    story,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: TC.text2(context),
+                      height: 1.35,
+                    ),
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _storyMeta(context, 'Previous', '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
+              const SizedBox(width: 18),
+              _storyMeta(context, 'Top Category', topCat == null ? 'None' : '${topCat.icon} ${topCat.label}'),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _storyMeta(
-      BuildContext context, IconData icon, String label, String value) {
+  Widget _storyMeta(BuildContext context, String label, String value) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(13),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.7)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 9.5,
-                          color: Colors.white.withValues(alpha: 0.55),
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4)),
-                  const SizedBox(height: 1),
-                  Text(value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 13.5,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800)),
-                ],
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: TC.text(context), fontWeight: FontWeight.w800)),
+        ],
       ),
     );
   }
@@ -412,10 +322,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: TC.primaryPale(context),
-                  border: Border.all(
-                      color: TC.primary(context).withValues(alpha: 0.45),
-                      width: 1.5),
+                  border: Border.all(color: AppColors.green, width: 1.5),
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -434,12 +341,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: TC.bg(context),
                     border: Border.all(color: TC.border(context), width: 1.5),
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.calendar_today_outlined, size: 13, color: TC.primary(context)),
+                    Icon(Icons.calendar_today_outlined, size: 13, color: TC.text(context)),
                     const SizedBox(width: 5),
                     Flexible(child: Text(dateLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TC.text(context)), overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 3),
@@ -454,12 +360,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               child: Container(
                 width: 38, height: 38,
                 decoration: BoxDecoration(
-                  color: TC.bg(context),
                   border: Border.all(color: TC.border(context), width: 1.5),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.tune_rounded, size: 16, color: TC.primary(context)),
+                child: Icon(Icons.tune_rounded, size: 16, color: TC.text(context)),
               ),
             ),
           ]),
