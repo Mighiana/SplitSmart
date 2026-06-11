@@ -102,6 +102,27 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     }
 
 
+    // Pace comparison: previous month up to the SAME day-of-month, so the chip
+    // is honest mid-month (full-month comparisons always read "under" early).
+    // Custom ranges fall back to the full previous period (-1 sentinel).
+    double pacePrev = -1;
+    final bool isDefaultMonth =
+        state.overviewStartDate == null && state.overviewEndDate == null;
+    if (isDefaultMonth) {
+      final prevStart = DateTime(now.year, now.month - 1, 1);
+      final prevLen = DateTime(now.year, now.month, 0).day;
+      final cutDay = now.day > prevLen ? prevLen : now.day;
+      final prevCut = DateTime(now.year, now.month - 1, cutDay, 23, 59, 59);
+      pacePrev = allTxs.where((t) {
+        if (t.currency != selectedCur) return false;
+        if (t.type.toLowerCase() != 'expense') return false;
+        final d = t.rawDate;
+        return d != null && !d.isBefore(prevStart) && !d.isAfter(prevCut);
+      }).fold(0.0, (s, t) => s + t.amount);
+    }
+    final int currentSeg =
+        isDefaultMonth ? ((now.day - 1) ~/ (segmentDays > 0 ? segmentDays : 8)).clamp(0, 3) : 3;
+
     String dateLabel = '';
     if (state.overviewStartDate != null && state.overviewEndDate != null) {
       if (state.overviewStartDate!.month == state.overviewEndDate!.month && 
@@ -131,7 +152,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 .animate()
                 .fadeIn(duration: 280.ms)
                 .slideY(begin: -0.08, end: 0, curve: Curves.easeOutCubic),
-            _buildSpendingStory(context, isDark, totalExpense, curSym, dateLabel, state, selectedCur, startDate, endDate, sortedCats)
+            _buildSpendingStory(context, isDark, totalExpense, curSym, dateLabel, state, selectedCur, startDate, endDate, sortedCats, expenseData, pacePrev, isDefaultMonth, currentSeg)
                 .animate(delay: 150.ms)
                 .fadeIn(duration: 340.ms)
                 .slideY(begin: 0.12, end: 0, curve: Curves.easeOutBack),
@@ -173,9 +194,19 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     DateTime start,
     DateTime end,
     List<MapEntry<String, double>> sortedCats,
+    List<double> weekBars,
+    double pacePrev,
+    bool isDefaultMonth,
+    int currentSeg,
   ) {
-    final prev = _prevPeriodExpense(state, start, end, selectedCur);
+    // Pace-aware delta: same-point-last-month for the default view, full
+    // previous period for custom ranges.
+    final prev = pacePrev >= 0
+        ? pacePrev
+        : _prevPeriodExpense(state, start, end, selectedCur);
     final diffPct = prev > 0 ? ((totalExpense - prev) / prev * 100) : null;
+    final paceLabel =
+        isDefaultMonth ? 'vs this time last month' : 'vs previous period';
     final top = sortedCats.isNotEmpty ? sortedCats.first : null;
     final topCat = top == null
         ? null
@@ -221,33 +252,116 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           ),
           const SizedBox(height: 5),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Text(
-                  '$sym${AppCurrencyUtils.formatAmount(totalExpense, 0)}',
-                  style: TC.gloock(context, fontSize: 40, letterSpacing: -1.4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$sym${AppCurrencyUtils.formatAmount(totalExpense, 0)}',
+                      style:
+                          TC.gloock(context, fontSize: 40, letterSpacing: -1.4),
+                    ),
+                    if (diffPct != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: diffPct >= 0
+                              ? AppColors.red.withValues(alpha: 0.10)
+                              : AppColors.greenDim,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              diffPct >= 0
+                                  ? Icons.trending_up_rounded
+                                  : Icons.trending_down_rounded,
+                              size: 13,
+                              color: diffPct >= 0
+                                  ? AppColors.red
+                                  : AppColors.green,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${diffPct >= 0 ? '+' : ''}${diffPct.round()}% $paceLabel',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: diffPct >= 0
+                                    ? AppColors.red
+                                    : AppColors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (diffPct != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: diffPct >= 0 ? AppColors.red.withValues(alpha: 0.10) : AppColors.greenDim,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${diffPct >= 0 ? '+' : ''}${diffPct.round()}%',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: diffPct >= 0 ? AppColors.red : AppColors.green,
-                    ),
-                  ),
-                ),
+              const SizedBox(width: 12),
+              // Weekly spending mini bars (current segment highlighted) —
+              // taps through to the full charts screen.
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              MoneyChartsScreen(initialCurrency: selectedCur)));
+                },
+                child: Builder(builder: (context) {
+                  final maxW = weekBars.fold(0.0, (m, v) => v > m ? v : m);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(weekBars.length, (i) {
+                      final h = maxW <= 0
+                          ? 10.0
+                          : 12.0 + (weekBars[i] / maxW) * 56.0;
+                      final isCur = i == currentSeg;
+                      return Padding(
+                        padding: EdgeInsets.only(left: i == 0 ? 0 : 7),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 350),
+                              width: 14,
+                              height: h,
+                              decoration: BoxDecoration(
+                                color: isCur
+                                    ? TC.primary(context)
+                                    : TC.primary(context)
+                                        .withValues(alpha: 0.22),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text('W${i + 1}',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: isCur
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                    color: isCur
+                                        ? TC.primary(context)
+                                        : TC.text3(context))),
+                          ],
+                        ),
+                      );
+                    }),
+                  );
+                }),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -276,27 +390,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _storyMeta(context, 'Previous', '$sym${AppCurrencyUtils.formatAmount(prev, 0)}'),
-              const SizedBox(width: 18),
-              _storyMeta(context, 'Top Category', topCat == null ? 'None' : '${topCat.icon} ${topCat.label}'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _storyMeta(BuildContext context, String label, String value) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 10, color: TC.text3(context), fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: TC.text(context), fontWeight: FontWeight.w800)),
         ],
       ),
     );

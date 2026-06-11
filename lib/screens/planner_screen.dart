@@ -65,9 +65,6 @@ class PlannerScreen extends StatelessWidget {
     return '🎯';
   }
 
-  String _monthYear(DateTime d) =>
-      '${DateFormat('MMM').format(d)} ${d.year}';
-
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -448,99 +445,95 @@ class PlannerScreen extends StatelessWidget {
               ),
             )
           else
-            SizedBox(
-              height: 158,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                itemCount: goals.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (_, i) => _goalCard(context, goals[i], openGoals),
-              ),
+            // Single compact row (subscription style) — the full list lives
+            // behind "See all".
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: _goalRowCard(context, goals.first, openGoals),
             ),
         ],
       ),
     );
   }
 
-  Widget _goalCard(BuildContext context, SavingGoal g, VoidCallback onTap) {
-    final frac =
-        g.targetAmount > 0 ? (g.savedAmount / g.targetAmount).clamp(0.0, 1.0) : 0.0;
+  Widget _goalRowCard(BuildContext context, SavingGoal g, VoidCallback onTap) {
+    final frac = g.targetAmount > 0
+        ? (g.savedAmount / g.targetAmount).clamp(0.0, 1.0)
+        : 0.0;
     final pct = (frac * 100).round();
     final color = g.color != null
         ? _colorFromHex(g.color)
         : _goalPalette[g.id % _goalPalette.length];
     final sym = _sym(g.currency);
-    final deadline =
-        g.targetDate != null ? _monthYear(g.targetDate!) : 'No date';
-
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
         onTap();
       },
       child: Container(
-        width: 156,
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: _cardDeco(context),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                // Progress ring with the goal icon inside.
-                SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CircularProgressIndicator(
-                        value: frac,
-                        strokeWidth: 3.6,
-                        strokeCap: StrokeCap.round,
-                        backgroundColor: TC.bg2(context),
-                        valueColor: AlwaysStoppedAnimation(color),
-                      ),
-                      Center(
-                        child: Icon(iconForEmoji(g.icon ?? _goalEmoji(g.title)),
-                            size: 17, color: color),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Text('$pct%',
-                    style: TC.gloock(context, fontSize: 17, color: color)),
-              ],
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(14)),
+              alignment: Alignment.center,
+              child: Icon(iconForEmoji(g.icon ?? _goalEmoji(g.title)),
+                  size: 20, color: color),
             ),
-            const Spacer(),
-            Text(g.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TC.geist(context,
-                    fontSize: 13.5, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 3),
-            Text(
-                '$sym${AppCurrencyUtils.formatAmount(g.savedAmount, 0)} of $sym${AppCurrencyUtils.formatAmount(g.targetAmount, 0)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    TC.geist(context, fontSize: 10.5, color: TC.text3(context))),
-            const SizedBox(height: 2),
-            Row(children: [
-              Icon(Icons.event_rounded, size: 10, color: TC.text3(context)),
-              const SizedBox(width: 3),
-              Text(deadline,
-                  style: TC.geist(context,
-                      fontSize: 10, color: TC.text3(context))),
-            ]),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(g.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TC.geist(context,
+                          fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
+                  Text(
+                      '$sym${AppCurrencyUtils.formatAmount(g.savedAmount, 0)} of $sym${AppCurrencyUtils.formatAmount(g.targetAmount, 0)}',
+                      style: TC.geist(context,
+                          fontSize: 11.5, color: TC.text3(context))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: Stack(
+                fit: StackFit.expand,
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: frac,
+                    strokeWidth: 3.4,
+                    strokeCap: StrokeCap.round,
+                    backgroundColor: TC.bg2(context),
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                  Center(
+                    child: Text('$pct%',
+                        style: TC.geist(context,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: color)),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+
 
   // ─── Subscriptions — next renewals ───────────────────────────────────────
   Widget _subsSection(BuildContext context, List<SubscriptionData> subs,

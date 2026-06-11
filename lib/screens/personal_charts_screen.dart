@@ -9,6 +9,7 @@ import '../utils/icon_map.dart';
 import '../utils/app_utils.dart';
 import '../main.dart';
 import '../l10n/app_localizations.dart';
+import 'budget_screen.dart';
 
 // ─── Premium Chart Screen ─────────────────────────────────────────────────────
 class MoneyChartsScreen extends StatefulWidget {
@@ -773,8 +774,119 @@ class _MoneyChartsScreenState extends State<MoneyChartsScreen>
                       .fade(delay: 350.ms, duration: 500.ms)
                       .slideY(begin: 0.08),
 
+                  // ── Named budgets (Budgets feature) for this currency ────────
+                  if (!_showIncome &&
+                      state.budgets.any((b) => b.currency == _currency))
+                    Builder(builder: (context) {
+                      final cbs = state.budgets
+                          .where((b) => b.currency == _currency)
+                          .take(3)
+                          .toList();
+                      Color hexOr(String? h, Color f) {
+                        if (h == null || h.isEmpty) return f;
+                        final v = int.tryParse(h.replaceAll('#', '0xFF'));
+                        return v == null ? f : Color(v);
+                      }
+                      return Container(
+                        margin: const EdgeInsets.only(top: 20),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: TC.card(context),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: TC.border(context)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(children: [
+                              Icon(Icons.donut_small_rounded,
+                                  color: primaryColor, size: 20),
+                              const SizedBox(width: 8),
+                              Text('Budgets',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: TC.text(context))),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              const BudgetScreen()));
+                                },
+                                child: Text('Manage →',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: primaryColor)),
+                              ),
+                            ]),
+                            const SizedBox(height: 6),
+                            ...cbs.map((b) {
+                              final spent = state.budgetSpent(b);
+                              final frac = b.amount > 0
+                                  ? (spent / b.amount).clamp(0.0, 1.0)
+                                  : 0.0;
+                              final over = spent > b.amount;
+                              final accent = over
+                                  ? TC.er(context)
+                                  : (frac >= 0.8
+                                      ? TC.wn(context)
+                                      : hexOr(b.color, primaryColor));
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 7),
+                                child: Column(children: [
+                                  Row(children: [
+                                    Icon(
+                                        iconForEmoji(b.icon ??
+                                            (b.categories.isNotEmpty
+                                                ? b.categories.first
+                                                : '💰')),
+                                        size: 15,
+                                        color: accent),
+                                    const SizedBox(width: 7),
+                                    Expanded(
+                                      child: Text(b.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: TC.text(context))),
+                                    ),
+                                    Text(
+                                        '$sym${AppCurrencyUtils.formatAmount(spent, 0)} of $sym${AppCurrencyUtils.formatAmount(b.amount, 0)}',
+                                        style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: TC.text2(context))),
+                                  ]),
+                                  const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: LinearProgressIndicator(
+                                      value: frac,
+                                      minHeight: 6,
+                                      backgroundColor: TC.bg2(context),
+                                      valueColor:
+                                          AlwaysStoppedAnimation(accent),
+                                    ),
+                                  ),
+                                ]),
+                              );
+                            }),
+                          ],
+                        ),
+                      );
+                    }).animate().fade(delay: 430.ms).slideY(begin: 0.05),
+
                   // ── Budget CTA ────────────────────────────────────────────────
-                  if (monthlyBudget == 0)
+                  if (monthlyBudget == 0 &&
+                      (_showIncome ||
+                          !state.budgets
+                              .any((b) => b.currency == _currency)))
                     GestureDetector(
                       onTap: () => _openBudgetSheet(
                           context, state, budgetKey, _currency!, sym),
@@ -1459,6 +1571,8 @@ class _TrendHistogram extends StatelessWidget {
     final labels = <String>[];
     final incomeData = <double>[];
     final expenseData = <double>[];
+    final periodStarts = <DateTime>[];
+    final periodEnds = <DateTime>[];
 
     final filtered = currency != null
         ? transactions.where((t) => t.currency == currency).toList()
@@ -1467,6 +1581,8 @@ class _TrendHistogram extends StatelessWidget {
     for (int i = barCount - 1; i >= 0; i--) {
       final periodStart = DateTime(now.year, now.month - i, 1);
       final periodEnd = DateTime(now.year, now.month - i + 1, 1);
+      periodStarts.add(periodStart);
+      periodEnds.add(periodEnd);
       const months = ['Jan','Feb','Mar','Apr','May','Jun',
                       'Jul','Aug','Sep','Oct','Nov','Dec'];
       final label = i == 0 ? 'Now' : months[periodStart.month - 1];
@@ -1588,6 +1704,16 @@ class _TrendHistogram extends StatelessWidget {
                   maxY: maxVal * 1.15,
                   minY: 0,
                   barTouchData: BarTouchData(
+                    // Tap a month → category breakdown sheet (Copilot-style).
+                    touchCallback: (event, resp) {
+                      if (event is FlTapUpEvent &&
+                          resp?.spot != null &&
+                          resp!.spot!.touchedBarGroupIndex >= 0) {
+                        final i = resp.spot!.touchedBarGroupIndex;
+                        _showMonthBreakdown(context, filtered, periodStarts[i],
+                            periodEnds[i], expenseData[i]);
+                      }
+                    },
                     touchTooltipData: BarTouchTooltipData(
                       tooltipBorderRadius: BorderRadius.circular(10),
                       getTooltipItem: (group, _, rod, rodIndex) {
@@ -1595,9 +1721,7 @@ class _TrendHistogram extends StatelessWidget {
                         return BarTooltipItem(
                           '${isIncome ? l.income : l.expense}\n${AppCurrencyUtils.formatAmount(rod.toY)}',
                           TextStyle(
-                            color: isIncome
-                                ? AppColors.green
-                                : const Color(0xFFFF4D6D),
+                            color: isIncome ? TC.ok(context) : TC.er(context),
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
@@ -1671,27 +1795,27 @@ class _TrendHistogram extends StatelessWidget {
                       barRods: [
                         BarChartRodData(
                           toY: incomeData[i],
-                          color: AppColors.green,
+                          color: TC.ok(context),
                           width: 16,
                           borderRadius:
                               const BorderRadius.vertical(top: Radius.circular(5)),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: maxVal * 1.15,
-                            color: AppColors.green
+                            color: TC.ok(context)
                                 .withValues(alpha: isDark ? 0.07 : 0.04),
                           ),
                         ),
                         BarChartRodData(
                           toY: expenseData[i],
-                          color: const Color(0xFFFF4D6D),
+                          color: TC.er(context),
                           width: 16,
                           borderRadius:
                               const BorderRadius.vertical(top: Radius.circular(5)),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: maxVal * 1.15,
-                            color: const Color(0xFFFF4D6D)
+                            color: TC.er(context)
                                 .withValues(alpha: isDark ? 0.07 : 0.04),
                           ),
                         ),
@@ -1702,6 +1826,139 @@ class _TrendHistogram extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Copilot-style month breakdown: tap a bar → sheet with that month's
+  /// spending split by category (top 6 + "All other categories").
+  void _showMonthBreakdown(BuildContext context, List<TransactionData> txs,
+      DateTime start, DateTime end, double totalExp) {
+    HapticFeedback.lightImpact();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final title = '${months[start.month - 1]} ${start.year}';
+
+    final Map<String, double> cats = {};
+    String sym = '';
+    for (final t in txs) {
+      final d = t.rawDate;
+      if (d == null || d.isBefore(start) || !d.isBefore(end)) continue;
+      if (t.type.toLowerCase() != 'expense') continue;
+      cats[t.cat] = (cats[t.cat] ?? 0) + t.amount;
+      sym = t.sym;
+    }
+    final sorted = cats.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = sorted.take(6).toList();
+    final restTotal =
+        sorted.skip(6).fold(0.0, (s, e) => s + e.value);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TC.surface(context),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: TC.border(context),
+                      borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Row(children: [
+                Text(title,
+                    style: TC.geist(context,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: TC.text(context))),
+                const Spacer(),
+                Text('$sym${AppCurrencyUtils.formatAmount(totalExp, 2)}',
+                    style: TC.gloock(context,
+                        fontSize: 20, color: TC.text(context))),
+              ]),
+              const SizedBox(height: 8),
+              Divider(color: TC.border(context), height: 1),
+              const SizedBox(height: 6),
+              if (top.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Text('No spending this month',
+                      style: TC.geist(context,
+                          fontSize: 13, color: TC.text3(context))),
+                ),
+              ...top.map((e) {
+                final color = _getCatColor(e.key);
+                final label = AppState.expenseCategories
+                        .where((c) => c.icon == e.key)
+                        .firstOrNull
+                        ?.label ??
+                    'Other';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Row(children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.14),
+                          shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Icon(iconForEmoji(e.key), size: 16, color: color),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(label,
+                          style: TC.geist(context,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: TC.text(context))),
+                    ),
+                    Text('$sym${AppCurrencyUtils.formatAmount(e.value, 2)}',
+                        style: TC.geist(context,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: TC.text(context))),
+                  ]),
+                );
+              }),
+              if (restTotal > 0.005)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Row(children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: TC.bg2(context), shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Icon(Icons.more_horiz_rounded,
+                          size: 16, color: TC.text3(context)),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text('All other categories…',
+                          style: TC.geist(context,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: TC.text2(context))),
+                    ),
+                    Text('$sym${AppCurrencyUtils.formatAmount(restTotal, 2)}',
+                        style: TC.geist(context,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: TC.text2(context))),
+                  ]),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
