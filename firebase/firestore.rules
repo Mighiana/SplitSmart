@@ -164,7 +164,8 @@ service cloud.firestore {
     // ─── Groups ──────────────────────────────────────────────────────────────
     // Only group members can read/write group data.
     // Any authenticated (non-guest) user can create a new group.
-    // Any authenticated user can GET a specific group (needed for joining).
+    // Joining resolves invite codes via the resolveInvite Cloud Function;
+    // direct group reads are member/creator-only.
     match /groups/{groupId} {
 
       // SEC-C2: Create requires a non-guest caller AND a well-formed document:
@@ -182,9 +183,14 @@ service cloud.firestore {
                     && (request.resource.data.get('isPremiumGroup', false) == false
                         || hasPremium());
 
-      // Allow any authenticated user to get a specific group (needed for joining
-      // via invite). They can't list groups they aren't part of.
-      allow get: if request.auth != null;
+      // SEC: get is members/creator only. Invite resolution (the old reason
+      // for a public get) now goes through the `resolveInvite` Cloud Function,
+      // so knowing a group ID no longer exposes its metadata.
+      allow get: if request.auth != null
+                 && (
+                   request.auth.uid in resource.data.get('memberUids', [])
+                   || resource.data.createdBy == request.auth.uid
+                 );
 
       // Allow list if the user is a member of the group OR created it (legacy fallback)
       allow list: if request.auth != null
@@ -308,7 +314,9 @@ service cloud.firestore {
     // ─── Invite Codes ────────────────────────────────────────────────────────
     // SEC-C5: Secure invite code resolution without collection scraping.
     match /inviteCodes/{code} {
-      allow get: if request.auth != null;
+      // SEC: resolution happens in the resolveInvite Cloud Function (Admin
+      // SDK bypasses rules); clients never need to read mappings directly.
+      allow get: if false;
       allow create: if validInviteCodeMapping(code);
       allow update, delete: if false;
     }

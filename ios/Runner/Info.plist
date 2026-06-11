@@ -26,6 +26,16 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>SplitSmart uses the camera to scan QR invite codes and attach receipt photos.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>SplitSmart uses Face ID to unlock the app when app lock is enabled.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SplitSmart uses the microphone for optional voice expense entry.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SplitSmart lets you choose receipt images from your photo library.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SplitSmart uses speech recognition for optional voice expense entry.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -9,6 +9,8 @@
  *  4. playRtdnHandler      — Google Play Real-Time Developer Notifications
  *  5. appStoreNotifications — App Store Server Notifications V2
  *  6. cleanupAnonUsers     — scheduled removal of orphan anonymous (guest) accts
+ *  7. resolveInvite        — resolves an invite code to a group preview so the
+ *                            client never needs public read access to groups
  */
 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
@@ -500,6 +502,46 @@ exports.verifyPurchase = onCall({ enforceAppCheck: true }, async (request) => {
   const ent = { premium: true, until: result.until, productId, store };
   await applyEntitlement(uid, ent);
   return { valid: true, entitlement: ent };
+});
+
+// ─── Invite resolution (SEC: removes the need for public group reads) ─────────
+// Resolves an invite code to the group preview + member arrays the client
+// needs to perform the rules-validated join update. Possession of a valid
+// code is the capability; without it nothing is returned. This lets
+// firestore.rules restrict `get /groups/{id}` to members only.
+exports.resolveInvite = onCall({ enforceAppCheck: true }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in to use invite codes.");
+  }
+  const code = String(request.data?.code || "").toUpperCase().trim();
+  // 8-char A-Z0-9 codes today; accept 4-16 for legacy tolerance.
+  if (!/^[A-Z0-9]{4,16}$/.test(code)) {
+    throw new HttpsError("invalid-argument", "Malformed invite code.");
+  }
+
+  const mapping = await db.collection("inviteCodes").doc(code).get();
+  if (!mapping.exists) {
+    throw new HttpsError("not-found", "Invalid invite code.");
+  }
+  const groupId = String(mapping.data().groupId || "");
+  if (!groupId) {
+    throw new HttpsError("not-found", "Invalid invite code.");
+  }
+
+  const doc = await db.collection("groups").doc(groupId).get();
+  if (!doc.exists) {
+    throw new HttpsError("not-found", "Group no longer exists.");
+  }
+  const d = doc.data();
+  return {
+    groupId,
+    name: typeof d.name === "string" ? d.name : "",
+    isPremiumGroup: d.isPremiumGroup === true,
+    memberCount: Array.isArray(d.memberUids) ? d.memberUids.length : 0,
+    memberUids: Array.isArray(d.memberUids) ? d.memberUids : [],
+    members: Array.isArray(d.members) ? d.members : [],
+    memberMeta: d.memberMeta || {},
+  };
 });
 
 // ─── Google Play Real-Time Developer Notifications (Pub/Sub) ──────────────────

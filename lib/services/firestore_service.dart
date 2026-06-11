@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../providers/app_state.dart';
 import 'auth_service.dart';
@@ -600,27 +601,43 @@ class FirestoreService {
   /// SEC-H4: Maximum group members allowed.
   static const int _maxGroupMembers = 50;
 
-  /// Join a group via invite code (Client-side secure pattern).
+  /// Resolve an invite code via the `resolveInvite` Cloud Function.
+  ///
+  /// SEC: non-members can no longer `get` group docs directly (rules restrict
+  /// reads to members), so the preview/member arrays needed pre-join come from
+  /// the server, gated on possession of a valid code. Returns null if invalid.
+  Future<Map<String, dynamic>?> _resolveInvite(String cleanCode) async {
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('resolveInvite')
+          .call<Map<dynamic, dynamic>>({'code': cleanCode});
+      return Map<String, dynamic>.from(result.data);
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[Firestore] resolveInvite failed: ${e.code} ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('[Firestore] resolveInvite error: $e');
+      return null;
+    }
+  }
+
+  /// Join a group via invite code (server-resolved secure pattern).
   Future<GroupData?> joinGroupByInviteCode(String code, String memberName) async {
     try {
       final cleanCode = code.toUpperCase().trim();
-      
-      // 1. Fetch the groupId from the secure inviteCodes mapping
-      final mappingDoc = await _db.collection('inviteCodes').doc(cleanCode).get();
-      if (!mappingDoc.exists) {
+
+      // 1. Resolve the code server-side (CF reads the mapping + group).
+      final resolved = await _resolveInvite(cleanCode);
+      if (resolved == null) {
         debugPrint('[Firestore] Invalid invite code or mapping not found.');
         return null;
       }
-      final String groupId = mappingDoc.data()?['groupId'] ?? '';
-      
-      // 2. Fetch the actual group to verify
-      final doc = await _groupsCol.doc(groupId).get();
-      if (!doc.exists) return null;
+      final String groupId = resolved['groupId'] ?? '';
+      if (groupId.isEmpty) return null;
 
-      final data = doc.data() as Map<String, dynamic>;
-      final memberUids = List<String>.from(data['memberUids'] ?? []);
-      final members = List<String>.from(data['members'] ?? []);
-      final isPremiumGroup = data['isPremiumGroup'] == true;
+      final memberUids = List<String>.from(resolved['memberUids'] ?? []);
+      final members = List<String>.from(resolved['members'] ?? []);
+      final isPremiumGroup = resolved['isPremiumGroup'] == true;
       final isGuest = AuthService.instance.isGuest;
 
       // GUEST GATE: anonymous users may only join groups whose owner has
@@ -645,7 +662,7 @@ class FirestoreService {
 
         // Authoritative uid → name mapping (fixes parallel-array ambiguity).
         final memberMeta =
-            Map<String, dynamic>.from(data['memberMeta'] as Map? ?? {});
+            Map<String, dynamic>.from(resolved['memberMeta'] as Map? ?? {});
         memberMeta[_uid] = {
           'name': safeName,
           'uid': _uid,
@@ -654,18 +671,17 @@ class FirestoreService {
         };
 
         // SEC-C1: Pass the code to prove we know it, bypassing member-only lock
-        await doc.reference.update({
+        await _groupsCol.doc(groupId).update({
           'memberUids': memberUids,
           'members': members,
           'memberMeta': memberMeta,
           'joinAttemptCode': cleanCode,
         });
-
-        // Refetch the document so it has the new member list
-        final updatedDoc = await _groupsCol.doc(groupId).get();
-        return await _groupFromDocFull(updatedDoc);
       }
 
+      // Now a member, so the member-only `get` rule allows this read.
+      final doc = await _groupsCol.doc(groupId).get();
+      if (!doc.exists) return null;
       return await _groupFromDocFull(doc);
     } catch (e) {
       debugPrint('[Firestore] joinGroupByInviteCode error: $e');
@@ -715,18 +731,15 @@ class FirestoreService {
   Future<Map<String, dynamic>?> probeInviteCode(String code) async {
     try {
       final cleanCode = code.toUpperCase().trim();
-      final mapping = await _db.collection('inviteCodes').doc(cleanCode).get();
-      if (!mapping.exists) return null;
-      final groupId = mapping.data()?['groupId'] as String? ?? '';
+      final resolved = await _resolveInvite(cleanCode);
+      if (resolved == null) return null;
+      final groupId = resolved['groupId'] as String? ?? '';
       if (groupId.isEmpty) return null;
-      final doc = await _groupsCol.doc(groupId).get();
-      if (!doc.exists) return null;
-      final d = doc.data() as Map<String, dynamic>;
       return {
         'groupId': groupId,
-        'isPremiumGroup': d['isPremiumGroup'] == true,
-        'memberCount': (d['memberUids'] as List?)?.length ?? 0,
-        'name': d['name'] ?? '',
+        'isPremiumGroup': resolved['isPremiumGroup'] == true,
+        'memberCount': resolved['memberCount'] ?? 0,
+        'name': resolved['name'] ?? '',
       };
     } catch (e) {
       debugPrint('[Firestore] probeInviteCode error: $e');

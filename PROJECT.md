@@ -3,7 +3,7 @@
 > **Purpose of this file:** a complete, self-contained brief so **any AI model or developer** can understand the project and continue work without prior context.
 > **RULE: Keep this file updated.** After *every* meaningful change, update the relevant section and add an entry to the **Changelog** at the bottom (newest first). Treat this as the single source of truth.
 
-_Last updated: 2026-06-10_
+_Last updated: 2026-06-12_
 
 ---
 
@@ -163,6 +163,15 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 ---
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
+
+### 2026-06-12 — Security-review fixes: store readiness + access tightening
+- **iOS Info.plist**: added all 5 usage descriptions (camera, mic, speech, photo library, Face ID) — was an App Store/TestFlight blocker.
+- **Backup restore hardening** (`backup_service.dart`): rejects ZIPs > 100 MB, > 1000 entries, > 100 MB per entry, or > 250 MB expanded (`_archiveLooksSafe`) before decode/restore — closes local memory-DoS risk.
+- **Group metadata no longer publicly readable**: new `resolveInvite` callable CF (App Check enforced, `firebase/functions/index.js`) resolves invite code → group preview + member arrays. Client `joinGroupByInviteCode`/`probeInviteCode` (`firestore_service.dart`) now call it instead of reading `inviteCodes`/`groups` directly. Rules: `groups/{id}` `get` is member/creator-only; `inviteCodes` `get` is now `false`. ⚠️ **CF must be deployed BEFORE shipping this client build** (`firebase deploy --only functions,firestore:rules`).
+- **Storage rules**: `users/{uid}/profile/*` read is owner-only (path unused by app; was any-authenticated).
+- **Functions dep audit → 0 vulnerabilities**: firebase-admin ^13, firebase-functions ^7, googleapis ^173, + `overrides: uuid ^11.1.1` (was 11 moderate). `node --check` passes; emulator smoke-test still pending (Java not on PATH).
+- **Release signing created**: `android/app/splitsmart-release.jks` (RSA-2048, alias `splitsmart`, random 31-char password) + `android/app/key.properties`. Both git-ignored. ⚠️ Owner MUST back up the keystore + password (e.g. password manager) — losing it means losing the Play Store identity.
+- `flutter analyze` clean.
 
 ### 2026-06-10 — Premium Overview hero + onboarding tour redesign
 - **Overview hero** (`overview_tab.dart`): flat "Total spent" card → **teal gradient hero** (`TC.cardGradient` + primary glow + corner radial sheen, matching the Money tab's Net Position card). Count-up total (`CountUpText`), trend-arrow **delta chip vs previous period** (light coral/mint tints `0xFFFCA5A5`/`0xFF86EFAC` for on-gradient legibility), frosted insight pill, and icon stat chips for Previous / Top Category — **Top Category now renders `iconForEmoji(...)` instead of a raw emoji**. Header filter pills get fills (currency = `primaryPale` + teal border, month/filter = `TC.bg`) and teal icons.

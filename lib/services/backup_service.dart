@@ -20,6 +20,24 @@ class BackupService {
   BackupService._();
 
   static const _prefAutoBackup = 'auto_backup_enabled';
+  static const _maxBackupZipBytes = 100 * 1024 * 1024; // 100 MB
+  static const _maxBackupExpandedBytes = 250 * 1024 * 1024; // 250 MB
+  static const _maxBackupEntryBytes = 100 * 1024 * 1024; // 100 MB
+  static const _maxBackupEntries = 1000;
+
+  static bool _archiveLooksSafe(Archive archive) {
+    if (archive.length > _maxBackupEntries) return false;
+
+    var expandedBytes = 0;
+    for (final file in archive) {
+      if (!file.isFile) continue;
+      if (file.size < 0 || file.size > _maxBackupEntryBytes) return false;
+      expandedBytes += file.size;
+      if (expandedBytes > _maxBackupExpandedBytes) return false;
+    }
+
+    return true;
+  }
 
   static Future<File> createBackup() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -107,8 +125,10 @@ class BackupService {
 
   static Future<BackupPreview?> previewFile(File file) async {
     try {
+      if (await file.length() > _maxBackupZipBytes) return null;
       final bytes = await file.readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
+      if (!_archiveLooksSafe(archive)) return null;
       int size = 0;
       for (final f in archive) {
         if (f.name == 'splitsmart.db') size = f.size ~/ 1024;
@@ -133,8 +153,17 @@ class BackupService {
 
   static Future<bool> restoreFromFile(File zipFile, AppState state) async {
     try {
+      if (await zipFile.length() > _maxBackupZipBytes) {
+        debugPrint('[BackupService] restore rejected: backup file is too large');
+        return false;
+      }
+
       final bytes = await zipFile.readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
+      if (!_archiveLooksSafe(archive)) {
+        debugPrint('[BackupService] restore rejected: unsafe archive size');
+        return false;
+      }
       
       final docs = await getApplicationDocumentsDirectory();
       final dbDir = await getDatabasesPath();
