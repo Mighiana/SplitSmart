@@ -164,6 +164,16 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Local data encrypted at rest (SQLCipher) + encrypted backups
+- **DB is now SQLCipher-encrypted** (`sqflite` → `sqflite_sqlcipher` in pubspec + the only two importers, `database_service.dart` / `backup_service.dart`). Key = random 64-hex string, generated once and kept in platform secure storage (new `lib/services/db_key_service.dart`, `flutter_secure_storage`: Android Keystore-backed EncryptedSharedPreferences / iOS Keychain `first_unlock`). Android `minSdk` raised to ≥ 23 (`maxOf(flutter.minSdkVersion, 23)`).
+- **Legacy-install migration**: `DatabaseService._init` detects a plaintext `splitsmart_v3.db` (header check `isPlaintextDb`) and converts it once in place via `ATTACH … KEY` + `sqlcipher_export` (`encryptPlaintextDb`), preserving `PRAGMA user_version` (critical — export doesn't copy it; without it `openDatabase(version:19)` would rerun `onCreate`). WAL/SHM sidecars cleared after the swap.
+- **Backups — 3 DB flavors** (`RestoreResult` enum in `backup_service.dart`):
+  - *Local/auto backup* (no passphrase): zips the raw device-keyed DB — encrypted at rest, restorable only on the same device.
+  - *Shared backup*: settings Share flow now requires a **user passphrase** (min 6 chars, dialog in `settings_screen.dart`); DB exported via `exportEncryptedCopy` (SQLCipher KDFs the passphrase) → portable across devices.
+  - *Restore* stages the DB to a temp file and probes flavor BEFORE touching live data: plaintext-legacy → restored then encrypted in place; device-key → placed as-is; passphrase → UI prompts (`needsPassphrase`) and the snapshot is **rekeyed to the device key** (`rekeyCopy`). Wrong passphrase leaves current data intact.
+- Known limitation: receipt images inside backup ZIPs remain unencrypted (the DB is the sensitive payload); zip-level AES not used to avoid weak-ZipCrypto false confidence.
+- `flutter analyze` clean; 67/67 tests pass.
+
 ### 2026-06-12 — Security-review fixes: store readiness + access tightening
 - **iOS Info.plist**: added all 5 usage descriptions (camera, mic, speech, photo library, Face ID) — was an App Store/TestFlight blocker.
 - **Backup restore hardening** (`backup_service.dart`): rejects ZIPs > 100 MB, > 1000 entries, > 100 MB per entry, or > 250 MB expanded (`_archiveLooksSafe`) before decode/restore — closes local memory-DoS risk.

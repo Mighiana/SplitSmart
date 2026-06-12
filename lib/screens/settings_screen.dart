@@ -168,12 +168,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Ask for a backup passphrase. Returns null if the user cancels.
+  Future<String?> _askPassphrase({
+    required String title,
+    required String message,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TC.card(ctx),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            color: TC.text(ctx),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: TextStyle(fontSize: 13, color: TC.text2(ctx)),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: true,
+              style: TextStyle(color: TC.text(ctx)),
+              decoration: InputDecoration(
+                hintText: 'Passphrase (min 6 characters)',
+                hintStyle: TextStyle(color: TC.text2(ctx), fontSize: 13),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: TC.text2(ctx))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text(
+              'Continue',
+              style: TextStyle(color: _cGreen, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return null;
+    if (result.length < 6) {
+      _snack('Passphrase must be at least 6 characters.',
+          icon: Icons.error_outline, iconColor: _cRed);
+      return null;
+    }
+    return result;
+  }
+
   Future<void> _shareBackup() async {
     if (_isWorking) return;
     HapticFeedback.lightImpact();
+
+    // Shared backups leave the device, so they are encrypted with a
+    // passphrase (needed again to restore — including on a new phone).
+    final passphrase = await _askPassphrase(
+      title: 'Protect This Backup',
+      message:
+          'Choose a passphrase to encrypt the backup. You will need it to '
+          'restore — there is no way to recover it if forgotten.',
+    );
+    if (passphrase == null || !mounted) return;
+
     setState(() => _isWorking = true);
     try {
-      final file = await BackupService.createBackup();
+      final file = await BackupService.createBackup(passphrase: passphrase);
       if (!mounted) return;
       await BackupService.shareBackup(file, context);
       AnalyticsService.logBackupShared();
@@ -308,20 +384,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isWorking = true);
     try {
       final appState = context.read<AppState>();
-      final ok = await BackupService.restoreFromFile(file, appState);
+      var result = await BackupService.restoreFromFile(file, appState);
+
+      // Passphrase-protected backup: prompt and retry once.
+      if (result == RestoreResult.needsPassphrase && mounted) {
+        setState(() => _isWorking = false);
+        final passphrase = await _askPassphrase(
+          title: 'Backup Is Protected',
+          message: 'Enter the passphrase this backup was created with.',
+        );
+        if (passphrase == null || !mounted) return;
+        setState(() => _isWorking = true);
+        result = await BackupService.restoreFromFile(
+          file,
+          appState,
+          passphrase: passphrase,
+        );
+      }
+
       if (!mounted) return;
-      if (ok) {
-        _snack(
-          'Restore complete! All data recovered.',
-          icon: Icons.check_circle_rounded,
-        );
-        AnalyticsService.logBackupRestored();
-      } else {
-        _snack(
-          'Restore failed. File may be corrupted.',
-          icon: Icons.error_outline,
-          iconColor: _cRed,
-        );
+      switch (result) {
+        case RestoreResult.success:
+          _snack(
+            'Restore complete! All data recovered.',
+            icon: Icons.check_circle_rounded,
+          );
+          AnalyticsService.logBackupRestored();
+        case RestoreResult.wrongPassphrase:
+          _snack(
+            'Wrong passphrase for this backup.',
+            icon: Icons.error_outline,
+            iconColor: _cRed,
+          );
+        case RestoreResult.needsPassphrase:
+          break; // user cancelled the prompt
+        case RestoreResult.invalidFile:
+          _snack(
+            'Restore failed. File may be corrupted.',
+            icon: Icons.error_outline,
+            iconColor: _cRed,
+          );
       }
     } catch (e) {
       _snack('Restore error: $e', icon: Icons.error_outline, iconColor: _cRed);

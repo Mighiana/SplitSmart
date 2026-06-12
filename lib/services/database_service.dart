@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart';
 import '../providers/app_state.dart';
+import 'db_key_service.dart';
 
 /// Singleton SQLite service.
 class DatabaseService {
@@ -29,14 +31,134 @@ class DatabaseService {
   Future<Database> _init() async {
     final dir  = await getDatabasesPath();
     final path = join(dir, 'splitsmart_v3.db');
+    final key  = await DbKeyService.getOrCreateKey();
+
+    // SEC: encrypt-at-rest migration. Installs that predate SQLCipher have a
+    // plaintext DB; convert it in place once before opening with the key.
+    if (await isPlaintextDb(path)) {
+      await encryptPlaintextDb(path, key);
+    }
 
     return openDatabase(
       path,
+      password: key,
       version: 19,
       onCreate: _create,
       onUpgrade: _upgrade,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
     );
+  }
+
+  /// True if the file at [path] exists and carries the plaintext SQLite
+  /// header ("SQLite format 3\0"). SQLCipher databases have random headers.
+  static Future<bool> isPlaintextDb(String path) async {
+    final f = File(path);
+    if (!await f.exists() || await f.length() < 16) return false;
+    final raf = await f.open();
+    try {
+      final header = await raf.read(16);
+      return String.fromCharCodes(header).startsWith('SQLite format 3');
+    } finally {
+      await raf.close();
+    }
+  }
+
+  /// One-way conversion of a plaintext SQLite file into a SQLCipher database
+  /// keyed with [key], preserving schema version. Used for the legacy-install
+  /// migration and for restoring old plaintext backups.
+  static Future<void> encryptPlaintextDb(String path, String key) async {
+    final tmpPath = '$path.enc_tmp';
+    final tmp = File(tmpPath);
+    if (await tmp.exists()) await tmp.delete();
+
+    final plain = await openDatabase(path);
+    try {
+      final ver = Sqflite.firstIntValue(
+            await plain.rawQuery('PRAGMA user_version'),
+          ) ??
+          0;
+      final escaped = tmpPath.replaceAll("'", "''");
+      await plain.rawQuery("ATTACH DATABASE '$escaped' AS encrypted KEY '$key'");
+      await plain.rawQuery("SELECT sqlcipher_export('encrypted')");
+      // sqlcipher_export does not copy user_version; without it the next
+      // openDatabase(version: N) would treat the DB as new and run onCreate.
+      await plain.execute('PRAGMA encrypted.user_version = $ver');
+      await plain.rawQuery('DETACH DATABASE encrypted');
+    } finally {
+      await plain.close();
+    }
+
+    // Swap the encrypted copy into place and clear stale WAL/SHM sidecars.
+    await tmp.rename(path);
+    for (final suffix in ['-wal', '-shm']) {
+      final sidecar = File('$path$suffix');
+      if (await sidecar.exists()) await sidecar.delete();
+    }
+    debugPrint('[DB] plaintext database encrypted in place');
+  }
+
+  /// Export the live database to [destPath], encrypted with [key] (typically
+  /// a user passphrase — SQLCipher runs its own PBKDF2 on string keys). The
+  /// result is a portable single-file snapshot (no WAL/SHM sidecars).
+  Future<void> exportEncryptedCopy(String destPath, String key) async {
+    final dest = File(destPath);
+    if (await dest.exists()) await dest.delete();
+
+    final db = await _database;
+    final ver = Sqflite.firstIntValue(
+          await db.rawQuery('PRAGMA user_version'),
+        ) ??
+        0;
+    final escapedPath = destPath.replaceAll("'", "''");
+    final escapedKey = key.replaceAll("'", "''");
+    await db.rawQuery(
+        "ATTACH DATABASE '$escapedPath' AS portable KEY '$escapedKey'");
+    try {
+      await db.rawQuery("SELECT sqlcipher_export('portable')");
+      await db.execute('PRAGMA portable.user_version = $ver');
+    } finally {
+      await db.rawQuery('DETACH DATABASE portable');
+    }
+  }
+
+  /// True if the SQLCipher file at [path] opens with [key].
+  static Future<bool> canOpenWithKey(String path, String key) async {
+    Database? db;
+    try {
+      db = await openDatabase(path, password: key, readOnly: true);
+      await db.rawQuery('SELECT count(*) FROM sqlite_master');
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      await db?.close();
+    }
+  }
+
+  /// Re-encrypt the SQLCipher file at [srcPath] (keyed with [srcKey]) into
+  /// [destPath] keyed with [destKey]. Used when restoring a passphrase-keyed
+  /// backup onto this device's own key.
+  static Future<void> rekeyCopy(
+      String srcPath, String srcKey, String destPath, String destKey) async {
+    final dest = File(destPath);
+    if (await dest.exists()) await dest.delete();
+
+    final src = await openDatabase(srcPath, password: srcKey);
+    try {
+      final ver = Sqflite.firstIntValue(
+            await src.rawQuery('PRAGMA user_version'),
+          ) ??
+          0;
+      final escapedPath = destPath.replaceAll("'", "''");
+      final escapedKey = destKey.replaceAll("'", "''");
+      await src.rawQuery(
+          "ATTACH DATABASE '$escapedPath' AS rekeyed KEY '$escapedKey'");
+      await src.rawQuery("SELECT sqlcipher_export('rekeyed')");
+      await src.execute('PRAGMA rekeyed.user_version = $ver');
+      await src.rawQuery('DETACH DATABASE rekeyed');
+    } finally {
+      await src.close();
+    }
   }
 
   Future<void> _create(Database db, int version) async {

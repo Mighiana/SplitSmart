@@ -36,8 +36,9 @@ android {
 
     defaultConfig {
         applicationId = "com.splitsmart.splitsmart"
-        // flutter_local_notifications and Firebase require minSdk 21+
-        minSdk = flutter.minSdkVersion
+        // flutter_local_notifications and Firebase require minSdk 21+;
+        // flutter_secure_storage (DB encryption key) requires 23+.
+        minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

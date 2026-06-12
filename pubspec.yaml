@@ -12,8 +12,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # Offline local database
-  sqflite: ^2.3.3
+  # Offline local database (SQLCipher-encrypted at rest; key in Keystore/Keychain)
+  sqflite_sqlcipher: ^3.1.0
+  flutter_secure_storage: ^9.2.2
   path_provider: ^2.1.3
   path: ^1.9.0
 
