@@ -6,6 +6,12 @@
 build/
 *.iml
 
+# Obfuscation symbol files (per-release; needed to decode crash reports).
+# NOT committed (they change every build and bloat the repo) — but you MUST
+# retain/back them up locally or upload to Crashlytics, or that release's
+# crash stack traces are permanently unreadable. See scripts/build_release.ps1.
+debug-symbols/
+
 # Build/JVM crash logs & temp working files
 hs_err_pid*.log
 android/hs_err_pid*.log

@@ -164,6 +164,12 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Release obfuscation + client-hardening guidance
+- **Obfuscated release build script** (`scripts/build_release.ps1`): `flutter build appbundle --release --flavor prod --obfuscate --split-debug-info=debug-symbols/<version>/`. Mangles Dart symbol names (defense-in-depth vs reverse-engineering of app LOGIC; does NOT and cannot hide Firebase API keys — those are public client identifiers, security is rules+Auth+AppCheck). **USE THIS SCRIPT for every Play Store release** instead of the bare build command. R8/Java obfuscation already on (`isMinifyEnabled=true`).
+- **⚠️ Symbol retention**: `debug-symbols/` is git-ignored (per-build, repo-bloating). Owner MUST back up each release's folder (or upload to Crashlytics) or that release's crash stack traces are permanently undecodable. Same criticality class as the keystore.
+- **App Check verified correct in code** (`main.dart`): Play Integrity (Android release) / DeviceCheck (iOS release), debug providers only in `kDebugMode`. Client attestation is done.
+- **Console TODOs the owner must click (free, Spark-compatible, NOT doable via CLI)** — see `docs/CONSOLE_HARDENING.md`: (1) App Check → enforce on Cloud Firestore [HIGHEST VALUE — blocks scripted quota-exhaustion DoS]; (2) restrict the Android API key to the app's package + SHA-256 in Google Cloud console; (3) Auth → enable email enumeration protection + leaked-password protection. These are the real-world max for a client app on the free plan.
+
 ### 2026-06-12 — Red-team pass: expense/settlement field hardening
 - **Pentest of attacker-as-group-member.** No cross-tenant or escalation holes found (other groups unreachable, `addedBy`/`createdBy` unforgeable, premium claim server-only, names/memberMeta now append/remove-only). Enforceable gaps fixed below; one design property documented.
 - **FIXED + DEPLOYED — type-confusion & doc-bloat in expenses/settlements**: `validExpense`/`validSettlement` previously bounded only `amount`/`desc`/`paidBy`/`from`/`to`, leaving `paidById`, `splitIds`, `splits`, `cat`, `subcat`, `fromId`, `toId` unbounded — a member could write a multi-hundred-KB doc (sync/cost abuse on every member) or wrong-typed fields to break other clients' parsers. Now all are type+size bounded via null-tolerant `optStr`/`optMap` helpers (client writes explicit nulls, so `== null` is allowed before the `is string`/`is map` check).
