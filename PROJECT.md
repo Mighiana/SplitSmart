@@ -167,7 +167,9 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 ### 2026-06-12 — Package name changed (Play conflict)
 - **`applicationId` changed `com.splitsmart.splitsmart` → `com.mighiana.splitsmart`** (`android/app/build.gradle.kts` defaultConfig). The original was already registered to another developer on Google Play ("package name already in use"), and Play package names are globally unique + permanent. `namespace` (internal code package) intentionally LEFT as `com.splitsmart.splitsmart` — it's not Play-facing, so no Kotlin sources moved. dev flavor → `com.mighiana.splitsmart.dev`.
 - **Firebase**: added a SECOND Android app (`com.mighiana.splitsmart`) to the SAME project `splitsmart-3898` (no data touched). New `google-services.json` (contains both packages) swapped into `android/app/`. Both SHA-1s (debug `b7:b3:72…`, release `80:fb:cb…`) + SHA-256s re-added to the new app.
-- Rebuilt obfuscated release AAB under the new id. ⚠️ Play app-signing SHA-1 still to be added to the NEW Firebase app after first upload.
+- Rebuilt obfuscated release AAB under the new id, uploaded to **Internal testing** (live; 19.6 MB download size confirmed). Added 6 tester Gmails.
+- **Play app-signing SHA added to the `com.mighiana.splitsmart` Firebase app** (so Play-delivered builds can Google-Sign-In): SHA-1 `69:8F:B2:8E:4C:9D:71:89:52:F7:4C:AC:D7:D0:E7:8C:76:1F:F4:3C`, SHA-256 `42:91:81:9B:7C:AB:2C:25:C5:FF:88:EF:A3:C0:F4:40:26:2E:55:F4:E9:D7:0C:CF:95:29:7C:BB:EF:2B:13:B2`. The new Firebase app now has 3 fingerprint sources: debug, release/upload key (`80:fb:cb…`), and Play app-signing (`69:8f:b2…`).
+- **BETA IS LIVE.** Remaining: testers install via opt-in link + verify sign-in; fill Play App-content forms (Data safety from `docs/PLAY_DATA_SAFETY.md`, content rating, target audience) before promoting to closed/production.
 
 ### 2026-06-12 — Google Sign-In SHA fingerprints (gotcha, resolved)
 - **Symptom**: release APK threw `PlatformException(sign_in_failed, ApiException: 10)` (DEVELOPER_ERROR) on Google Sign-In, while debug builds worked.
