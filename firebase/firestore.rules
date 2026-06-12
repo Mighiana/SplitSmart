@@ -236,6 +236,14 @@ service cloud.firestore {
                         && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
                         && request.auth.uid in request.resource.data.memberUids
                         && request.resource.data.memberUids.size() <= 50
+                        // SEC: a joiner may only APPEND — existing display
+                        // names are retained and only their own memberMeta
+                        // entry may be touched (no vandalizing other members).
+                        && request.resource.data.get('members', []).hasAll(resource.data.get('members', []))
+                        && request.resource.data.get('members', []).size() == resource.data.get('members', []).size() + 1
+                        && request.resource.data.get('memberMeta', {})
+                             .diff(resource.data.get('memberMeta', {}))
+                             .affectedKeys().hasOnly([request.auth.uid])
                         // GUEST GATE: anonymous joiners require a premium group.
                         && (!isAnon() || resource.data.get('isPremiumGroup', false) == true)
                         // Joiners must never flip the premium flag.
@@ -250,6 +258,14 @@ service cloud.firestore {
                         && !(request.auth.uid in request.resource.data.memberUids)
                         && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
                         && request.resource.data.memberUids.hasOnly(resource.data.memberUids)
+                        // SEC: a leaver may only REMOVE — no new or renamed
+                        // display names (arrayRemove may drop duplicate name
+                        // entries, so no lower size bound), and only their own
+                        // memberMeta entry may be touched.
+                        && resource.data.get('members', []).hasAll(request.resource.data.get('members', []))
+                        && request.resource.data.get('memberMeta', {})
+                             .diff(resource.data.get('memberMeta', {}))
+                             .affectedKeys().hasOnly([request.auth.uid])
                         && !premiumFlagChanged()
                       )
                     );

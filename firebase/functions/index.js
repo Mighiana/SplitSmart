@@ -256,15 +256,14 @@ const ALLOWED_PRODUCT_IDS = new Set(Object.keys(PRODUCT_DURATION_MS));
 async function applyEntitlement(uid, ent) {
   const active = !!ent.premium && (!ent.until || ent.until > Date.now());
 
-  // 1. Custom claim (preserve any existing claims).
-  try {
-    const user = await auth.getUser(uid);
-    const claims = Object.assign({}, user.customClaims || {});
-    claims.premium = active;
-    await auth.setCustomUserClaims(uid, claims);
-  } catch (e) {
-    console.error(`[billing] setCustomUserClaims failed for ${uid}:`, e.message);
-  }
+  // 1. Custom claim (preserve any existing claims). This is the authoritative
+  //    premium signal — if it cannot be set, ABORT before writing the mirror
+  //    doc or stamping groups, so the UX never shows premium that the
+  //    security rules will deny.
+  const user = await auth.getUser(uid);
+  const claims = Object.assign({}, user.customClaims || {});
+  claims.premium = active;
+  await auth.setCustomUserClaims(uid, claims);
 
   // 2. Mirror doc.
   await db.collection("users").doc(uid).set(

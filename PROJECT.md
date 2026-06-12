@@ -164,6 +164,13 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Backend re-review: member-vandalism rules fix + entitlement hardening
+- **Full backend review** (rules, functions, storage, deployed state). Verdict: design solid; findings below.
+- **FIXED + DEPLOYED — member vandalism (was the only pre-beta blocker)**: the group-update join path (b) and self-leave path (c) validated `memberUids` but left `members` (display names) and `memberMeta` unconstrained — any member could rewrite everyone's names or wipe `memberMeta` in a join/leave write. Now: joins may only APPEND (names superset +1, `memberMeta.diff().affectedKeys().hasOnly([uid])`), leaves may only REMOVE (names subset — no lower size bound because client `arrayRemove` drops duplicate name entries — same memberMeta diff guard). Owner path (a) intentionally unrestricted. Rules deployed ✓.
+- **Verified safe — receipts without Storage**: `storage_service.uploadReceipt` catches all errors → null; the single caller (`app_state.dart` ~1254) keeps the local receipt path when url == null. With no Storage bucket (Spark), receipts stay device-local; nothing breaks.
+- **Hardened `applyEntitlement`** (functions, code-only — undeployable until Blaze): custom-claim set failure now ABORTS before the mirror doc/group stamping, so UX can never show premium that rules deny.
+- **Accepted risks for beta (documented, fix = Blaze + resolveInvite CF)**: (1) any signed-in user with a leaked groupId can read the group doc INCLUDING `inviteCode` → join capability, since Spark rules allow open single-doc `get`; group IDs are unguessable. (2) Purchase-webhook fallback trusts client-written `purchaseQueue` token→uid mapping (moot — functions undeployed). (3) `inviteCodes`/`purchaseTokens` orphans accumulate (no TTL). (4) `cleanupAnonUsers` not running. (5) App Check console enforcement unverified — check Firebase console → App Check when next there.
+
 ### 2026-06-12 — Spark-plan reality check: invite flow made dual-mode
 - **Discovery**: project `splitsmart-3898` is on the FREE Spark plan → **Cloud Functions have NEVER deployed** (Blaze required). `firebase functions:list` = empty. This means: no push notifications via CF triggers, no `verifyPurchase`, and the `resolveInvite` CF from earlier today was never live (the rules that depended on it would have broken joining).
 - **Fix — dual-mode invite resolution** (`firestore_service.dart` `_resolveInvite`): client tries direct Firestore reads first (Spark rules allow signed-in single-doc `get` on `inviteCodes` + `groups`); on `permission-denied` it falls back to the `resolveInvite` CF. Works on both backend configurations with no client update.
