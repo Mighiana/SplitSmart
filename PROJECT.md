@@ -164,6 +164,11 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Play prep: device install + Data Safety draft
+- **Obfuscated release APK built + installed** on physical device (Samsung SM-A566B / Galaxy A56, Android 16 / API 36) via `flutter install --use-application-binary`. APK is 112.8 MB (fat/all-arch; per-device install is smaller). Symbols in `debug-symbols/apk-release/`. NOTE: `.aab` (Play upload) cannot be sideloaded — release APK is the device-install artifact.
+- **Data Safety form drafted** (`docs/PLAY_DATA_SAFETY.md`): copy-ready answers for Play Console App-content (data types/purposes/encryption/deletion), content rating, target audience (18+, not children), ads (none) — matched to the privacy policy.
+- **Remaining to ship internal test**: fill Play Console App content (privacy URL `https://mighiana.github.io/splitsmart-privacy/privacy_policy.html` + Data Safety from the doc + content rating + target audience + ads=No) → Testing → Internal testing → upload `app-prod-release.aab` → add testers → roll out.
+
 ### 2026-06-12 — Release obfuscation + client-hardening guidance
 - **Obfuscated release build script** (`scripts/build_release.ps1`): `flutter build appbundle --release --flavor prod --obfuscate --split-debug-info=debug-symbols/<version>/`. Mangles Dart symbol names (defense-in-depth vs reverse-engineering of app LOGIC; does NOT and cannot hide Firebase API keys — those are public client identifiers, security is rules+Auth+AppCheck). **USE THIS SCRIPT for every Play Store release** instead of the bare build command. R8/Java obfuscation already on (`isMinifyEnabled=true`).
 - **Symbol retention**: `debug-symbols/` is now COMMITTED to the repo (~15 MB/release) so crash-decode symbols can never be lost and always match a release — no manual backup needed. (Earlier wording called this keystore-critical; corrected — losing symbols only means one build's obfuscated crashes can't be decoded, not loss of update ability.)
