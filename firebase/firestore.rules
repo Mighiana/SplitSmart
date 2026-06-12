@@ -164,8 +164,8 @@ service cloud.firestore {
     // ─── Groups ──────────────────────────────────────────────────────────────
     // Only group members can read/write group data.
     // Any authenticated (non-guest) user can create a new group.
-    // Joining resolves invite codes via the resolveInvite Cloud Function;
-    // direct group reads are member/creator-only.
+    // Joining: client resolves invite codes directly (Spark plan); the
+    // resolveInvite CF takes over once the project is on Blaze.
     match /groups/{groupId} {
 
       // SEC-C2: Create requires a non-guest caller AND a well-formed document:
@@ -183,14 +183,14 @@ service cloud.firestore {
                     && (request.resource.data.get('isPremiumGroup', false) == false
                         || hasPremium());
 
-      // SEC: get is members/creator only. Invite resolution (the old reason
-      // for a public get) now goes through the `resolveInvite` Cloud Function,
-      // so knowing a group ID no longer exposes its metadata.
-      allow get: if request.auth != null
-                 && (
-                   request.auth.uid in resource.data.get('memberUids', [])
-                   || resource.data.createdBy == request.auth.uid
-                 );
+      // Spark-plan compromise: any signed-in user may get a group by ID —
+      // required for client-side invite-code joins because the resolveInvite
+      // Cloud Function cannot be deployed without Blaze. Group IDs are
+      // unguessable Firestore IDs, so exposure needs a leaked ID. Once the
+      // project is on Blaze and resolveInvite is deployed, tighten this to:
+      //   request.auth.uid in resource.data.get('memberUids', [])
+      //   || resource.data.createdBy == request.auth.uid
+      allow get: if request.auth != null;
 
       // Allow list if the user is a member of the group OR created it (legacy fallback)
       allow list: if request.auth != null
@@ -314,9 +314,10 @@ service cloud.firestore {
     // ─── Invite Codes ────────────────────────────────────────────────────────
     // SEC-C5: Secure invite code resolution without collection scraping.
     match /inviteCodes/{code} {
-      // SEC: resolution happens in the resolveInvite Cloud Function (Admin
-      // SDK bypasses rules); clients never need to read mappings directly.
-      allow get: if false;
+      // Spark-plan compromise: clients resolve codes directly (single-doc
+      // get only, no list/enumeration). Switch to `allow get: if false` once
+      // the resolveInvite Cloud Function is deployed (needs Blaze).
+      allow get: if request.auth != null;
       allow create: if validInviteCodeMapping(code);
       allow update, delete: if false;
     }

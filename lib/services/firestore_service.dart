@@ -601,12 +601,48 @@ class FirestoreService {
   /// SEC-H4: Maximum group members allowed.
   static const int _maxGroupMembers = 50;
 
-  /// Resolve an invite code via the `resolveInvite` Cloud Function.
+  /// Resolve an invite code to `{groupId, name, isPremiumGroup, memberCount,
+  /// memberUids, members, memberMeta}`, or null if invalid.
   ///
-  /// SEC: non-members can no longer `get` group docs directly (rules restrict
-  /// reads to members), so the preview/member arrays needed pre-join come from
-  /// the server, gated on possession of a valid code. Returns null if invalid.
+  /// Tries the direct Firestore reads first (works on the Spark plan, where
+  /// rules allow signed-in single-doc gets). If rules have been tightened to
+  /// member-only reads (Blaze setup), the read is denied and we fall back to
+  /// the `resolveInvite` Cloud Function — so both backend configurations work
+  /// without a client update.
   Future<Map<String, dynamic>?> _resolveInvite(String cleanCode) async {
+    try {
+      final mapping =
+          await _db.collection('inviteCodes').doc(cleanCode).get();
+      if (!mapping.exists) return null;
+      final groupId = mapping.data()?['groupId'] as String? ?? '';
+      if (groupId.isEmpty) return null;
+      final doc = await _groupsCol.doc(groupId).get();
+      if (!doc.exists) return null;
+      final d = doc.data() as Map<String, dynamic>;
+      return {
+        'groupId': groupId,
+        'name': d['name'] ?? '',
+        'isPremiumGroup': d['isPremiumGroup'] == true,
+        'memberCount': (d['memberUids'] as List?)?.length ?? 0,
+        'memberUids': List<String>.from(d['memberUids'] ?? []),
+        'members': List<String>.from(d['members'] ?? []),
+        'memberMeta': Map<String, dynamic>.from(d['memberMeta'] as Map? ?? {}),
+      };
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') {
+        debugPrint('[Firestore] invite resolution error: $e');
+        return null;
+      }
+      // Member-only rules are live: resolve through the Cloud Function.
+      return _resolveInviteViaFunction(cleanCode);
+    } catch (e) {
+      debugPrint('[Firestore] invite resolution error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _resolveInviteViaFunction(
+      String cleanCode) async {
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('resolveInvite')
