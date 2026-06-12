@@ -28,12 +28,34 @@ service cloud.firestore {
       return v is number && v >= 0 && v <= 1000000000;
     }
     // SEC-C3: validate an expense document's client-supplied fields.
+    // NOTE: rules can bound TYPES and SIZES but cannot prove the payer/splits
+    // are "honest" — within a group, members are mutually trusting by design
+    // (like Splitwise). What we CAN guarantee: no other group is touched,
+    // `addedBy` is the real caller (set elsewhere), amounts are sane, and no
+    // member can bloat a doc or smuggle wrong-typed fields to break clients.
+    // Optional string: absent OR null OR a bounded string. The client writes
+    // explicit nulls for unset fields, and `null is string` is false, so we
+    // must allow null explicitly or legitimate writes would be rejected.
+    function optStr(data, field, maxLen) {
+      return data.get(field, null) == null
+          || (data.get(field, '') is string && data.get(field, '').size() <= maxLen);
+    }
+    // Optional map: absent OR null OR a map with a bounded key count.
+    function optMap(data, field, maxKeys) {
+      return data.get(field, null) == null
+          || (data.get(field, {}) is map && data.get(field, {}).size() <= maxKeys);
+    }
     function validExpense() {
       return validAmount(request.resource.data.amount)
           && request.resource.data.get('desc', '') is string
           && request.resource.data.get('desc', '').size() <= 200
           && request.resource.data.get('paidBy', '') is string
-          && request.resource.data.get('paidBy', '').size() <= 100;
+          && request.resource.data.get('paidBy', '').size() <= 100
+          && optStr(request.resource.data, 'paidById', 128)
+          && optStr(request.resource.data, 'cat', 32)
+          && optStr(request.resource.data, 'subcat', 64)
+          && optMap(request.resource.data, 'splits', 50)
+          && optMap(request.resource.data, 'splitIds', 50);
     }
     // SEC-C3: validate a settlement document's client-supplied fields.
     function validSettlement() {
@@ -41,7 +63,9 @@ service cloud.firestore {
           && request.resource.data.get('from', '') is string
           && request.resource.data.get('from', '').size() <= 100
           && request.resource.data.get('to', '') is string
-          && request.resource.data.get('to', '').size() <= 100;
+          && request.resource.data.get('to', '').size() <= 100
+          && optStr(request.resource.data, 'fromId', 128)
+          && optStr(request.resource.data, 'toId', 128);
     }
     // SEC-C4: shared group document shape limits. Rules cannot prove every
     // nested value is perfect, but they can prevent obvious bloat/tampering.

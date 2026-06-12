@@ -164,6 +164,11 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Red-team pass: expense/settlement field hardening
+- **Pentest of attacker-as-group-member.** No cross-tenant or escalation holes found (other groups unreachable, `addedBy`/`createdBy` unforgeable, premium claim server-only, names/memberMeta now append/remove-only). Enforceable gaps fixed below; one design property documented.
+- **FIXED + DEPLOYED — type-confusion & doc-bloat in expenses/settlements**: `validExpense`/`validSettlement` previously bounded only `amount`/`desc`/`paidBy`/`from`/`to`, leaving `paidById`, `splitIds`, `splits`, `cat`, `subcat`, `fromId`, `toId` unbounded — a member could write a multi-hundred-KB doc (sync/cost abuse on every member) or wrong-typed fields to break other clients' parsers. Now all are type+size bounded via null-tolerant `optStr`/`optMap` helpers (client writes explicit nulls, so `== null` is allowed before the `is string`/`is map` check).
+- **Documented design property (NOT fixable in rules, same as Splitwise)**: within a group, a member can record an expense attributing payment to another member, or a settlement between two parties, that isn't "honest". This is inherent to cooperative split apps and is mitigated by: full real-time visibility of every doc, locked `addedBy` (you can't frame someone else as the recorder), amount caps, and author/creator delete+edit. Closing it fully needs a server authority (Cloud Function) → Blaze.
+
 ### 2026-06-12 — Backend re-review: member-vandalism rules fix + entitlement hardening
 - **Full backend review** (rules, functions, storage, deployed state). Verdict: design solid; findings below.
 - **FIXED + DEPLOYED — member vandalism (was the only pre-beta blocker)**: the group-update join path (b) and self-leave path (c) validated `memberUids` but left `members` (display names) and `memberMeta` unconstrained — any member could rewrite everyone's names or wipe `memberMeta` in a join/leave write. Now: joins may only APPEND (names superset +1, `memberMeta.diff().affectedKeys().hasOnly([uid])`), leaves may only REMOVE (names subset — no lower size bound because client `arrayRemove` drops duplicate name entries — same memberMeta diff guard). Owner path (a) intentionally unrestricted. Rules deployed ✓.
