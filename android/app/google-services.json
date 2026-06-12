@@ -7,12 +7,72 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:698180984926:android:f0fb4ba78bb614b42ed4cf",
+        "android_client_info": {
+          "package_name": "com.mighiana.splitsmart"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "698180984926-j5saicjq4d05dg0bd7lnusop0113dph5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mighiana.splitsmart",
+            "certificate_hash": "80fbcb2f9fc51ac26e4fa90bd236f40cc7376d8a"
+          }
+        },
+        {
+          "client_id": "698180984926-o7i9j4mbn3f10mmn9fmpvt409einnk8t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mighiana.splitsmart",
+            "certificate_hash": "b7b372bfdb2f6bd4b184d0ebfe9e3763334cc482"
+          }
+        },
+        {
+          "client_id": "698180984926-usqs3pcvjl47ffgamhf4ing9ar740nt4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdqQTvTrtlsRaSbQ7wkFcsw7KwvKm060U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "698180984926-usqs3pcvjl47ffgamhf4ing9ar740nt4.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "698180984926-pm8od6ec0rhdio3lrt8lrm66bmtqmev9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mighiana.splitsmart"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:698180984926:android:0bd3f6452f13efd42ed4cf",
         "android_client_info": {
           "package_name": "com.splitsmart.splitsmart"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "698180984926-9hod3u9sisv3jiartnoqf4brl1bt1bgo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.splitsmart.splitsmart",
+            "certificate_hash": "80fbcb2f9fc51ac26e4fa90bd236f40cc7376d8a"
+          }
+        },
         {
           "client_id": "698180984926-vnf0qja1m27tr5eedckjt3mkrq6dvg3q.apps.googleusercontent.com",
           "client_type": 1,
@@ -37,6 +97,13 @@
             {
               "client_id": "698180984926-usqs3pcvjl47ffgamhf4ing9ar740nt4.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "698180984926-pm8od6ec0rhdio3lrt8lrm66bmtqmev9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mighiana.splitsmart"
+              }
             }
           ]
         }

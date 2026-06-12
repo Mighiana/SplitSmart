@@ -35,7 +35,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.splitsmart.splitsmart"
+        // Play-facing app identity. NOTE: differs from `namespace` above on
+        // purpose — namespace is the internal code package (kept stable to
+        // avoid moving Kotlin sources); applicationId is the unique Play /
+        // Firebase identifier. The original com.splitsmart.splitsmart was
+        // already taken on Google Play by another developer.
+        applicationId = "com.mighiana.splitsmart"
         // flutter_local_notifications and Firebase require minSdk 21+;
         // flutter_secure_storage (DB encryption key) requires 23+.
         minSdk = maxOf(flutter.minSdkVersion, 23)
@@ -58,7 +63,7 @@ android {
     productFlavors {
         create("prod") {
             dimension = "env"
-            // production applicationId stays com.splitsmart.splitsmart
+            // production applicationId = com.mighiana.splitsmart (from defaultConfig)
             manifestPlaceholders["appName"] = "SplitSmart"
         }
         create("dev") {

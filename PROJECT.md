@@ -164,6 +164,11 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Package name changed (Play conflict)
+- **`applicationId` changed `com.splitsmart.splitsmart` → `com.mighiana.splitsmart`** (`android/app/build.gradle.kts` defaultConfig). The original was already registered to another developer on Google Play ("package name already in use"), and Play package names are globally unique + permanent. `namespace` (internal code package) intentionally LEFT as `com.splitsmart.splitsmart` — it's not Play-facing, so no Kotlin sources moved. dev flavor → `com.mighiana.splitsmart.dev`.
+- **Firebase**: added a SECOND Android app (`com.mighiana.splitsmart`) to the SAME project `splitsmart-3898` (no data touched). New `google-services.json` (contains both packages) swapped into `android/app/`. Both SHA-1s (debug `b7:b3:72…`, release `80:fb:cb…`) + SHA-256s re-added to the new app.
+- Rebuilt obfuscated release AAB under the new id. ⚠️ Play app-signing SHA-1 still to be added to the NEW Firebase app after first upload.
+
 ### 2026-06-12 — Google Sign-In SHA fingerprints (gotcha, resolved)
 - **Symptom**: release APK threw `PlatformException(sign_in_failed, ApiException: 10)` (DEVELOPER_ERROR) on Google Sign-In, while debug builds worked.
 - **Cause**: Google Sign-In validates the app's signing-cert SHA-1 against fingerprints registered in Firebase. Only the DEBUG key's SHA was registered; the release key's wasn't.
