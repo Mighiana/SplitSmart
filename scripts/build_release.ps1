@@ -11,8 +11,8 @@
 
   Obfuscation renames everything, so crash stack traces become unreadable
   symbols. The matching symbol files are written to debug-symbols/<version>/
-  so you can de-obfuscate later. KEEP THESE FILES - without the set that
-  matches a given release, that release's crash reports cannot be decoded.
+  and are COMMITTED to the repo (small, ~15 MB/release) so a release's crash
+  reports can always be decoded. After building, just commit the new folder.
 
 .PARAMETER Flavor
   Build flavor (default: prod).
@@ -64,4 +64,4 @@ if (Test-Path $aab) {
   Write-Host "Build reported success but the .aab was not found at $aab" -ForegroundColor Yellow
 }
 Write-Host "Symbols saved to: $symbolDir" -ForegroundColor Green
-Write-Host "BACK UP that folder - it is required to read crash reports for this release." -ForegroundColor Yellow
+Write-Host "Next: commit the debug-symbols/ folder so this release's crashes stay decodable." -ForegroundColor Yellow
