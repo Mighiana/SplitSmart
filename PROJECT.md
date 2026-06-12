@@ -172,6 +172,7 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
   - *Shared backup*: settings Share flow now requires a **user passphrase** (min 6 chars, dialog in `settings_screen.dart`); DB exported via `exportEncryptedCopy` (SQLCipher KDFs the passphrase) → portable across devices.
   - *Restore* stages the DB to a temp file and probes flavor BEFORE touching live data: plaintext-legacy → restored then encrypted in place; device-key → placed as-is; passphrase → UI prompts (`needsPassphrase`) and the snapshot is **rekeyed to the device key** (`rekeyCopy`). Wrong passphrase leaves current data intact.
 - Known limitation: receipt images inside backup ZIPs remain unencrypted (the DB is the sensitive payload); zip-level AES not used to avoid weak-ZipCrypto false confidence.
+- **App size**: deleted `assets/images/` (3 onboarding PNGs, ~2.9 MB) — dead since the 2026-06-10 icon-based onboarding redesign; removed dir from pubspec assets. Note: the 72.7 MB `.aab` is NOT the user download (~100 MB of it is Play-side proguard map + debug symbols); per-device Play download is ~25-30 MB.
 - `flutter analyze` clean; 67/67 tests pass.
 
 ### 2026-06-12 — Security-review fixes: store readiness + access tightening
