@@ -663,13 +663,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
       child: Row(
         children: [
           _GroupActionTile(
-            icon: '💸',
-            label: l.expense,
+            icon: Icons.add_rounded,
+            label: l.addExpense,
+            primary: true,
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddExpenseScreen())),
           ),
           const SizedBox(width: 10),
           _GroupActionTile(
-            icon: '⚙️',
+            icon: Icons.settings_rounded,
             label: l.settings,
             onTap: () {
               final g = context.read<AppState>().currentGroup;
@@ -1461,29 +1462,39 @@ class _SummaryCell extends StatelessWidget {
 }
 
 class _GroupActionTile extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final String label;
   final VoidCallback onTap;
+  // Primary = the main call-to-action (Add expense): filled teal so it reads
+  // as the obvious tap target, not a passive label.
+  final bool primary;
 
   const _GroupActionTile({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.primary = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final fg = primary ? Colors.white : const Color(0xFF6E8C86);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           height: 92,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: primary ? AppColors.green : Colors.white,
             borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: const Color(0xFFE9E4DB)),
+            border: Border.all(
+                color: primary ? AppColors.green : const Color(0xFFE9E4DB)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
+              BoxShadow(
+                  color: (primary ? AppColors.green : Colors.black)
+                      .withValues(alpha: primary ? 0.28 : 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4)),
             ],
           ),
           child: Column(
@@ -1493,17 +1504,19 @@ class _GroupActionTile extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEDE9E1),
+                  color: primary
+                      ? Colors.white.withValues(alpha: 0.22)
+                      : const Color(0xFFEDE9E1),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 alignment: Alignment.center,
-                child: Text(icon, style: const TextStyle(fontSize: 18)),
+                child: Icon(icon, size: 22, color: fg),
               ),
               const SizedBox(height: 9),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Color(0xFF9BB5B0),
+                style: TextStyle(
+                  color: fg,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
                 ),
