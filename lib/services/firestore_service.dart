@@ -658,71 +658,90 @@ class FirestoreService {
   }
 
   /// Join a group via invite code (server-resolved secure pattern).
+  ///
+  /// The join write must be built from CURRENT group state (the rules only
+  /// allow appending exactly the caller's own entry). If another member joins
+  /// between our resolve and our update, the write is rejected — so we retry
+  /// with freshly resolved data a few times before giving up.
   Future<GroupData?> joinGroupByInviteCode(String code, String memberName) async {
-    try {
-      final cleanCode = code.toUpperCase().trim();
+    final cleanCode = code.toUpperCase().trim();
 
-      // 1. Resolve the code server-side (CF reads the mapping + group).
-      final resolved = await _resolveInvite(cleanCode);
-      if (resolved == null) {
-        debugPrint('[Firestore] Invalid invite code or mapping not found.');
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // 1. Resolve the code (direct reads on Spark, CF fallback on Blaze).
+        final resolved = await _resolveInvite(cleanCode);
+        if (resolved == null) {
+          debugPrint('[Firestore] Invalid invite code or mapping not found.');
+          return null;
+        }
+        final String groupId = resolved['groupId'] ?? '';
+        if (groupId.isEmpty) return null;
+
+        final memberUids = List<String>.from(resolved['memberUids'] ?? []);
+        final members = List<String>.from(resolved['members'] ?? []);
+        final isPremiumGroup = resolved['isPremiumGroup'] == true;
+        final isGuest = AuthService.instance.isGuest;
+
+        // GUEST GATE: anonymous users may only join groups whose owner has
+        // SplitSmart Premium. Full accounts may always join via invite (free).
+        // Security rules enforce the same condition server-side.
+        if (isGuest && !isPremiumGroup) {
+          debugPrint('[Firestore] Guest join blocked: group is not premium.');
+          return null;
+        }
+
+        // SEC-H4: Enforce member cap locally (Rules enforce it server-side)
+        if (memberUids.length >= _maxGroupMembers) {
+          debugPrint('[Firestore] Group full: ${memberUids.length} >= $_maxGroupMembers');
+          return null;
+        }
+
+        if (!memberUids.contains(_uid)) {
+          memberUids.add(_uid);
+          // Sanitize member name length
+          final safeName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
+          members.add(safeName);
+
+          // Authoritative uid → name mapping (fixes parallel-array ambiguity).
+          final memberMeta =
+              Map<String, dynamic>.from(resolved['memberMeta'] as Map? ?? {});
+          memberMeta[_uid] = {
+            'name': safeName,
+            'uid': _uid,
+            'isGuest': isGuest,
+            'provider': isGuest ? 'anonymous' : 'full',
+          };
+
+          // SEC-C1: Pass the code to prove we know it, bypassing member-only lock
+          await _groupsCol.doc(groupId).update({
+            'memberUids': memberUids,
+            'members': members,
+            'memberMeta': memberMeta,
+            'joinAttemptCode': cleanCode,
+          });
+        }
+
+        // Now a member, so the member-only `get` rule allows this read.
+        final doc = await _groupsCol.doc(groupId).get();
+        if (!doc.exists) return null;
+        return await _groupFromDocFull(doc);
+      } on FirebaseException catch (e) {
+        // permission-denied here = our snapshot went stale mid-join (another
+        // member joined first). Re-resolve and try again.
+        if (e.code == 'permission-denied' && attempt < 3) {
+          debugPrint(
+              '[Firestore] join raced with another member (attempt $attempt), retrying…');
+          await Future.delayed(Duration(milliseconds: 200 * attempt));
+          continue;
+        }
+        debugPrint('[Firestore] joinGroupByInviteCode error: $e');
+        return null;
+      } catch (e) {
+        debugPrint('[Firestore] joinGroupByInviteCode error: $e');
         return null;
       }
-      final String groupId = resolved['groupId'] ?? '';
-      if (groupId.isEmpty) return null;
-
-      final memberUids = List<String>.from(resolved['memberUids'] ?? []);
-      final members = List<String>.from(resolved['members'] ?? []);
-      final isPremiumGroup = resolved['isPremiumGroup'] == true;
-      final isGuest = AuthService.instance.isGuest;
-
-      // GUEST GATE: anonymous users may only join groups whose owner has
-      // SplitSmart Premium. Full accounts may always join via invite (free).
-      // Security rules enforce the same condition server-side.
-      if (isGuest && !isPremiumGroup) {
-        debugPrint('[Firestore] Guest join blocked: group is not premium.');
-        return null;
-      }
-
-      // SEC-H4: Enforce member cap locally (Rules will enforce it server-side)
-      if (memberUids.length >= _maxGroupMembers) {
-        debugPrint('[Firestore] Group full: ${memberUids.length} >= $_maxGroupMembers');
-        return null;
-      }
-
-      if (!memberUids.contains(_uid)) {
-        memberUids.add(_uid);
-        // Sanitize member name length
-        final safeName = memberName.length > 30 ? memberName.substring(0, 30) : memberName;
-        members.add(safeName);
-
-        // Authoritative uid → name mapping (fixes parallel-array ambiguity).
-        final memberMeta =
-            Map<String, dynamic>.from(resolved['memberMeta'] as Map? ?? {});
-        memberMeta[_uid] = {
-          'name': safeName,
-          'uid': _uid,
-          'isGuest': isGuest,
-          'provider': isGuest ? 'anonymous' : 'full',
-        };
-
-        // SEC-C1: Pass the code to prove we know it, bypassing member-only lock
-        await _groupsCol.doc(groupId).update({
-          'memberUids': memberUids,
-          'members': members,
-          'memberMeta': memberMeta,
-          'joinAttemptCode': cleanCode,
-        });
-      }
-
-      // Now a member, so the member-only `get` rule allows this read.
-      final doc = await _groupsCol.doc(groupId).get();
-      if (!doc.exists) return null;
-      return await _groupFromDocFull(doc);
-    } catch (e) {
-      debugPrint('[Firestore] joinGroupByInviteCode error: $e');
-      return null;
     }
+    return null;
   }
 
   /// Get the invite code for a group.
