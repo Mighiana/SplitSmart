@@ -164,6 +164,12 @@ Root: `main.dart` → `HomeScreen` (`lib/screens/main_navigation_screen.dart`) =
 
 ## 11. Changelog (newest first — ADD AN ENTRY EVERY SESSION)
 
+### 2026-06-12 — Google Sign-In SHA fingerprints (gotcha, resolved)
+- **Symptom**: release APK threw `PlatformException(sign_in_failed, ApiException: 10)` (DEVELOPER_ERROR) on Google Sign-In, while debug builds worked.
+- **Cause**: Google Sign-In validates the app's signing-cert SHA-1 against fingerprints registered in Firebase. Only the DEBUG key's SHA was registered; the release key's wasn't.
+- **Fix**: added the release keystore SHA-1 `80:FB:CB:2F:9F:C5:1A:C2:6E:4F:A9:0B:D2:36:F4:0C:C7:37:6D:8A` + SHA-256 `47:63:61:97:AB:B4:2F:44:6D:E3:D8:AF:6C:BC:71:EA:FF:3C:82:F7:86:C3:99:2C:5E:67:F9:EA:19:6E:7C:06` in Firebase → Project Settings → Android app → Add fingerprint. Server-side, no rebuild. Working.
+- **⚠️ STILL TODO at Play upload**: Google Play re-signs with its OWN key → a THIRD SHA-1. After uploading the `.aab`, copy the App-signing SHA-1 from Play Console → Setup → App signing and add it to Firebase too, or Sign-In breaks for Play Store testers. (Firebase keeps all fingerprints: debug + release + Play.)
+
 ### 2026-06-12 — Play prep: device install + Data Safety draft
 - **Obfuscated release APK built + installed** on physical device (Samsung SM-A566B / Galaxy A56, Android 16 / API 36) via `flutter install --use-application-binary`. APK is 112.8 MB (fat/all-arch; per-device install is smaller). Symbols in `debug-symbols/apk-release/`. NOTE: `.aab` (Play upload) cannot be sideloaded — release APK is the device-install artifact.
 - **Data Safety form drafted** (`docs/PLAY_DATA_SAFETY.md`): copy-ready answers for Play Console App-content (data types/purposes/encryption/deletion), content rating, target audience (18+, not children), ads (none) — matched to the privacy policy.
