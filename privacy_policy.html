@@ -29,8 +29,8 @@
 <div class="container">
 
 <h1>🔒 SplitSmart Privacy Policy</h1>
-<span class="badge">Version 1.0</span>
-<span class="date">Effective Date: April 17, 2026</span>
+<span class="badge">Version 1.1</span>
+<span class="date">Effective Date: April 17, 2026 · Last Updated: June 12, 2026</span>
 
 <p>SplitSmart ("the App", "we", "us") is committed to protecting your privacy. This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data.</p>
 
@@ -45,11 +45,12 @@
   <li><strong>Profile photo URL</strong> (Google Sign-In only) — displayed in the app UI.</li>
 </ul>
 <p>We do <strong>not</strong> store your password. Authentication is handled entirely by Firebase Authentication.</p>
+<p>If you join a group as a <strong>guest</strong> (without creating an account), an anonymous Firebase session is created. It contains no email or personal details — only the display name you choose for the group. Orphaned guest sessions are periodically deleted.</p>
 
 <h3>1.2 Financial Data</h3>
 <p>You enter personal transactions, group expenses, budget limits, saving goals, and subscription details. This data is:</p>
 <ul>
-  <li>Stored locally on your device (SQLite) when you are not signed in.</li>
+  <li>Stored locally on your device in an <strong>encrypted database</strong> (SQLCipher, AES-256). The encryption key is generated on your device and kept in the platform secure store (Android Keystore / iOS Keychain) — it never leaves your device.</li>
   <li>Synced to Google Cloud Firestore when you are signed in, enabling cross-device access.</li>
 </ul>
 <p><strong>We never sell, share, or monetize your financial data.</strong></p>
@@ -86,7 +87,8 @@
 <h2>3. Data Storage & Security</h2>
 <ul>
   <li>Cloud data is stored in <strong>Google Cloud Firestore</strong> and <strong>Firebase Storage</strong>, protected by Firebase Security Rules that restrict access to authorized users only.</li>
-  <li>Local data is stored in an <strong>encrypted SQLite database</strong> on your device.</li>
+  <li>Local data is stored in an <strong>encrypted SQLite database</strong> (SQLCipher, AES-256) on your device. The key lives in the Android Keystore / iOS Keychain.</li>
+  <li>Backups you share off-device are protected by a <strong>passphrase you choose</strong>; we cannot read or recover them without it. Automatic on-device backups are encrypted with your device key.</li>
   <li>All network communication uses <strong>HTTPS/TLS encryption</strong>.</li>
   <li>Biometric authentication (fingerprint/FaceID) can be enabled to protect app access.</li>
 </ul>
@@ -104,9 +106,9 @@
 
 <h2>5. Your Rights</h2>
 <ul>
-  <li><strong>Access & Export:</strong> You can export your data as a PDF report or a compressed backup file at any time from the Settings screen.</li>
+  <li><strong>Access & Export:</strong> You can export your data as a PDF report or an encrypted backup file at any time from the Settings screen.</li>
   <li><strong>Deletion:</strong> You can delete all your data from the Settings screen ("Reset All Data"). This removes all local and cloud data.</li>
-  <li><strong>Account Deletion:</strong> You can sign out at any time. To delete your Firebase account, contact us.</li>
+  <li><strong>Account Deletion:</strong> You can sign out at any time. To delete your Firebase account, contact us at the email below.</li>
   <li><strong>Offline Use:</strong> You can use the app without signing in. All data stays on your device.</li>
 </ul>
 
@@ -123,8 +125,9 @@
 <hr>
 
 <h2>8. Contact</h2>
-<p>If you have questions about this Privacy Policy, please contact us at:</p>
-<p><strong>Email:</strong> <a href="mailto:support@splitsmart.app">support@splitsmart.app</a></p>
+<p>If you have questions about this Privacy Policy, your data, or wish to request account deletion, please contact us at:</p>
+<p><strong>Email:</strong> <a href="mailto:usmanmighiana3898@gmail.com">usmanmighiana3898@gmail.com</a></p>
+<p>You can also reach us from the <strong>Contact Us</strong> screen inside the app.</p>
 
 <hr>
 <p style="text-align:center; color:#aaa; font-size:13px; margin-top:20px;">

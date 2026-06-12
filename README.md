@@ -35,9 +35,11 @@
 - **Offline Fallback**: Seamless local SQLite fallback if Firestore is unreachable.
 
 ### 🔒 Privacy & Security
+- **Encrypted at Rest**: All local data lives in a SQLCipher (AES-256) database; the key is generated on-device and stored in the Android Keystore / iOS Keychain.
+- **Encrypted Backups**: Shared backups are protected by a passphrase you choose; on-device auto-backups are encrypted with your device key. Legacy plaintext databases are auto-encrypted on first launch.
 - **Biometric Security**: Protect your financial data with Fingerprint, FaceID, or device lock.
-- **Encrypted Backups**: Export and import your entire database as a compressed backup file.
 - **Privacy-Safe Analytics**: Only feature usage is tracked — no financial amounts, no names, no PII.
+- **Hardened Backend**: Firestore security rules with default-deny, member-only access, server-validated joins, and Firebase App Check.
 
 ### 🌍 Global Readiness
 - **Full Localization**: 8 languages — English, Urdu, Arabic, French, Spanish, German, Turkish, Hindi.
@@ -50,7 +52,7 @@
 - **Framework**: Flutter (Dart 3.0+)
 - **State Management**: `Provider` with optimized `context.select` rebuild patterns.
 - **Cloud Backend**: Firebase (Auth, Firestore, Storage, Analytics, Crashlytics, Cloud Messaging)
-- **Local Persistence**: `SQLite` (sqflite) — subscriptions & reminders always local, synced data uses Firestore when signed in.
+- **Local Persistence**: SQLCipher-encrypted `SQLite` (sqflite_sqlcipher) — subscriptions & reminders always local, synced data uses Firestore when signed in.
 - **Smart Entry**: Google ML Kit (OCR), `speech_to_text` (voice), local pattern matching (suggestions) — all offline, zero-cost.
 - **Global Error Boundary**: Dual-layer (Flutter framework + platform dispatcher) crash handling with Firebase Crashlytics + local log file.
 - **Modular Design**: Feature-driven screens with domain-specific tab components.
@@ -68,10 +70,10 @@
 ### Run Locally
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/splitsmart.git
+git clone https://github.com/Mighiana/SplitSmart.git
 
 # Navigate to project directory
-cd splitsmart
+cd SplitSmart
 
 # Install dependencies
 flutter pub get
@@ -83,9 +85,9 @@ flutter run
 ### Firebase Setup
 1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
 2. Enable **Authentication** (Google + Email/Password)
-3. Enable **Cloud Firestore** and publish security rules
-4. Enable **Firebase Storage** and publish storage rules
-5. Deploy the push notification Cloud Function (see deployment guide)
+3. Enable **Cloud Firestore** and publish security rules (`firebase deploy --only firestore:rules` from `firebase/`)
+4. Enable **Firebase Storage** and publish storage rules *(requires the Blaze plan)*
+5. Deploy the Cloud Functions — push notifications, purchase verification, invite resolution (`firebase deploy --only functions`) *(requires the Blaze plan; the app degrades gracefully without them)*
 6. Add `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) to the project
 
 ---
@@ -102,8 +104,13 @@ flutter run
 ## 🤝 Contributing
 SplitSmart is an open-source project. Contributions, issues, and feature requests are welcome!
 
+## 📬 Contact & Support
+- **Email**: [usmanmighiana3898@gmail.com](mailto:usmanmighiana3898@gmail.com)
+- **Privacy Policy**: see [`privacy_policy.html`](privacy_policy.html)
+- In-app: use the **Contact Us** screen in Settings
+
 ## 📜 License
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License.
 
 ---
 *Made with ❤️ for better financial transparency.*

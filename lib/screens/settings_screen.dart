@@ -896,7 +896,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   _privacySection(
                     'Data Storage',
-                    'Your data is stored locally on your device in the app\'s private, sandboxed storage, which other apps cannot access. Optional cloud sync is powered by Firebase, which encrypts your data in transit and at rest on Google\'s servers.',
+                    'Your data is stored locally in an encrypted database (SQLCipher, AES-256). The encryption key is created on your device and kept in your phone\'s secure hardware store — it never leaves your device. Optional cloud sync is powered by Firebase, which encrypts your data in transit and at rest on Google\'s servers.',
                   ),
                   _privacySection(
                     'Data Sharing',
@@ -908,11 +908,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   _privacySection(
                     'Your Rights',
-                    'You may delete all your data at any time using the "Reset All Data" option in Settings. For any privacy concerns, please contact us through the Contact Us screen.',
+                    'You may delete all your data at any time using the "Reset All Data" option in Settings. For any privacy concerns or account deletion requests, contact us through the Contact Us screen or email usmanmighiana3898@gmail.com.',
                   ),
                   _privacySection(
                     'Security',
-                    'We implement security measures including optional biometric app lock and sandboxed on-device storage. Backups you export are portable data files — keep them somewhere safe, as anyone with the file can read its contents.',
+                    'Your database is encrypted at rest, and an optional biometric app lock protects access to the app. Backups you share are encrypted with a passphrase you choose — without it, the backup cannot be opened. Keep your passphrase safe: it cannot be recovered.',
                   ),
                 ],
               ),
