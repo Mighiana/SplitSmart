@@ -602,6 +602,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _showToast('Enter an amount!');
       return;
     }
+    if (amt > 999999999) {
+      _showToast('Amount is too large');
+      return;
+    }
+    if (desc.length > 200) {
+      _showToast('Description is too long');
+      return;
+    }
     // Description is optional — fall back to the category/subcategory label.
     if (desc.isEmpty) {
       desc = _subcat != null

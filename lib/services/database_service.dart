@@ -515,14 +515,36 @@ class DatabaseService {
     final db = await _database;
 
     final groupRows = await db.query('groups', orderBy: 'id DESC');
-    final groups    = <GroupData>[];
+    if (groupRows.isEmpty) return [];
+
+    // Bulk-fetch all related rows in 3 queries instead of 3 per group (N+1).
+    // Per-group ordering is preserved because the global ORDER BY matches what
+    // the per-group queries used (id DESC for expenses, id ASC for settlements).
+    final allMemberRows     = await db.query('group_members');
+    final allExpenseRows    = await db.query('expenses',     orderBy: 'id DESC');
+    final allSettlementRows = await db.query('settlements',  orderBy: 'id ASC');
+
+    final membersByGroup     = <int, List<Map<String, Object?>>>{};
+    final expensesByGroup    = <int, List<Map<String, Object?>>>{};
+    final settlementsByGroup = <int, List<Map<String, Object?>>>{};
+
+    for (final r in allMemberRows) {
+      (membersByGroup[r['group_id'] as int] ??= []).add(r);
+    }
+    for (final r in allExpenseRows) {
+      (expensesByGroup[r['group_id'] as int] ??= []).add(r);
+    }
+    for (final r in allSettlementRows) {
+      (settlementsByGroup[r['group_id'] as int] ??= []).add(r);
+    }
+
+    final groups = <GroupData>[];
 
     for (final row in groupRows) {
       final gId = row['id'] as int;
 
       // members
-      final mRows = await db.query('group_members',
-          where: 'group_id = ?', whereArgs: [gId]);
+      final mRows = membersByGroup[gId] ?? [];
       final members = mRows.map((r) => r['name'] as String).toList();
       // Roster only when member ids were persisted (v16+); else leave empty so
       // the engine falls back to name-based behavior for legacy data.
@@ -540,8 +562,7 @@ class DatabaseService {
       }
 
       // expenses
-      final eRows = await db.query('expenses',
-          where: 'group_id = ?', whereArgs: [gId], orderBy: 'id DESC');
+      final eRows = expensesByGroup[gId] ?? [];
       final expenses = eRows.map((r) {
         Map<String, double>? splits;
         final sj = r['split_json'] as String?;
@@ -575,8 +596,7 @@ class DatabaseService {
       }).toList();
 
       // settlements
-      final sRows = await db.query('settlements',
-          where: 'group_id = ?', whereArgs: [gId], orderBy: 'id ASC');
+      final sRows = settlementsByGroup[gId] ?? [];
       final settlements = sRows.map((r) => SettlementData(
             from:   r['from_m'] as String,
             to:     r['to_m']   as String,
@@ -1137,20 +1157,22 @@ class DatabaseService {
   /// then standalone tables, so foreign key constraints are never violated.
   Future<void> clearAll() async {
     final db = await _database;
-    final batch = db.batch();
-    // FK children of groups — delete before groups
-    batch.delete('settlements');
-    batch.delete('expenses');
-    batch.delete('group_members');
-    batch.delete('groups');
-    // Standalone tables — no FK ordering required
-    batch.delete('transactions');
-    batch.delete('wallets');
-    batch.delete('group_wallets');
-    batch.delete('budget_limits');
-    batch.delete('subscriptions');
-    batch.delete('reminders');
-    batch.delete('saving_goals');
-    await batch.commit(noResult: true);
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      // FK children of groups — delete before groups
+      batch.delete('settlements');
+      batch.delete('expenses');
+      batch.delete('group_members');
+      batch.delete('groups');
+      // Standalone tables — no FK ordering required
+      batch.delete('transactions');
+      batch.delete('wallets');
+      batch.delete('group_wallets');
+      batch.delete('budget_limits');
+      batch.delete('subscriptions');
+      batch.delete('reminders');
+      batch.delete('saving_goals');
+      await batch.commit(noResult: true);
+    });
   }
 }

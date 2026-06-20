@@ -79,8 +79,21 @@ class AuthService {
 
   /// Refresh the user from Firebase and return the latest verified state.
   /// Call after the user taps "I've verified" so the banner can disappear.
+  ///
+  /// SEC: `reload()` alone can leave `emailVerified` stale (it reads a cached
+  /// token). We also force an ID-token refresh so an UNVERIFIED user can never
+  /// dismiss the nudge by tapping "I've verified" without actually verifying.
   Future<bool> reloadEmailVerified() async {
-    await _auth.currentUser?.reload();
+    final u = _auth.currentUser;
+    if (u == null) return true; // signed out — nothing to verify
+    try {
+      await u.reload();
+      await u.getIdToken(true); // force server round-trip, refreshes claims
+    } catch (_) {
+      // Network/refresh failure: do NOT assume verified.
+      return isEmailVerified;
+    }
+    // Re-read the (now refreshed) current user.
     return isEmailVerified;
   }
 
@@ -312,6 +325,25 @@ class AuthService {
       debugPrint('[Auth] Signed out');
     } catch (e) {
       debugPrint('[Auth] Sign out error: $e');
+      rethrow;
+    }
+  }
+
+  // ─── Delete account ─────────────────────────────────────────────────────
+
+  /// Permanently delete the Firebase Auth account for the current user.
+  /// Google Sign-In users must re-authenticate first (Firebase requirement).
+  /// Throws [FirebaseAuthException] with code 'requires-recent-login' if
+  /// re-auth is needed — callers should catch this and prompt the user.
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await _googleSignIn.signOut();
+      await user.delete();
+      debugPrint('[Auth] Account deleted');
+    } catch (e) {
+      debugPrint('[Auth] Delete account error: $e');
       rethrow;
     }
   }

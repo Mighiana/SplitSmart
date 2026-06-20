@@ -19,6 +19,7 @@ class NewGroupScreen extends StatefulWidget {
 class _NewGroupScreenState extends State<NewGroupScreen> {
   final _nameCtrl = TextEditingController();
   String _groupEmoji = '✈️';
+  bool _isCreating = false;
 
   static const List<_IconOption> _iconOptions = [
     _IconOption('✈️', 'Trip', Color(0xFF4F46E5)),
@@ -245,16 +246,21 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
 
             // ── Create button ───────────────────────────────────────────
             GestureDetector(
-              onTap: _createGroup,
+              onTap: _isCreating ? null : _createGroup,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: AppColors.green,
+                  color: _isCreating ? AppColors.green.withValues(alpha: 0.5) : AppColors.green,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
-                child: const Text(
+                child: _isCreating
+                    ? const SizedBox(
+                        width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Text(
                   'Create Group →',
                   style: TextStyle(
                     color: Colors.black,
@@ -383,12 +389,14 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
   }
 
   Future<void> _createGroup() async {
+    if (_isCreating) return;
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       _showToast('Enter a group name!');
       return;
     }
 
+    setState(() => _isCreating = true);
     HapticFeedback.mediumImpact();
     final state = context.read<AppState>();
     // Account-only: the group starts with just the creator; others join via the
@@ -417,6 +425,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
       await AnalyticsService.logGroupCreated();
     } catch (e) {
       if (mounted) {
+        setState(() => _isCreating = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to create group: $e')));

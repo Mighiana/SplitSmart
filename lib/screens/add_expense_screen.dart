@@ -36,6 +36,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String? _receiptPath;
   bool _isEdit = false;
   bool _isSaving = false;
+  bool _isDeleting = false;
   bool _isListening = false;
   String _voiceText = '';
 
@@ -1078,7 +1079,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           if (g == null) return;
           if (mode == 'custom') _initCustomSplits(g.members);
           if (mode == 'percent') _initPercentSplits(g.members);
-          if (mode == 'shares') _initPercentSplits(g.members);
           setState(() => _split = mode);
         },
         child: AnimatedContainer(
@@ -1287,6 +1287,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ),
           TextButton(
             onPressed: () async {
+              if (_isDeleting) return;
+              setState(() => _isDeleting = true);
               HapticFeedback.heavyImpact();
               Navigator.pop(dialogCtx);
               if (g != null && existing != null) {
@@ -1295,6 +1297,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 if (ok && mounted) {
                   Navigator.pop(context);
                 } else if (!ok && mounted) {
+                  setState(() => _isDeleting = false);
                   _showToast('Failed to delete expense. Please try again.');
                 }
               }
@@ -1334,6 +1337,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     if (_isListening) {
       await voice.stopListening();
+      if (!mounted) return;
       setState(() => _isListening = false);
       if (_voiceText.isNotEmpty) {
         _applyVoiceResult(g);

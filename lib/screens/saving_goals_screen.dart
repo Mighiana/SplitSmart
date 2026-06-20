@@ -374,8 +374,8 @@ class _SavingGoalsScreenState extends State<SavingGoalsScreen> {
                     final newSaved = goal.savedAmount + amt;
                     final justCompleted = newSaved >= goal.targetAmount &&
                         goal.savedAmount < goal.targetAmount;
+                    Navigator.pop(context); // dismiss first to prevent double-tap
                     state.depositToGoal(goal, amt);
-                    Navigator.pop(context);
                     if (justCompleted) {
                       _confettiController.play();
                       // Dialog renders in the ROOT overlay, so it's visible

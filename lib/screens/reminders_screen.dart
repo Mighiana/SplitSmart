@@ -578,6 +578,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
   final _titleCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   DateTime _date = DateTime.now().add(const Duration(days: 1));
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -613,7 +614,9 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
   }
 
   Future<void> _save() async {
+    if (_isSaving) return;
     if (_titleCtrl.text.trim().isEmpty) return;
+    setState(() => _isSaving = true);
     final r = ReminderData(
       id: 0,
       title: _titleCtrl.text.trim(),

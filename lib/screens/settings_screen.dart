@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -50,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loadingPrefs = true;
   bool _isWorking = false;
   bool _appLockEnabled = false;
+  bool _notificationsEnabled = true;
   int _notifyBeforeDays = 1; // days before due date
 
   @override
@@ -63,18 +66,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final appLockE = await SecurityService.isAppLockEnabled();
     final prefs = await SharedPreferences.getInstance();
     final notifyDays = prefs.getInt('notify_before_days') ?? 1;
+    final notifyEnabled = prefs.getBool('notifications_enabled') ?? true;
 
     if (!mounted) return;
 
+    String version = '1.0.0';
     try {
       final info = await PackageInfo.fromPlatform();
-      _appVersion = info.version;
+      version = info.version;
     } catch (_) {}
 
+    if (!mounted) return;
+
     setState(() {
+      _appVersion = version;
       _autoBackupEnabled = autoE;
       _appLockEnabled = appLockE;
       _notifyBeforeDays = notifyDays;
+      _notificationsEnabled = notifyEnabled;
       _loadingPrefs = false;
     });
   }
@@ -828,6 +837,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             child: const Text(
               'Sign Out',
+              style: TextStyle(color: _cRed, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context) {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TC.card(context),
+        title: Text(
+          'Delete Account?',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: TC.text(context),
+          ),
+        ),
+        content: Text(
+          'This will permanently delete your Firebase account. Your local data will remain on this device until you reset it. This action cannot be undone.',
+          style: TextStyle(color: TC.text2(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: TC.text2(context))),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await AuthService.instance.deleteAccount();
+                if (context.mounted) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              } on FirebaseAuthException catch (e) {
+                if (e.code == 'requires-recent-login' && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Please sign out and sign in again before deleting your account.',
+                      ),
+                    ),
+                  );
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.message ?? 'Failed to delete account.')),
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'Delete Account',
               style: TextStyle(color: _cRed, fontWeight: FontWeight.w700),
             ),
           ),
@@ -1725,7 +1790,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 .slideY(begin: 0.1, curve: Curves.easeOut),
 
             // ACCOUNT CARD
-            _AccountCard(onSignOut: () => _confirmSignOut(context))
+            _AccountCard(
+              onSignOut: () => _confirmSignOut(context),
+              onDeleteAccount: () => _confirmDeleteAccount(context),
+            )
                 .animate(delay: 50.ms)
                 .fade(duration: 300.ms)
                 .slideY(begin: 0.1, curve: Curves.easeOut),
@@ -1872,9 +1940,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       iconBg: _cRedL,
                       title: 'Reminder Alerts',
-                      subtitle: 'Get notified for upcoming payments',
+                      subtitle: 'Manage notification permissions in system settings',
                       trailing: _CustomToggle(
-                        value: true,
+                        value: _notificationsEnabled,
                         onChanged: (v) {
                           AppSettings.openAppSettings(
                             type: AppSettingsType.notification,
@@ -1952,77 +2020,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 .fade(duration: 300.ms)
                 .slideY(begin: 0.1, curve: Curves.easeOut),
 
-            // DEVELOPER SECTION
-            const _SecTitle('Developer', color: _cRed)
-                .animate(delay: 230.ms)
-                .fade(duration: 300.ms)
-                .slideY(begin: 0.1, curve: Curves.easeOut),
-            _CardBox(
-                  children: [
-                    _Tile(
-                      icon: const Text('🗑️', style: TextStyle(fontSize: 18)),
-                      iconBg: _cRedL,
-                      title: 'Reset All Data',
-                      subtitle:
-                          'Wipe all groups, wallets, reminders, and transactions',
-                      titleColor: _cRed,
-                      onTap: () => _confirmReset(
-                        context,
-                        state,
-                        AppLocalizations.of(context),
+            // DEVELOPER SECTION (debug builds only)
+            if (kDebugMode) ...[
+              const _SecTitle('Developer', color: _cRed)
+                  .animate(delay: 230.ms)
+                  .fade(duration: 300.ms)
+                  .slideY(begin: 0.1, curve: Curves.easeOut),
+              _CardBox(
+                    children: [
+                      _Tile(
+                        icon: const Text('🗑️', style: TextStyle(fontSize: 18)),
+                        iconBg: _cRedL,
+                        title: 'Reset All Data',
+                        subtitle:
+                            'Wipe all groups, wallets, reminders, and transactions',
+                        titleColor: _cRed,
+                        onTap: () => _confirmReset(
+                          context,
+                          state,
+                          AppLocalizations.of(context),
+                        ),
                       ),
-                    ),
-                    _Tile(
-                      icon: const Text('🧹', style: TextStyle(fontSize: 18)),
-                      iconBg: _cOrangeL,
-                      title: 'Clear Local Cache',
-                      subtitle: 'Remove temporary app data',
-                      onTap: _clearLogs,
-                    ),
-                    _Tile(
-                      icon: const Text('📋', style: TextStyle(fontSize: 18)),
-                      iconBg: _cBlueL,
-                      title: 'Export Debug Logs',
-                      subtitle: 'Share logs for troubleshooting',
-                      onTap: _shareSupportLogs,
-                    ),
-                    _Tile(
-                      icon: const Icon(Icons.local_fire_department_rounded, size: 18),
-                      iconBg: _cYellowL,
-                      title: 'Firebase Test Tools',
-                      subtitle: 'Check sync, auth, and Firestore status',
-                      onTap: _showFirebaseTestPanel,
-                    ),
-                    _Tile(
-                      icon: const Text('🌱', style: TextStyle(fontSize: 18)),
-                      iconBg: _cGreenL,
-                      title: 'Seed Demo Data',
-                      subtitle:
-                          'Create sample groups, expenses, reminders, and wallets',
-                      onTap: () => _seedDemoData(state),
-                    ),
-                    _Tile(
-                      icon: const Icon(Icons.rocket_launch_rounded, size: 18),
-                      iconBg: _cBlueL,
-                      title: 'Reset Onboarding',
-                      subtitle: 'Show onboarding screens on next app launch',
-                      showDivider: false,
-                      onTap: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.remove('onboarding_done');
-                        await prefs.remove('onboarding_seen');
-                        if (context.mounted) {
-                          _snack(
-                            'Onboarding reset — restart the app to see it',
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                )
-                .animate(delay: 230.ms)
-                .fade(duration: 300.ms)
-                .slideY(begin: 0.1, curve: Curves.easeOut),
+                      _Tile(
+                        icon: const Text('🧹', style: TextStyle(fontSize: 18)),
+                        iconBg: _cOrangeL,
+                        title: 'Clear Local Cache',
+                        subtitle: 'Remove temporary app data',
+                        onTap: _clearLogs,
+                      ),
+                      _Tile(
+                        icon: const Text('📋', style: TextStyle(fontSize: 18)),
+                        iconBg: _cBlueL,
+                        title: 'Export Debug Logs',
+                        subtitle: 'Share logs for troubleshooting',
+                        onTap: _shareSupportLogs,
+                      ),
+                      _Tile(
+                        icon: const Icon(Icons.local_fire_department_rounded, size: 18),
+                        iconBg: _cYellowL,
+                        title: 'Firebase Test Tools',
+                        subtitle: 'Check sync, auth, and Firestore status',
+                        onTap: _showFirebaseTestPanel,
+                      ),
+                      _Tile(
+                        icon: const Text('🌱', style: TextStyle(fontSize: 18)),
+                        iconBg: _cGreenL,
+                        title: 'Seed Demo Data',
+                        subtitle:
+                            'Create sample groups, expenses, reminders, and wallets',
+                        onTap: () => _seedDemoData(state),
+                      ),
+                      _Tile(
+                        icon: const Icon(Icons.rocket_launch_rounded, size: 18),
+                        iconBg: _cBlueL,
+                        title: 'Reset Onboarding',
+                        subtitle: 'Show onboarding screens on next app launch',
+                        showDivider: false,
+                        onTap: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.remove('onboarding_done');
+                          await prefs.remove('onboarding_seen');
+                          if (context.mounted) {
+                            _snack(
+                              'Onboarding reset — restart the app to see it',
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  )
+                  .animate(delay: 230.ms)
+                  .fade(duration: 300.ms)
+                  .slideY(begin: 0.1, curve: Curves.easeOut),
+            ],
 
             // ABOUT
             const _SecTitle('About')
@@ -2112,7 +2182,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _AccountCard extends StatelessWidget {
   final VoidCallback onSignOut;
-  const _AccountCard({required this.onSignOut});
+  final VoidCallback onDeleteAccount;
+  const _AccountCard({required this.onSignOut, required this.onDeleteAccount});
 
   @override
   Widget build(BuildContext context) {
@@ -2284,12 +2355,9 @@ class _AccountCard extends StatelessWidget {
             indent: 16,
             endIndent: 16,
           ),
-          if (isSignedIn)
+          if (isSignedIn) ...[
             InkWell(
               onTap: onSignOut,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(16),
-              ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                 child: Row(
@@ -2324,6 +2392,41 @@ class _AccountCard extends StatelessWidget {
                 ),
               ),
             ),
+            Divider(height: 1, thickness: 1, color: TC.border(context), indent: 16, endIndent: 16),
+            InkWell(
+              onTap: onDeleteAccount,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _cRedL,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.delete_forever_outlined, color: _cRed, size: 20),
+                    ),
+                    const SizedBox(width: 13),
+                    const Expanded(
+                      child: Text(
+                        'Delete Account',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: _cRed,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: TC.text3(context), size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -38,8 +38,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
   final _searchCtrl = TextEditingController();
   late ConfettiController _confettiCtrl;
 
-  AnimationController? _sheetCtrl;
-
   @override
   void initState() {
     super.initState();
@@ -49,7 +47,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
   @override
   void dispose() {
     _confettiCtrl.dispose();
-    _sheetCtrl?.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -583,80 +580,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     );
   }
 
-  // ignore: unused_element
-  Widget _buildOweCardLegacy(double bal, AppLocalizations l, GroupData g) {
-    final bool isOwed = bal > 0;
-    final bool owes = bal < 0;
-    final bool settled = bal == 0;
-    
-    final Color bgColor = owes ? const Color(0xFFfff5f5) : (isOwed ? const Color(0xFFf0fdf4) : Colors.white);
-    final Color borderColor = owes ? const Color.fromRGBO(255, 120, 120, 0.15) : (isOwed ? const Color.fromRGBO(34, 197, 94, 0.15) : const Color(0xFFf0f0f0));
-    final Color labelColor = owes ? const Color(0xFFe84040) : (isOwed ? const Color(0xFF1fa84a) : const Color(0xFF888888));
-    final Color amountColor = owes ? const Color(0xFFe84040) : (isOwed ? const Color(0xFF1fa84a) : const Color(0xFF1a1a1a));
-    
-    final String labelText = isOwed ? l.youAreOwedLabel : (owes ? l.youOweLabel : l.allSettledUpLabel);
-    final String amountText = settled ? l.everyoneEven : '${g.sym}${bal.abs().toStringAsFixed(2)}';
-    final String subText = owes ? 'Settle up and clear your balance.' : (isOwed ? 'Someone owes you money.' : 'No pending balances.');
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 2))],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(labelText, style: TextStyle(color: labelColor, fontSize: 13, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(amountText, style: TextStyle(color: amountColor, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1.1)),
-                const SizedBox(height: 4),
-                Text(subText, style: const TextStyle(color: Color(0xFFaaaaaa), fontSize: 12)),
-              ],
-            ),
-          ),
-          if (!settled)
-            GestureDetector(
-              onTap: () {
-                 HapticFeedback.mediumImpact();
-                 setState(() => _tab = 3); // switch to Settle tab
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: owes 
-                    ? const LinearGradient(colors: [Color(0xFFff6b6b), Color(0xFFe84040)], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                    : const LinearGradient(colors: [Color(0xFF2ab55a), Color(0xFF1a9447)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(50),
-                  boxShadow: [
-                    BoxShadow(
-                      color: owes ? const Color.fromRGBO(232, 64, 64, 0.35) : const Color.fromRGBO(26, 148, 71, 0.35), 
-                      blurRadius: 16, 
-                      offset: const Offset(0, 4)
-                    )
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Text(l.settleUp, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 12),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons(AppLocalizations l) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -678,68 +601,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
             },
           ),
         ],
-      ),
-    );
-  }
-
-  // ignore: unused_element
-  Widget _buildActionButtonsLegacy(AppLocalizations l) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFf0f0f0)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          _buildActionItem(
-            icon: const Icon(Icons.add, color: Color(0xFF1fa84a), size: 26),
-            iconBg: const Color(0xFFe8f8ee),
-            label: l.expense,
-            sub: 'Record new',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddExpenseScreen())),
-          ),
-          Container(width: 1, height: 44, color: const Color(0xFFf0f0f0)),
-          _buildActionItem(
-            icon: const Icon(Icons.settings_outlined, color: Color(0xFF666666), size: 24),
-            iconBg: const Color(0xFFf2f2f2),
-            label: l.settings,
-            sub: 'Preferences',
-            onTap: () {
-              final g = context.read<AppState>().currentGroup;
-              if (g != null) _showGroupSettings(context, context.read<AppState>(), g);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionItem({required Widget icon, required Color iconBg, required String label, required String sub, required VoidCallback onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          children: [
-            Container(
-              width: 54, height: 54,
-              decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: icon,
-            ),
-            const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1a1a1a)), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 2),
-            Text(sub, style: const TextStyle(fontSize: 11, color: Color(0xFFaaaaaa)), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
-        ),
       ),
     );
   }
@@ -784,76 +645,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
       ),
     );
   }
-
-  // ignore: unused_element
-  Widget _buildTabsLegacy(AppLocalizations l) {
-    // Use short labels to prevent overflow in the compact pill tabs
-    const shortLabels = ['Expenses', 'Members', 'Breakdown', 'Settle'];
-    final icons = [Icons.receipt_long_outlined, Icons.people_outline, Icons.pie_chart_outline, Icons.compare_arrows];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFf2f3f5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFe8e8e8)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 1))],
-      ),
-      child: Row(
-        children: List.generate(4, (i) {
-          final active = _tab == i;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _tab = i);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                decoration: BoxDecoration(
-                  color: active ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: active
-                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.07), blurRadius: 6, offset: const Offset(0, 2))]
-                      : null,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedScale(
-                      duration: const Duration(milliseconds: 180),
-                      scale: active ? 1.1 : 1.0,
-                      child: Icon(
-                        icons[i],
-                        size: 17,
-                        color: active ? const Color(0xFF1fa84a) : const Color(0xFF999999),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      shortLabels[i],
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                        color: active ? const Color(0xFF1fa84a) : const Color(0xFF999999),
-                        letterSpacing: -0.1,
-                      ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
 
   Widget _buildCategoryChips(BuildContext context) {
     final g = context.read<AppState>().currentGroup;
@@ -1264,7 +1055,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
           );
         },
       ),
-    );
+    ).whenComplete(() => nameCtrl.dispose());
   }
 
   void _showExportOptions(BuildContext context, AppState state, GroupData g) {

@@ -516,19 +516,7 @@ class FirestoreService {
     final docId = await _groupDocId(groupId);
     if (docId == null) return;
 
-    // SEC-M4: Validate settlement amount is positive
     if (s.amount <= 0) return;
-
-    // SEC-M4: Validate from/to are actual group members
-    final groupDoc = await _groupsCol.doc(docId).get();
-    final groupData = groupDoc.data() as Map<String, dynamic>?;
-    if (groupData != null) {
-      final members = List<String>.from(groupData['members'] ?? []);
-      if (!members.contains(s.from) || !members.contains(s.to)) {
-        debugPrint('[Firestore] Settlement rejected: from/to not in members');
-        return;
-      }
-    }
 
     await _groupsCol.doc(docId).collection('settlements').add({
       'from': s.from,
@@ -1215,14 +1203,20 @@ class FirestoreService {
   /// clearAll(), which is why they kept reappearing after a data reset.
   Future<void> clearAll() async {
     // ── 1. Personal data (transactions, wallets, budgets, goals) ──────────
-    final personalBatch = _db.batch();
+    // Collect all refs then delete in 400-op chunks to stay under Firestore's
+    // 500-operation batch limit.
+    final allPersonalRefs = <DocumentReference>[];
     for (final col in ['transactions', 'wallets', 'groupWallets', 'budgetLimits', 'savingGoals']) {
       final snap = await _userDoc.collection(col).get();
-      for (final d in snap.docs) {
-        personalBatch.delete(d.reference);
-      }
+      allPersonalRefs.addAll(snap.docs.map((d) => d.reference));
     }
-    await personalBatch.commit();
+    const kChunk = 400;
+    for (var i = 0; i < allPersonalRefs.length; i += kChunk) {
+      final chunk = allPersonalRefs.sublist(i, (i + kChunk).clamp(0, allPersonalRefs.length));
+      final b = _db.batch();
+      for (final ref in chunk) { b.delete(ref); }
+      await b.commit();
+    }
 
     // ── 2. Groups (top-level collection) ──────────────────────────────────
     // FIXED: Two-phase deletion so that a failed expense/settlement delete

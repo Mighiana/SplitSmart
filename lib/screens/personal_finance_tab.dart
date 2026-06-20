@@ -108,9 +108,10 @@ class _MoneyTabState extends State<MoneyTab> {
           ],
         ),
       );
+      ctrl.dispose();
       if (newName != null && newName.isNotEmpty) {
         await prefs.setString('user_first_name', newName);
-        setState(() => _userName = newName);
+        if (mounted) setState(() => _userName = newName);
       }
     }
   }
@@ -153,7 +154,6 @@ class _MoneyTabState extends State<MoneyTab> {
       });
     }
 
-    final overallBalance = activeCur != null ? (wallets[activeCur] ?? 0.0) : 0.0;
     final safeActiveCur = activeCur ?? '';
     final CurrencyData? activeCurData = activeCur != null
         ? AppState.currencies.firstWhere(
@@ -161,7 +161,17 @@ class _MoneyTabState extends State<MoneyTab> {
             orElse: () => CurrencyData(safeActiveCur, safeActiveCur, '💱', safeActiveCur),
           )
         : null;
-    final sym = activeCurData?.sym ?? '\$' ;
+    final sym = activeCurData?.sym ?? '\$';
+
+    // Monthly spending for the active currency (used by Net Position card + snapshot)
+    final sm = _spendingMonth;
+    double monthlySpent = 0;
+    for (final tx in state.allTransactionsWithGroupShares) {
+      if (tx.currency == activeCur && tx.type == 'expense') {
+        final d = DateTime.tryParse(tx.date);
+        if (d != null && d.year == sm.year && d.month == sm.month) monthlySpent += tx.amount;
+      }
+    }
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : _kBg,
@@ -193,7 +203,7 @@ class _MoneyTabState extends State<MoneyTab> {
                     _buildHeader(context, state, isDark)
                         .animate().fadeIn(duration: 280.ms).slideY(begin: 0.12, end: 0, curve: Curves.easeOut),
                     _buildEmailVerifyBanner(context),
-                    _buildNetPositionCard(context, overallBalance, sym, activeCur, isDark, state),
+                    _buildNetPositionCard(context, monthlySpent, sym, activeCur, isDark, state),
                     _buildActionButtons(context, activeCur)
                         .animate().fadeIn(delay: 120.ms, duration: 320.ms).slideY(begin: 0.14, end: 0, delay: 120.ms, curve: Curves.easeOut),
                     _buildQuickStats(context, isDark, state, sym, activeCur)
@@ -422,15 +432,24 @@ class _MoneyTabState extends State<MoneyTab> {
     );
   }
 
-  Widget _buildNetPositionCard(BuildContext context, double personalBal, String sym, String? activeCur, bool isDark, AppState state) {
+  Widget _buildNetPositionCard(BuildContext context, double monthlySpent, String sym, String? activeCur, bool isDark, AppState state) {
     final flag = activeCur != null ? AppState.currencies.firstWhere(
       (c) => c.code == activeCur,
       orElse: () => CurrencyData(activeCur, activeCur, '💱', ''),
     ).flag : '🇺🇸';
 
-    final double groupsBal = activeCur != null ? state.getGroupWalletBalance(activeCur) : 0.0;
-    final double net = personalBal + groupsBal;
-    final String groupsLabel = groupsBal < 0 ? 'owed' : groupsBal > 0 ? 'to collect' : 'settled';
+    final now = _spendingMonth;
+    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final monthLabel = '${months[now.month - 1]} ${now.year}';
+
+    // Income this month
+    double monthlyIncome = 0;
+    for (final tx in state.allTransactionsWithGroupShares) {
+      if (tx.currency == activeCur && tx.type == 'income') {
+        final d = DateTime.tryParse(tx.date);
+        if (d != null && d.year == now.year && d.month == now.month) monthlyIncome += tx.amount;
+      }
+    }
 
     String money(double v) => '$sym${AppCurrencyUtils.formatAmount(v.abs(), v.abs() >= 1000 ? 0 : 2)}';
 
@@ -483,7 +502,7 @@ class _MoneyTabState extends State<MoneyTab> {
                       child: Row(
                         children: [
                           Text(
-                            'NET POSITION',
+                            'THIS MONTH\'S SPENDING',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -561,9 +580,9 @@ class _MoneyTabState extends State<MoneyTab> {
                             fontSize: 42, letterSpacing: -1.0, color: Colors.white),
                       )
                     : CountUpText(
-                        value: net,
+                        value: monthlySpent,
                         builder: (ctx, v) => Text(
-                          '${v < 0 ? '-' : ''}${money(v)}',
+                          money(v),
                           style: TC.gloock(ctx,
                               fontSize: 42,
                               letterSpacing: -1.0,
@@ -573,11 +592,7 @@ class _MoneyTabState extends State<MoneyTab> {
                 if (!_balanceCollapsed) ...[
                   const SizedBox(height: 4),
                   Text(
-                    _hideBalance
-                        ? 'Personal + Groups'
-                        : groupsBal == 0
-                            ? 'Across your personal & group wallets'
-                            : 'Groups ${money(groupsBal)} $groupsLabel',
+                    _hideBalance ? monthLabel : 'Total spent in $monthLabel',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -587,9 +602,9 @@ class _MoneyTabState extends State<MoneyTab> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(child: _netSubCard('👤', 'PERSONAL', _hideBalance ? '••••' : money(personalBal), personalBal < 0)),
+                      Expanded(child: _netSubCard('🛒', 'SPENT', _hideBalance ? '••••' : money(monthlySpent), false)),
                       const SizedBox(width: 12),
-                      Expanded(child: _netSubCard('👥', 'GROUPS', _hideBalance ? '••••' : '${groupsBal < 0 ? '-' : ''}${money(groupsBal)}', groupsBal < 0)),
+                      Expanded(child: _netSubCard('💰', 'INCOME', _hideBalance ? '••••' : money(monthlyIncome), false)),
                     ],
                   ),
                 ],

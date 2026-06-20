@@ -147,6 +147,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen>
 
   // ── Save ───────────────────────────────────────────────────────────────────
   Future<void> _save() async {
+    if (_saving) return;
     setState(() => _submitted = true);
     if (!_formValid) {
       HapticFeedback.heavyImpact();

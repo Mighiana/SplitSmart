@@ -21,6 +21,7 @@ part 'app_state_models.dart';
 class AppState extends ChangeNotifier {
   // ─── Loading flag ────────────────────────────────────────────────────────
   bool isLoading = true;
+  bool _loadInProgress = false;
 
   /// Current participation tier. Derived from the Firebase session — the
   /// single source of truth that replaces the old `_useCloud == isSignedIn`
@@ -427,6 +428,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _load() async {
+    if (_loadInProgress) return;
+    _loadInProgress = true;
     isLoading = true;
     // Do NOT call notifyListeners() here — we're inside initState's
     // postFrameCallback and the widget tree is still building.
@@ -462,6 +465,7 @@ class AppState extends ChangeNotifier {
       // Defer the notify to avoid firing during the build phase
       // (SQLite reads can return near-synchronously from cache).
       isLoading = false;
+      _loadInProgress = false;
       SchedulerBinding.instance.addPostFrameCallback((_) {
         notifyListeners();
       });
@@ -543,6 +547,7 @@ class AppState extends ChangeNotifier {
     await _loadCurrencyPrefs();
 
     isLoading = false;
+    _loadInProgress = false;
     notifyListeners();
   }
 
@@ -640,13 +645,14 @@ class AppState extends ChangeNotifier {
     if (localTxns.isEmpty) return;
     try {
       final cloudTxns = await fs.loadTransactions();
-      // Build a set of "desc|amount|date" keys for dedup
+      // Build a set of "id|desc|amount|date" keys for dedup — include id so
+      // two legitimate transactions with identical desc/amount/date aren't dropped.
       final cloudKeys = cloudTxns
-          .map((t) => '${t.desc}|${t.amount}|${t.date}')
+          .map((t) => '${t.id}|${t.desc}|${t.amount}|${t.date}')
           .toSet();
 
       for (final t in localTxns) {
-        final key = '${t.desc}|${t.amount}|${t.date}';
+        final key = '${t.id}|${t.desc}|${t.amount}|${t.date}';
         if (cloudKeys.contains(key)) continue;
         try {
           await fs.insertTransaction(t);
@@ -1328,10 +1334,17 @@ class AppState extends ChangeNotifier {
 
   Future<bool> deleteExpense(GroupData g, ExpenseData e) async {
     try {
+      // Local-first: always delete from SQLite immediately so the expense
+      // can't resurrect from the local cache on next cold start.
+      await DatabaseService.instance.deleteExpense(e.id);
       if (_useCloud) {
-        await FirestoreService.instance.deleteExpense(g.id, e.id);
-      } else {
-        await DatabaseService.instance.deleteExpense(e.id);
+        unawaited(() async {
+          try {
+            await FirestoreService.instance.deleteExpense(g.id, e.id);
+          } catch (err) {
+            debugPrint('[cloud] expense delete sync deferred: $err');
+          }
+        }());
       }
       g.expenses = g.expenses.where((x) => x.id != e.id).toList();
       groups = List.of(groups);
@@ -1340,7 +1353,6 @@ class AppState extends ChangeNotifier {
       return true;
     } catch (e2) {
       debugPrint('[AppState] deleteExpense failed: $e2');
-      // Re-sync to revert any optimistic cache changes
       notifyListeners();
       return false;
     }
@@ -1902,24 +1914,29 @@ class AppState extends ChangeNotifier {
             .map((d) => '${d.amount}|${d.date.toIso8601String()}|${d.note}')
             .join('||'),
     };
-    int id;
+    // Local-first: SQLite write is immediate so the goal survives offline.
+    final id = await DatabaseService.instance.insertSavingGoal(data);
     if (_useCloud) {
-      id = await FirestoreService.instance.insertSavingGoal(data);
-    } else {
-      id = await DatabaseService.instance.insertSavingGoal(data);
+      unawaited(() async {
+        try {
+          await FirestoreService.instance.insertSavingGoal(data);
+        } catch (e) {
+          debugPrint('[cloud] saving goal sync deferred: $e');
+        }
+      }());
     }
     savingGoals.add(SavingGoal(id: id, currency: currency, title: title, targetAmount: targetAmount, savedAmount: savedAmount, targetDate: targetDate, icon: icon, color: color, deposits: seed));
     notifyListeners();
   }
 
-  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate, String? icon, String? color, List<GoalDeposit>? deposits}) async {
+  Future<void> updateSavingGoal(SavingGoal g, {String? title, double? targetAmount, double? savedAmount, DateTime? targetDate, bool clearTargetDate = false, String? icon, String? color, List<GoalDeposit>? deposits}) async {
     final updated = SavingGoal(
       id: g.id,
       currency: g.currency,
       title: title ?? g.title,
       targetAmount: targetAmount ?? g.targetAmount,
       savedAmount: savedAmount ?? g.savedAmount,
-      targetDate: targetDate ?? g.targetDate,
+      targetDate: clearTargetDate ? null : (targetDate ?? g.targetDate),
       icon: icon ?? g.icon,
       color: color ?? g.color,
       deposits: deposits ?? g.deposits,   // ← carry existing deposits forward
