@@ -1,7 +1,9 @@
-# SplitSmart 🚀
+# Splitzee 🚀
 ### Your Money, Your Rules.
 
-**SplitSmart** is a production-grade Flutter application designed to simplify bill splitting and personal finance management. Built with Firebase cloud sync, premium aesthetics, robust architecture, and zero-cost AI-powered smart entry.
+**Splitzee** is a production-grade Flutter application designed to simplify bill splitting and personal finance management. Built with Firebase cloud sync, premium aesthetics, robust architecture, and zero-cost AI-powered smart entry.
+
+> Formerly named **SplitSmart**. The GitHub repository and clone URLs below still use the original name.
 
 ---
 
@@ -102,7 +104,7 @@ flutter run
 ---
 
 ## 🤝 Contributing
-SplitSmart is an open-source project. Contributions, issues, and feature requests are welcome!
+Splitzee is an open-source project. Contributions, issues, and feature requests are welcome!
 
 ## 📬 Contact & Support
 - **Email**: [usmanmighiana3898@gmail.com](mailto:usmanmighiana3898@gmail.com)
