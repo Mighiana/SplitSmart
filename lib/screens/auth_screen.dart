@@ -303,7 +303,7 @@ class _AuthScreenState extends State<AuthScreen>
               ),
             ),
             const Text(
-              'Smart',
+              'zee',
               style: TextStyle(
                 fontSize: 34,
                 fontWeight: FontWeight.w800,

@@ -117,7 +117,7 @@ class _LockScreenState extends State<LockScreen>
                       style: TextStyle(color: AppColors.text),
                     ),
                     TextSpan(
-                      text: 'Smart',
+                      text: 'zee',
                       style: TextStyle(color: AppColors.green),
                     ),
                   ],
