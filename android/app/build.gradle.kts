@@ -64,14 +64,14 @@ android {
         create("prod") {
             dimension = "env"
             // production applicationId = com.mighiana.splitsmart (from defaultConfig)
-            manifestPlaceholders["appName"] = "SplitSmart"
+            manifestPlaceholders["appName"] = "Splitzee"
         }
         create("dev") {
             dimension = "env"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             // Distinct launcher label so the sandbox app is obvious on-device.
-            manifestPlaceholders["appName"] = "SplitSmart Dev"
+            manifestPlaceholders["appName"] = "Splitzee Dev"
         }
     }
 
