@@ -114,7 +114,7 @@ class _QRShareScreenState extends State<QRShareScreen>
       final bytes = byteData.buffer.asUint8List();
       final dir = await getTemporaryDirectory();
       final file = File(
-          '${dir.path}/splitsmart_qr_${widget.group.name.replaceAll(' ', '_')}.png');
+          '${dir.path}/splitzee_qr_${widget.group.name.replaceAll(' ', '_')}.png');
       await file.writeAsBytes(bytes);
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path, mimeType: 'image/png')],

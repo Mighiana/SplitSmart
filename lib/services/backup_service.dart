@@ -67,7 +67,7 @@ class BackupService {
     final dbFile = File(p.join(dbDir, 'splitsmart_v3.db'));
 
     final now = DateTime.now();
-    final name = 'splitsmart_backup_${now.year}_${now.month.toString().padLeft(2, "0")}_${now.day.toString().padLeft(2, "0")}.zip';
+    final name = 'splitzee_backup_${now.year}_${now.month.toString().padLeft(2, "0")}_${now.day.toString().padLeft(2, "0")}.zip';
     final zipFile = File(p.join(docs.path, name));
 
     final encoder = ZipFileEncoder();
@@ -305,7 +305,8 @@ class BackupService {
     return dir
         .listSync()
         .whereType<File>()
-        .where((f) => f.path.endsWith('.zip') && f.path.contains('splitsmart_backup_'))
+        .where((f) => f.path.endsWith('.zip') &&
+            (f.path.contains('splitzee_backup_') || f.path.contains('splitsmart_backup_')))
         .toList()
       ..sort((a, b) => b.path.compareTo(a.path));
   }
