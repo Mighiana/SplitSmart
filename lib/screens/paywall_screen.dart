@@ -109,7 +109,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
               ),
               const SizedBox(height: 20),
               Text(
-                'SplitSmart Premium',
+                'Splitzee Premium',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 26,

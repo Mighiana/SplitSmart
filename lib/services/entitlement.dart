@@ -147,7 +147,7 @@ bool canEnableGuestAccess(Entitlement ownerEntitlement) =>
 String guestJoinDenialMessage(GuestJoinDecision d) {
   switch (d) {
     case GuestJoinDecision.notPremiumGroup:
-      return 'The group owner needs SplitSmart Premium to let guests join.';
+      return 'The group owner needs Splitzee Premium to let guests join.';
     case GuestJoinDecision.groupFull:
       return 'This group is full.';
     case GuestJoinDecision.alreadyMember:

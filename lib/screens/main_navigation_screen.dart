@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 18),
                     const Text(
-                      'Enjoying SplitSmart?',
+                      'Enjoying Splitzee?',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.3),
                     ),

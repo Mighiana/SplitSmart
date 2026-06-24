@@ -702,14 +702,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
-        p.join(tempDir.path, 'SplitSmart_Support_Logs.txt'),
+        p.join(tempDir.path, 'Splitzee_Support_Logs.txt'),
       );
       await tempFile.writeAsString(deviceInfo + logContent);
 
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(tempFile.path)],
-          subject: 'SplitSmart Support Logs v$_appVersion',
+          subject: 'Splitzee Support Logs v$_appVersion',
         ),
       );
       AnalyticsService.logSupportLogsShared();
@@ -957,7 +957,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   _privacySection(
                     'Data Collection',
-                    'SplitSmart collects only the information you provide directly, such as your name, profile picture, and financial transaction data you enter into the app.',
+                    'Splitzee collects only the information you provide directly, such as your name, profile picture, and financial transaction data you enter into the app.',
                   ),
                   _privacySection(
                     'Data Storage',
@@ -2120,7 +2120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       iconBg: TC.bg(context),
                       title: 'App Version',
-                      subtitle: 'SplitSmart v$_appVersion',
+                      subtitle: 'Splitzee v$_appVersion',
                       trailing: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -2164,7 +2164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             text: '♥ ',
                             style: TextStyle(color: _cRed),
                           ),
-                          TextSpan(text: 'Made with love by SplitSmart'),
+                          TextSpan(text: 'Made with love by Splitzee'),
                         ],
                       ),
                     ),

@@ -1151,7 +1151,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
       }
     }
     sb.writeln('');
-    sb.writeln('Shared from SplitSmart — free at Play Store');
+    sb.writeln('Shared from Splitzee — free at Play Store');
 
     SharePlus.instance.share(
       ShareParams(

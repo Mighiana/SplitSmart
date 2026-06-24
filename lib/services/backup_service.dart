@@ -121,8 +121,8 @@ class BackupService {
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: 'application/zip')],
-        subject: 'SplitSmart Backup',
-        text: 'SplitSmart data + receipts backup.',
+        subject: 'Splitzee Backup',
+        text: 'Splitzee data + receipts backup.',
         sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : null,
       ),
     );
@@ -149,8 +149,8 @@ class BackupService {
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(logFile.path, mimeType: 'text/plain')],
-        subject: 'SplitSmart Error Logs',
-        text: 'Attached are the crash logs for SplitSmart.',
+        subject: 'Splitzee Error Logs',
+        text: 'Attached are the crash logs for Splitzee.',
         sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : null,
       ),
     );

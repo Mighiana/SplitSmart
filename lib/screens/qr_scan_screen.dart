@@ -47,7 +47,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       if (json['v'] != 1 || json['name'] == null) {
-        _showError('Not a valid SplitSmart QR code.');
+        _showError('Not a valid Splitzee QR code.');
         return;
       }
       _showImportSheet(json);
@@ -318,7 +318,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
                   child: Text(
                     _processing
                         ? '⏳ Processing...'
-                        : '📷 Point at a SplitSmart QR code',
+                        : '📷 Point at a Splitzee QR code',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,

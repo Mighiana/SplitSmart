@@ -46,7 +46,7 @@ class SecurityService {
   static Future<bool> authenticate() async {
     try {
       final bool result = await _auth.authenticate(
-        localizedReason: 'Please authenticate to unlock SplitSmart',
+        localizedReason: 'Please authenticate to unlock Splitzee',
       );
       return result;
     } on PlatformException catch (e) {

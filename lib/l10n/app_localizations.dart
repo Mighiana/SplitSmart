@@ -256,7 +256,7 @@ class AppLocalizations {
 
     // ── English ──────────────────────────────────────────────────────────────
     'en': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'Home',
       'money':           'Finances',
       'groups':          'Groups',
@@ -479,7 +479,7 @@ class AppLocalizations {
 
     // ── Urdu ─────────────────────────────────────────────────────────────────
     'ur': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'ہوم',
       'money':           'رقم',
       'groups':          'گروپس',
@@ -678,7 +678,7 @@ class AppLocalizations {
 
     // ── Arabic ────────────────────────────────────────────────────────────────
     'ar': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'الرئيسية',
       'money':           'المال',
       'groups':          'المجموعات',
@@ -877,7 +877,7 @@ class AppLocalizations {
 
     // ── French ────────────────────────────────────────────────────────────────
     'fr': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'Accueil',
       'money':           'Argent',
       'groups':          'Groupes',
@@ -1076,7 +1076,7 @@ class AppLocalizations {
 
     // ── Spanish ───────────────────────────────────────────────────────────────
     'es': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'Inicio',
       'money':           'Dinero',
       'groups':          'Grupos',
@@ -1275,7 +1275,7 @@ class AppLocalizations {
 
     // ── German ────────────────────────────────────────────────────────────────
     'de': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'Startseite',
       'money':           'Geld',
       'groups':          'Gruppen',
@@ -1474,7 +1474,7 @@ class AppLocalizations {
 
     // ── Turkish ───────────────────────────────────────────────────────────────
     'tr': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'Ana Sayfa',
       'money':           'Para',
       'groups':          'Gruplar',
@@ -1673,7 +1673,7 @@ class AppLocalizations {
 
     // ── Hindi ─────────────────────────────────────────────────────────────────
     'hi': {
-      'appName':         'SplitSmart',
+      'appName':         'Splitzee',
       'home':            'होम',
       'money':           'पैसा',
       'groups':          'समूह',

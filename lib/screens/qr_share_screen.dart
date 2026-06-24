@@ -118,8 +118,8 @@ class _QRShareScreenState extends State<QRShareScreen>
       await file.writeAsBytes(bytes);
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path, mimeType: 'image/png')],
-        subject: 'Join ${widget.group.name} on SplitSmart',
-        text: 'Scan this QR code to join "${widget.group.name}" on SplitSmart!',
+        subject: 'Join ${widget.group.name} on Splitzee',
+        text: 'Scan this QR code to join "${widget.group.name}" on Splitzee!',
       ));
       AnalyticsService.logGroupQRShared();
       try { await file.delete(); } catch (_) {}
@@ -452,7 +452,7 @@ class _QRShareScreenState extends State<QRShareScreen>
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    'Scan in SplitSmart, or enter the code to join',
+                    'Scan in Splitzee, or enter the code to join',
                     textAlign: TextAlign.center,
                     style: TC.geist(context,
                         fontSize: 11, color: TC.text3(context)),

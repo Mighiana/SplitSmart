@@ -178,7 +178,7 @@ class SplitSmartApp extends StatelessWidget {
     final state = context.watch<AppState>();
 
     return MaterialApp(
-      title: 'SplitSmart',
+      title: 'Splitzee',
       debugShowCheckedModeBanner: false,
       themeMode: state.themeMode,
       darkTheme: _buildTheme(Brightness.dark),
@@ -341,8 +341,8 @@ class _AppGateState extends State<_AppGate>
   late Animation<double> _logoFade;
   late Animation<double> _subtitleFade;
 
-  static const _word = 'SplitSmart';
-  static const _totalChars = 10;
+  static const _word = 'Splitzee';
+  static const _totalChars = 8;
   static const _typeStart = 0.32;
   static const _typeEnd = 0.95;
   static const _typeRange = _typeEnd - _typeStart;

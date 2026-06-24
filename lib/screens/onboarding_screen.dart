@@ -139,7 +139,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('SPLITSMART',
+                    Text('SPLITZEE',
                         style: TC.geist(context,
                             fontSize: 11,
                             fontWeight: FontWeight.w800,

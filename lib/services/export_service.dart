@@ -19,7 +19,7 @@ class ExportService {
           return [
             pw.Header(
               level: 0,
-              text: 'SplitSmart Report',
+              text: 'Splitzee Report',
             ),
             pw.Paragraph(
               text: 'Generated on: ${DateTime.now().toLocal().toString().split('.')[0]}',
@@ -85,7 +85,7 @@ class ExportService {
     );
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/SplitSmart_Report_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    final file = File('${dir.path}/Splitzee_Report_${DateTime.now().millisecondsSinceEpoch}.pdf');
     final bytes = await pdf.save();
     await file.writeAsBytes(bytes);
 
@@ -95,7 +95,7 @@ class ExportService {
        await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'application/pdf')],
-          text: 'SplitSmart Data Report',
+          text: 'Splitzee Data Report',
           sharePositionOrigin: origin,
         ),
        );
@@ -146,7 +146,7 @@ class ExportService {
     );
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/SplitSmart_Transactions_${currency}_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    final file = File('${dir.path}/Splitzee_Transactions_${currency}_${DateTime.now().millisecondsSinceEpoch}.pdf');
     final bytes = await pdf.save();
     await file.writeAsBytes(bytes);
 
@@ -255,7 +255,7 @@ class ExportService {
     // then fallback to 'group' if result is empty (e.g. all-emoji names).
     var safeName = g.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_|_$'), '');
     if (safeName.isEmpty) safeName = 'group_${g.id}';
-    final file = File('${dir.path}/SplitSmart_Group_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    final file = File('${dir.path}/Splitzee_Group_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf');
     final bytes = await pdf.save();
     await file.writeAsBytes(bytes);
 
