@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Splitsmart</string>
+	<string>Splitzee</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>splitsmart</string>
+	<string>splitzee</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,15 +27,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>SplitSmart uses the camera to scan QR invite codes and attach receipt photos.</string>
+	<string>Splitzee uses the camera to scan QR invite codes and attach receipt photos.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>SplitSmart uses Face ID to unlock the app when app lock is enabled.</string>
+	<string>Splitzee uses Face ID to unlock the app when app lock is enabled.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SplitSmart uses the microphone for optional voice expense entry.</string>
+	<string>Splitzee uses the microphone for optional voice expense entry.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SplitSmart lets you choose receipt images from your photo library.</string>
+	<string>Splitzee lets you choose receipt images from your photo library.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>SplitSmart uses speech recognition for optional voice expense entry.</string>
+	<string>Splitzee uses speech recognition for optional voice expense entry.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -55,6 +55,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   int _notifyBeforeDays = 1; // days before due date
 
+  // Hidden developer-mode unlock (tap App Version 7 times, like Android's
+  // own developer options). Persisted so it survives restarts; release
+  // builds show the Developer section only after unlocking.
+  bool _devUnlocked = false;
+  int _devTapCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -84,8 +90,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _appLockEnabled = appLockE;
       _notifyBeforeDays = notifyDays;
       _notificationsEnabled = notifyEnabled;
+      _devUnlocked = prefs.getBool('dev_mode_unlocked') ?? false;
       _loadingPrefs = false;
     });
+  }
+
+  /// Secret unlock: 7 taps on the App Version tile enables the Developer
+  /// section in release builds (debug builds always show it).
+  Future<void> _onVersionTileTap() async {
+    if (_devUnlocked) {
+      _snack('Developer mode is already on');
+      return;
+    }
+    _devTapCount++;
+    if (_devTapCount >= 7) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('dev_mode_unlocked', true);
+      if (!mounted) return;
+      setState(() => _devUnlocked = true);
+      _snack('🛠️ Developer mode unlocked!', color: _cGreen);
+    } else if (_devTapCount >= 4) {
+      _snack('${7 - _devTapCount} taps away from developer mode');
+    }
+  }
+
+  Future<void> _disableDevMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dev_mode_unlocked', false);
+    if (!mounted) return;
+    setState(() {
+      _devUnlocked = false;
+      _devTapCount = 0;
+    });
+    _snack('Developer mode disabled');
   }
 
   void _snack(
@@ -2020,8 +2057,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 .fade(duration: 300.ms)
                 .slideY(begin: 0.1, curve: Curves.easeOut),
 
-            // DEVELOPER SECTION (debug builds only)
-            if (kDebugMode) ...[
+            // DEVELOPER SECTION (debug builds, or unlocked via 7 taps on
+            // the App Version tile in release builds)
+            if (kDebugMode || _devUnlocked) ...[
               const _SecTitle('Developer', color: _cRed)
                   .animate(delay: 230.ms)
                   .fade(duration: 300.ms)
@@ -2075,7 +2113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         iconBg: _cBlueL,
                         title: 'Reset Onboarding',
                         subtitle: 'Show onboarding screens on next app launch',
-                        showDivider: false,
+                        showDivider: _devUnlocked,
                         onTap: () async {
                           final prefs = await SharedPreferences.getInstance();
                           await prefs.remove('onboarding_done');
@@ -2087,6 +2125,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }
                         },
                       ),
+                      if (_devUnlocked)
+                        _Tile(
+                          icon: const Icon(Icons.visibility_off_rounded,
+                              size: 18),
+                          iconBg: TC.bg(context),
+                          title: 'Disable Developer Mode',
+                          subtitle: 'Hide this section again',
+                          showDivider: false,
+                          onTap: _disableDevMode,
+                        ),
                     ],
                   )
                   .animate(delay: 230.ms)
@@ -2121,6 +2169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       iconBg: TC.bg(context),
                       title: 'App Version',
                       subtitle: 'Splitzee v$_appVersion',
+                      onTap: _onVersionTileTap,
                       trailing: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,

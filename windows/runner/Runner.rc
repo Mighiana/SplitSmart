@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.splitsmart" "\0"
-            VALUE "FileDescription", "splitsmart" "\0"
+            VALUE "CompanyName", "Splitzee" "\0"
+            VALUE "FileDescription", "Splitzee" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "splitsmart" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.splitsmart. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Splitzee. All rights reserved." "\0"
             VALUE "OriginalFilename", "splitsmart.exe" "\0"
-            VALUE "ProductName", "splitsmart" "\0"
+            VALUE "ProductName", "Splitzee" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

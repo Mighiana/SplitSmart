@@ -1,27 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:splitsmart/services/entitlement.dart';
-import 'package:splitsmart/providers/app_state.dart';
+import 'package:splitzee/services/entitlement.dart';
+import 'package:splitzee/providers/app_state.dart';
 
 /// Tests for the guest-join + owner-paid-premium business logic.
 /// These cover the pure decision layer that both the client and the
 /// Firestore security rules rely on.
 void main() {
   group('accountTierFrom', () {
-    test('no session → local', () {
+    test('no session â†’ local', () {
       expect(
         accountTierFrom(signedIn: false, isAnonymous: false),
         AccountTier.local,
       );
     });
 
-    test('anonymous session → guest', () {
+    test('anonymous session â†’ guest', () {
       expect(
         accountTierFrom(signedIn: true, isAnonymous: true),
         AccountTier.guest,
       );
     });
 
-    test('real account → full', () {
+    test('real account â†’ full', () {
       expect(
         accountTierFrom(signedIn: true, isAnonymous: false),
         AccountTier.full,
@@ -98,7 +98,7 @@ void main() {
       expect(restored.store, 'play');
     });
 
-    test('null map → none', () {
+    test('null map â†’ none', () {
       final e = Entitlement.fromMap(null);
       expect(e.premium, isFalse);
       expect(e.isActive, isFalse);
@@ -167,9 +167,9 @@ void main() {
       final g = GroupData(
         id: 1,
         name: 'X',
-        emoji: '🏠',
+        emoji: 'ðŸ ',
         currency: 'EUR',
-        sym: '€',
+        sym: 'â‚¬',
         members: const ['You'],
       );
       expect(g.isPremiumGroup, isFalse);
@@ -179,9 +179,9 @@ void main() {
       final g = GroupData(
         id: 1,
         name: 'X',
-        emoji: '🏠',
+        emoji: 'ðŸ ',
         currency: 'EUR',
-        sym: '€',
+        sym: 'â‚¬',
         members: const ['You'],
         isPremiumGroup: true,
       );
@@ -197,9 +197,9 @@ void main() {
       final g = GroupData(
         id: 99,
         name: 'Roadtrip',
-        emoji: '🚗',
+        emoji: 'ðŸš—',
         currency: 'EUR',
-        sym: '€',
+        sym: 'â‚¬',
         // "Sam" is a guest who joined accountlessly.
         members: const ['You', 'Sam'],
         expenses: [
@@ -207,14 +207,14 @@ void main() {
             id: 1,
             desc: 'Gas',
             amount: 40,
-            cat: '🚗',
+            cat: 'ðŸš—',
             paidBy: 'You',
             date: '2026-01-01',
           ),
         ],
       );
       final bal = state.getAllBalances(g);
-      // You paid 40, each owes 20 → You +20, Sam -20.
+      // You paid 40, each owes 20 â†’ You +20, Sam -20.
       expect(bal['You'], 20.0);
       expect(bal['Sam'], -20.0);
     });

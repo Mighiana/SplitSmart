@@ -1,7 +1,7 @@
 name: splitzee
 description: Splitzee — Bill Splitter & Money Manager. Split bills and track shared expenses effortlessly.
 publish_to: 'none'
-version: 1.0.2+20260624
+version: 1.0.3+20260702
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
