@@ -18,7 +18,7 @@
     EMAIL: "[REDACTED_EMAIL]",
     USERNAME: "[REDACTED_USERNAME]",
     IP_ADDRESS: "[REDACTED_IP_ADDRESS]",
-    PATH_OR_USERNAME: "[REDACTED_PATH]"
+    PATH_OR_USERNAME: "[REDACTED_USERNAME]"
   };
 
   function isValidIpv4(candidate) {
@@ -42,7 +42,8 @@
 
   function hasVersionFieldPrefix(source, candidateIndex) {
     const beforeCandidate = source.slice(0, candidateIndex);
-    return /(?:^|[^A-Za-z0-9_-])["']?(?:version|release|app[_-]?version|software[_-]?version)["']?\s*[:=]\s*["']?$/i.test(beforeCandidate);
+    return /(?:^|[^A-Za-z0-9_-])["']?(?:version|release)["']?(?:\s*[:=]\s*|\s+)["']?$/i.test(beforeCandidate) ||
+      /(?:^|[^A-Za-z0-9_-])["']?(?:app[_-]?version|software[_-]?version)["']?\s*[:=]\s*["']?$/i.test(beforeCandidate);
   }
 
   function isRedactableIpv4(candidate, context) {
@@ -130,9 +131,9 @@
         },
         replacement: function (match, prefix, pathValue) {
           if (pathValue.indexOf("\\") !== -1) {
-            return prefix + pathValue.replace(/^([A-Za-z]:\\Users\\)[A-Za-z0-9._-]+/, "$1[REDACTED_USER]");
+            return prefix + pathValue.replace(/^([A-Za-z]:\\Users\\)[A-Za-z0-9._-]+/, "$1" + REDACTION_LABELS.USERNAME);
           }
-          return prefix + pathValue.replace(/^((?:\/home\/|\/Users\/))[A-Za-z0-9._-]+/, "$1[REDACTED_USER]");
+          return prefix + pathValue.replace(/^((?:\/home\/|\/Users\/))[A-Za-z0-9._-]+/, "$1" + REDACTION_LABELS.USERNAME);
         }
       }
     ];

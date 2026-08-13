@@ -504,7 +504,7 @@
     "notes": "",
     "checks": {
       "notContains": ["usman"],
-      "contains": ["C:\\Users\\[REDACTED_USER]", "\\Desktop\\secret.log"],
+      "contains": ["C:\\Users\\[REDACTED_USERNAME]", "\\Desktop\\secret.log"],
       "categoriesInclude": ["PATH_OR_USERNAME"],
       "redactionCount": 1
     }
@@ -748,7 +748,7 @@
     "notes": "Regression case for F3.",
     "checks": {
       "notContains": ["alice"],
-      "contains": ["/home/[REDACTED_USER]/project/error.log"],
+      "contains": ["/home/[REDACTED_USERNAME]/project/error.log"],
       "categoriesInclude": ["PATH_OR_USERNAME"],
       "redactionCount": 1
     }
@@ -766,7 +766,7 @@
     "notes": "Regression case for F3.",
     "checks": {
       "notContains": ["bob"],
-      "contains": ["/home/[REDACTED_USER]/"],
+      "contains": ["/home/[REDACTED_USERNAME]/"],
       "categoriesInclude": ["PATH_OR_USERNAME"],
       "redactionCount": 1
     }
@@ -977,6 +977,128 @@
       "equalsInput": true,
       "categoriesExclude": ["IP_ADDRESS"],
       "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-058",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Release 1.2.3.4 passed QA yesterday.",
+    "expected_behavior": "Preserve IPv4-shaped values when directly associated with strong prose release context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 4 F6 showed obvious natural-language release version context was redacted as an IP address.",
+    "result": "pending",
+    "notes": "Regression case for F6.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-059",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Version 10.20.30.40 passed QA yesterday.",
+    "expected_behavior": "Preserve IPv4-shaped values when directly associated with strong prose version context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 4 F6 requires case-insensitive natural-language version context handling.",
+    "result": "pending",
+    "notes": "Regression case for F6.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-060",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "version: 1.2.3.4",
+    "expected_behavior": "Preserve IPv4-shaped values in colon version context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 4 F6 lists version colon syntax as a strong software-version context.",
+    "result": "pending",
+    "notes": "Boundary case for F6.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-061",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "release: 1.2.3.4",
+    "expected_behavior": "Preserve IPv4-shaped values in colon release context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 4 F6 lists release colon syntax as a strong software-version context.",
+    "result": "pending",
+    "notes": "Boundary case for F6.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-062",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Server 10.20.30.40 failed",
+    "expected_behavior": "Continue redacting IPv4 addresses in ordinary server prose.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 4 F6 requires the prose version-context exception to remain narrow.",
+    "result": "pending",
+    "notes": "Boundary case for F6.",
+    "checks": {
+      "notContains": ["10.20.30.40"],
+      "contains": ["Server ", "[REDACTED_IP_ADDRESS]", " failed"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-063",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Client 8.8.8.8 disconnected",
+    "expected_behavior": "Continue redacting IPv4 addresses in ordinary client prose.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 4 F6 requires preserving version context without disabling IP redaction.",
+    "result": "pending",
+    "notes": "Boundary case for F6.",
+    "checks": {
+      "notContains": ["8.8.8.8"],
+      "contains": ["Client ", "[REDACTED_IP_ADDRESS]", " disconnected"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-064",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Remote address: 172.20.10.15",
+    "expected_behavior": "Continue redacting IPv4 addresses in remote-address context.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 4 F6 requires non-version network contexts to remain redaction-eligible.",
+    "result": "pending",
+    "notes": "Boundary case for F6.",
+    "checks": {
+      "notContains": ["172.20.10.15"],
+      "contains": ["Remote address: ", "[REDACTED_IP_ADDRESS]"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
     }
   }
 ]

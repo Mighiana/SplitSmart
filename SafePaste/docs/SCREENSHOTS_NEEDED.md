@@ -11,8 +11,8 @@ Do not create fake screenshots. Capture these from the actual project state and 
 7. `.claude/hooks/pre-commit.sh` showing the secret-scanning hook.
 8. `evals/results_v1.md` showing preserved security-review findings.
 9. `CHANGELOG.md` entry explaining the JSON credential fix.
-10. Final unit test output showing 33/33 tests passed.
-11. Final eval output showing 57/57 evals passed.
+10. Final unit test output showing 35/35 tests passed.
+11. Final eval output showing 64/64 evals passed.
 12. Final SafePaste UI with a mixed log pasted.
 13. Example original vs sanitized output with email, Authorization header, IP address, and password redacted.
 14. `RED_TEAM.md` showing RT-P02 v1 failure and final red-team summary.
@@ -23,4 +23,5 @@ Do not create fake screenshots. Capture these from the actual project state and 
 19. `evals/graders/grader-comparison.md` showing the automated vs human disagreement on localhost.
 20. `evals/manual_test_2.md` showing real before/after evidence for F1, F2, and F3.
 21. `evals/manual_test_3.md` showing real before/after evidence for F4 and F5.
-22. Final terminal output showing 33/33 unit tests and all eval/grader checks after Manual Test 3 fixes.
+22. `evals/manual_test_4.md` showing real before/after evidence for F6 and marker consistency.
+23. Final terminal output showing 35/35 unit tests and all eval/grader checks after Manual Test 4 fixes.

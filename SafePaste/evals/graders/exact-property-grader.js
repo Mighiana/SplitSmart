@@ -19,7 +19,9 @@ const selectedCaseIds = [
   "EV-049",
   "EV-050",
   "EV-052",
-  "EV-055"
+  "EV-055",
+  "EV-058",
+  "EV-062"
 ];
 
 function loadSelectedCases() {

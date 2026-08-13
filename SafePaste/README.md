@@ -112,6 +112,8 @@ Manual Test 2 extended the grader evidence with a real localhost disagreement. S
 
 Manual Test 3 extended the policy for structured account identifiers and version context. SafePaste now redacts explicit username fields such as `username=`, `user_name=`, and `user=`, preserves arbitrary names in prose, and preserves IPv4-shaped values in narrow version fields such as `release=` while still redacting explicit `client_ip=` and `server_ip=` values.
 
+Manual Test 4 extended version context to direct prose such as `Release 1.2.3.4` and standardized current username markers on `[REDACTED_USERNAME]`.
+
 ## Known Limitations
 
 - SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.

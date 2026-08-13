@@ -202,9 +202,28 @@ const tests = [
     assert.strictEqual(sanitize("software_version=3.5.7.9").sanitized, "software_version=3.5.7.9");
   }),
 
+  test("preserves IPv4-shaped values in strong prose version context", () => {
+    assert.strictEqual(
+      sanitize("Release 1.2.3.4 passed QA yesterday.").sanitized,
+      "Release 1.2.3.4 passed QA yesterday."
+    );
+    assert.strictEqual(
+      sanitize("Version 10.20.30.40 passed QA yesterday.").sanitized,
+      "Version 10.20.30.40 passed QA yesterday."
+    );
+    assert.strictEqual(sanitize("version: 1.2.3.4").sanitized, "version: 1.2.3.4");
+    assert.strictEqual(sanitize("release: 1.2.3.4").sanitized, "release: 1.2.3.4");
+  }),
+
   test("redacts IPv4-shaped values in IP-specific fields", () => {
     assert.strictEqual(sanitize("client_ip=10.20.30.40").sanitized, `client_ip=${REDACTION_LABELS.IP_ADDRESS}`);
     assert.strictEqual(sanitize("server_ip=8.8.8.8").sanitized, `server_ip=${REDACTION_LABELS.IP_ADDRESS}`);
+  }),
+
+  test("redacts IPv4 addresses in non-version prose contexts", () => {
+    assert.strictEqual(sanitize("Server 10.20.30.40 failed").sanitized, `Server ${REDACTION_LABELS.IP_ADDRESS} failed`);
+    assert.strictEqual(sanitize("Client 8.8.8.8 disconnected").sanitized, `Client ${REDACTION_LABELS.IP_ADDRESS} disconnected`);
+    assert.strictEqual(sanitize("Remote address: 172.20.10.15").sanitized, `Remote address: ${REDACTION_LABELS.IP_ADDRESS}`);
   }),
 
   test("preserves PWD path-like environment values", () => {
@@ -271,13 +290,13 @@ const tests = [
 
   test("redacts Linux home path username", () => {
     const result = sanitize("/home/alice/project/error.log");
-    assert.strictEqual(result.sanitized, "/home/[REDACTED_USER]/project/error.log");
+    assert.strictEqual(result.sanitized, "/home/[REDACTED_USERNAME]/project/error.log");
     assert(result.categories.includes("PATH_OR_USERNAME"), "Linux home path category reported");
   }),
 
   test("redacts Linux home path username with trailing slash", () => {
     const result = sanitize("/home/bob/");
-    assert.strictEqual(result.sanitized, "/home/[REDACTED_USER]/");
+    assert.strictEqual(result.sanitized, "/home/[REDACTED_USERNAME]/");
   }),
 
   test("preserves non-home Linux system paths", () => {

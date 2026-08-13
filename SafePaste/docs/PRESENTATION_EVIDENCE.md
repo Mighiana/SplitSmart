@@ -30,7 +30,9 @@ Decisions caused by those conflicts:
 - Non-loopback IPv4 addresses are redacted by default but can be preserved by user choice.
 - Loopback IPv4 addresses are preserved after Manual Test 2 showed localhost redaction harmed diagnostic usefulness.
 - IPv4-shaped values in narrow version fields are preserved after Manual Test 3 showed release context was over-redacted.
+- Direct prose version contexts are preserved after Manual Test 4 showed `Release 1.2.3.4` was over-redacted.
 - Explicit structured username fields are redacted while arbitrary names in prose are preserved.
+- Current username replacement markers are standardized on `[REDACTED_USERNAME]`.
 - Generic secrets require credential-like key context.
 - `PWD` path values are preserved because security review showed they were false positives.
 
@@ -51,6 +53,8 @@ Decisions caused by those conflicts:
 | Linux home usernames redacted narrowly | Manual Test 2 F3 | v1.11 | EV-044 through EV-047 |
 | Structured username fields redacted | Manual Test 3 F4 | v1.12 | `evals/manual_test_3.md`, EV-048 through EV-051 |
 | Version-field IPv4-shaped values preserved | Manual Test 3 F5 and grader disagreement | v1.13 | EV-052 through EV-057 |
+| Prose version IPv4-shaped values preserved | Manual Test 4 F6 and grader disagreement | v1.14 | `evals/manual_test_4.md`, EV-058 through EV-064 |
+| Username marker standardized | Manual Test 4 consistency review | v1.15 | EV-029, EV-044, EV-045 |
 
 ## 4. Harness
 
@@ -68,13 +72,13 @@ V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
-57/57 eval cases passed after Manual Test 3 fixes.
+64/64 eval cases passed after Manual Test 4 fixes.
 
 Session 7 grader result:
 
-- Automated exact/property grader: 14 cases, 60/60 property checks passed.
-- Human rubric: 14 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL.
-- Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; the final spec preserves narrow version-field values.
+- Automated exact/property grader: 16 cases, 69/69 property checks passed.
+- Human rubric: 16 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, and EV-058 FAIL.
+- Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; Manual Test 4 extended that same issue to direct prose `Release`/`Version` contexts.
 
 Most interesting failures:
 
@@ -86,19 +90,21 @@ Most interesting failures:
 - Manual Test 2 F3: `/home/usman/...` did not redact the username.
 - Manual Test 3 F4: `username=musman24`, `user_name=alice_dev`, and `user=bob-admin` remained visible.
 - Manual Test 3 F5: `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
+- Manual Test 4 F6: `Release 1.2.3.4 passed QA yesterday.` became `Release [REDACTED_IP_ADDRESS] passed QA yesterday.`
+- Manual Test 4 consistency review: current product used both `[REDACTED_USER]` and `[REDACTED_USERNAME]` for username redaction.
 
 Categories tested:
-API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field IPv4-shaped values, explicit IP fields, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
+API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field and prose-version IPv4-shaped values, explicit IP fields, non-version prose IP addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
-EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, and EV-055.
+EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, EV-055, EV-058, and EV-062.
 
 ## 5a. Graders and the human in the loop
 
 | Grader | Location | Why chosen | Cases graded | Result |
 | --- | --- | --- | --- | --- |
-| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 14 | 60/60 property checks passed |
-| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 14 current cases plus preserved before/after disagreement evidence | 14 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL |
+| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 16 | 69/69 property checks passed |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 16 current cases plus preserved before/after disagreement evidence | 16 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, and EV-058 FAIL |
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
@@ -211,3 +217,27 @@ Added a narrow version-field context exception while keeping `client_ip=` and `s
 
 Permanent engineering control:
 Unit tests plus EV-052 through EV-057.
+
+Failure:
+Prose release/version context was over-redacted as an IP address.
+
+Detection:
+Manual Test 4 F6 and local reproduction showed `Release 1.2.3.4 passed QA yesterday.` became `Release [REDACTED_IP_ADDRESS] passed QA yesterday.`
+
+Response:
+Extended the narrow version-context exception to direct `Version` and `Release` prose associations.
+
+Permanent engineering control:
+Unit tests plus EV-058 through EV-064.
+
+Consistency finding:
+Username replacement labels were inconsistent.
+
+Detection:
+Manual Test 4 review showed home-path usernames used `[REDACTED_USER]` while structured username fields used `[REDACTED_USERNAME]`.
+
+Response:
+Current product output, tests, evals, and live docs now standardize on `[REDACTED_USERNAME]`.
+
+Permanent engineering control:
+Updated path username tests/evals while preserving historical evidence files unchanged.

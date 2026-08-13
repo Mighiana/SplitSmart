@@ -1,6 +1,6 @@
 # SafePaste Final Evaluation Results
 
-Refreshed after Manual Test 3 fixes on 2026-08-13.
+Refreshed after Manual Test 4 fixes on 2026-08-13.
 
 ## Commands Run
 
@@ -16,25 +16,27 @@ rg -n 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z
 
 ## After Results
 
-- Unit tests: 33 total, 33 passed, 0 failed.
-- Eval cases: 57 total, 57 passed, 0 failed.
-- Automated exact/property grader: 14 cases, 60 property checks, 60 passed, 0 failed.
-- Human rubric: 14 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL.
+- Unit tests: 35 total, 35 passed, 0 failed.
+- Eval cases: 64 total, 64 passed, 0 failed.
+- Automated exact/property grader: 16 cases, 69 property checks, 69 passed, 0 failed.
+- Human rubric: 16 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, and EV-058 FAIL.
 - Red-team cases: 15 total, 15 passed, 0 failed.
 - UI smoke: PASS.
 - Privacy/static scan: contextual documentation, history, eval-runner, local static server, local script tags, and scan-pattern hits only; no production network, persistence, cookie, or unsafe DOM finding.
 - Secret scan: synthetic fixtures in tests/evals/history/docs only; no production hardcoded credential finding.
 - Remaining failures from executed checks: none.
 
-## Manual Test 3 Findings Fixed
+## Manual Test 4 Findings Fixed
 
-- F4: Explicit structured username fields now redact account-like values while preserving field names and avoiding arbitrary personal-name detection.
-- F5: IPv4-shaped values in narrow version-related fields now remain visible, while explicit `client_ip=` and `server_ip=` values still redact.
+- F6: Direct prose `Version` and `Release` contexts now preserve IPv4-shaped version values.
+- Boundary preservation: `version:`, `release:`, `version=`, and `release=` contexts remain preserved.
+- Boundary redaction: `Server 10.20.30.40 failed`, `Client 8.8.8.8 disconnected`, and `Remote address: 172.20.10.15` still redact.
+- Marker consistency: current username replacements now use `[REDACTED_USERNAME]` for both structured username fields and home-path usernames.
 
 ## Summary
 
-- Total eval cases: 57
-- Passed: 57
+- Total eval cases: 64
+- Passed: 64
 - Failed: 0
 - Failure IDs: None
 
@@ -99,3 +101,10 @@ EV-054 | product | false-positive/ip-version | Developer / IT support engineer |
 EV-055 | product | ip | Security / compliance team | R6, R12 | PASS
 EV-056 | product | ip | Security / compliance team | R6, R12 | PASS
 EV-057 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-058 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-059 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-060 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-061 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-062 | product | ip | Security / compliance team | R6, R12 | PASS
+EV-063 | product | ip | Security / compliance team | R6, R12 | PASS
+EV-064 | product | ip | Security / compliance team | R6, R12 | PASS

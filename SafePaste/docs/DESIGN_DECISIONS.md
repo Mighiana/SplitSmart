@@ -29,7 +29,7 @@ Options considered:
 Always redact, never redact, or provide user-controlled behavior.
 
 Decision:
-Redact valid non-loopback IPv4 addresses by default and provide a checkbox to preserve them. Preserve IPv4 loopback addresses in `127.0.0.0/8` because they are usually local diagnostic context. Preserve IPv4-shaped values in narrow version-related fields. Redact common user-directory path usernames and explicit structured username fields while preserving surrounding context.
+Redact valid non-loopback IPv4 addresses by default and provide a checkbox to preserve them. Preserve IPv4 loopback addresses in `127.0.0.0/8` because they are usually local diagnostic context. Preserve IPv4-shaped values in narrow version-related contexts. Redact common user-directory path usernames and explicit structured username fields while preserving surrounding context.
 
 Reason:
 Default privacy protection helps data subjects and security stakeholders. Manual Test 2 showed that localhost redaction can be disproportionately harmful for debugging, so loopback addresses are preserved while the checkbox still gives developers control when other exact network context matters.
@@ -100,25 +100,45 @@ People whose data appears in logs, developers, and support recipients.
 Known limitation:
 Only simple account-like field values are handled; arbitrary names in prose are intentionally out of scope.
 
-## 2d. Version-Field IPv4-Shaped Values
+## 2d. Version-Context IPv4-Shaped Values
 
 Context:
-Manual Test 3 showed `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
+Manual Test 3 showed `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`. Manual Test 4 showed `Release 1.2.3.4 passed QA yesterday.` became `Release [REDACTED_IP_ADDRESS] passed QA yesterday.`
 
 Options considered:
-Keep purely syntactic IPv4 redaction, disable IPv4 redaction broadly, special-case one release string, or preserve IPv4-shaped values only in narrow version-related fields.
+Keep purely syntactic IPv4 redaction, disable IPv4 redaction broadly, special-case one release string, add broad natural-language interpretation, or preserve IPv4-shaped values only in narrow direct version contexts.
 
 Decision:
-Preserve IPv4-shaped values when immediately preceded by version-related fields such as `version=`, `release=`, `app_version=`, or `software_version=`. Continue redacting `client_ip=...`, `server_ip=...`, and other non-loopback IPv4 values.
+Preserve IPv4-shaped values when immediately preceded by narrow version-related fields such as `version=`, `release=`, `app_version=`, or `software_version=`, and when directly associated with strong prose keywords such as `Version 1.2.3.4` or `Release 1.2.3.4`. Continue redacting `client_ip=...`, `server_ip=...`, `Server 10.20.30.40 failed`, `Client 8.8.8.8 disconnected`, and other non-loopback IPv4 values.
 
 Reason:
-This resolves the automated-vs-human grader disagreement without weakening general IP protection. The rule is small enough to audit and avoids hardcoding the specific observed value.
+This resolves the automated-vs-human grader disagreement without weakening general IP protection. The rule is small enough to audit, avoids hardcoding the specific observed value, and does not introduce broad NLP.
 
 Stakeholders affected:
 Developers, support recipients, and security reviewers.
 
 Known limitation:
-The context check only covers a small set of version-related field names.
+The context check only covers a small set of version-related field names and direct `Version`/`Release` prose associations.
+
+## 2e. Username Replacement Marker
+
+Context:
+Manual Test 4 consistency review found that path usernames used `[REDACTED_USER]`, while structured username fields used `[REDACTED_USERNAME]`.
+
+Options considered:
+Keep both labels, use separate categories for path usernames and structured usernames, or standardize on one replacement label.
+
+Decision:
+Standardize current product output on `[REDACTED_USERNAME]` for both home-path usernames and explicit structured username fields.
+
+Reason:
+Both labels represent the same conceptual category: account or local usernames. One marker improves readability, grading consistency, and presentation clarity.
+
+Stakeholders affected:
+Developers, support recipients, security reviewers, and people whose usernames appear in logs.
+
+Known limitation:
+Historical evidence files still contain the markers that were actually observed in prior runs.
 
 ## 3. Detection Sensitivity vs False Positives
 

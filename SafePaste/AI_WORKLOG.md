@@ -84,6 +84,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: Adding the structured `user=` policy intentionally changed the expected handling of JSON `"user":"sam"` in the password JSON test and RT-P02; it is now redacted as a username rather than preserved as harmless context.
 - Resulting control: Explicit username-field tests/evals, arbitrary-name preservation tests/evals, version-field IPv4 false-positive tests/evals, and updated grader comparison for the F5 automated-vs-human disagreement.
 
+### 2026-08-13: Manual Test 4 follow-up
+
+- Task: Continue the engineering loop from real manual Test 4 results.
+- Instruction given: Preserve prior evidence and `SPEC_v1.md`, fix prose version-like IPv4 false positive, review username marker consistency, add tests/evals, update docs/graders, and rerun checks.
+- What AI produced: `evals/manual_test_4.md`, new unit regressions, EV-058 through EV-064, direct `Version`/`Release` prose context handling, current marker standardization on `[REDACTED_USERNAME]`, and spec/changelog/design/grader updates.
+- Accepted: Accepted after unit tests, full evals, exact/property grader, red-team, UI smoke, static checks, secret scan, hook, commit, and push passed.
+- Manual changes: None outside the documented code, test, eval, and evidence patches.
+- Failure or surprise: `version:` and `release:` already preserved before the fix, but direct `Version 1.2.3.4` and `Release 1.2.3.4` did not. Current output also used two username markers for the same concept.
+- Resulting control: Prose version-context regression tests/evals, non-version prose IP redaction tests/evals, and unified current username marker expectations.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys
@@ -221,3 +231,37 @@ Human response
 
 Permanent control added
 -> Version-field unit tests plus EV-052 through EV-057.
+
+### Prose release/version context was over-redacted as an IP address
+
+AI behavior
+-> The sanitizer redacted `Release 1.2.3.4 passed QA yesterday.` as an IP address.
+
+Why it was problematic
+-> Automated syntactic IP redaction looked privacy-protective, but human review found it removed obvious release-version context.
+
+How it was detected
+-> Manual Test 4 F6 and local reproduction.
+
+Human response
+-> Extend the existing version-context policy only to direct `Version` and `Release` prose associations, without broad NLP or disabling IP redaction.
+
+Permanent control added
+-> Prose version-context unit tests plus EV-058 through EV-064.
+
+### Username replacement labels were inconsistent
+
+AI behavior
+-> The sanitizer used `[REDACTED_USER]` in home paths and `[REDACTED_USERNAME]` in structured username fields.
+
+Why it was problematic
+-> The two labels represented the same conceptual category, which made current product output and grading evidence less consistent.
+
+How it was detected
+-> Manual Test 4 consistency review and local reproduction.
+
+Human response
+-> Standardize current product, tests, evals, and live docs on `[REDACTED_USERNAME]`.
+
+Permanent control added
+-> Updated path username tests/evals and documented that historical evidence files preserve prior observed labels.

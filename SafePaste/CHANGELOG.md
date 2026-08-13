@@ -214,3 +214,31 @@ Improves diagnostic usefulness for developers and support recipients while prese
 
 Mapped requirement:
 R6, R12, R14.
+
+## v1.14
+
+Changed:
+IPv4-shaped values are now preserved when directly associated with strong prose version keywords, such as `Version 1.2.3.4` and `Release 1.2.3.4`, case-insensitively.
+
+Why:
+Manual Test 4 F6 showed `Release 1.2.3.4 passed QA yesterday.` was redacted as an IP address even though the human rubric judged it to be obvious release-version context. This extended the Manual Test 3 version/IP grader disagreement from key/value syntax into direct natural-language version context.
+
+Stakeholder impact:
+Improves diagnostic usefulness for developers and support recipients while preserving IPv4 redaction for ordinary network prose such as `Server 10.20.30.40 failed`, `Client 8.8.8.8 disconnected`, and `Remote address: 172.20.10.15`.
+
+Mapped requirement:
+R6, R12, R14.
+
+## v1.15
+
+Changed:
+Current product output now standardizes username replacements on `[REDACTED_USERNAME]` for both structured username fields and usernames inside recognized home-directory paths.
+
+Why:
+Manual Test 4 consistency review found two labels, `[REDACTED_USERNAME]` and `[REDACTED_USER]`, representing the same conceptual category. The current product, tests, evals, and live documentation now use one marker while historical evidence files preserve the labels actually observed at the time.
+
+Stakeholder impact:
+Improves readability and grading consistency without changing which username values are protected.
+
+Mapped requirement:
+R13, R12.
