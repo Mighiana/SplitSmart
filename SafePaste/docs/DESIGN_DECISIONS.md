@@ -140,6 +140,26 @@ Developers, support recipients, security reviewers, and people whose usernames a
 Known limitation:
 Historical evidence files still contain the markers that were actually observed in prior runs.
 
+## 2f. IPv4 Sentence Punctuation Boundary
+
+Context:
+Manual Test 5 showed `Connection received from 192.168.20.50.` remained visible because the IPv4 detector rejected any candidate followed by a dot.
+
+Options considered:
+Keep rejecting all trailing dots, allow all trailing dots, special-case the observed sentence, or allow a trailing dot only when it behaves like sentence punctuation.
+
+Decision:
+Treat a dot after an IPv4 candidate as sentence punctuation only when it is followed by the end of input, whitespace, or closing punctuation. Continue preserving dotted numeric sequences such as `1.2.3.4.5` and hostname-embedded values such as `https://10.20.30.40.example.com/status`.
+
+Reason:
+This fixes the privacy/security false negative without hardcoding the exact sentence or weakening the previous false-positive protections.
+
+Stakeholders affected:
+People whose IP information appears in logs, security reviewers, developers, and support recipients.
+
+Known limitation:
+The rule remains a deterministic token-boundary rule and does not parse every possible log grammar.
+
 ## 3. Detection Sensitivity vs False Positives
 
 Context:

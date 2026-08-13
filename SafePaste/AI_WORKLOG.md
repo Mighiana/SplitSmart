@@ -94,6 +94,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: `version:` and `release:` already preserved before the fix, but direct `Version 1.2.3.4` and `Release 1.2.3.4` did not. Current output also used two username markers for the same concept.
 - Resulting control: Prose version-context regression tests/evals, non-version prose IP redaction tests/evals, and unified current username marker expectations.
 
+### 2026-08-13: Manual Test 5 follow-up
+
+- Task: Continue the engineering loop from real manual Test 5 results.
+- Instruction given: Preserve prior evidence, keep `SPEC_v1.md` unchanged, fix the standalone IPv4 false negative before sentence punctuation, add tests/evals, update evidence, and freeze the core sanitizer after full regression success unless another high-severity privacy/security regression appears.
+- What AI produced: `evals/manual_test_5.md`, unit regressions for sentence-ending IPv4 redaction and preservation guards, EV-065 through EV-071, exact/property grader coverage for EV-065, EV-069, and EV-071, and a narrow IPv4 token-boundary fix.
+- Accepted: Accepted after focused unit tests, evals, and automated grader checks passed; final full-suite verification is recorded in `evals/results_final.md`.
+- Manual changes: None outside the documented code, test, eval, and evidence patches.
+- Failure or surprise: The IPv4 validator and policy were correct, but the regex boundary rejected IP candidates followed by any dot, so a normal sentence-ending period caused `192.168.20.50.` and `10.1.2.3.` to remain visible.
+- Resulting control: Sentence-punctuation IPv4 unit tests, EV-065 and EV-066 privacy evals, EV-069 through EV-071 preservation guards, and a core sanitizer freeze after F7 unless a high-severity privacy/security regression is found.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys
@@ -248,6 +258,23 @@ Human response
 
 Permanent control added
 -> Prose version-context unit tests plus EV-058 through EV-064.
+
+### Standalone IPv4 addresses before sentence periods were not redacted
+
+AI behavior
+-> The sanitizer preserved `Connection received from 192.168.20.50.` because the IPv4 regex rejected candidates followed by any dot.
+
+Why it was problematic
+-> The value was a valid standalone non-loopback IPv4 address in normal network prose, so leaving it visible was a privacy/security false negative.
+
+How it was detected
+-> Manual Test 5 F7 and local reproduction, then a failing unit regression and failing evals EV-065 and EV-066 before the production fix.
+
+Human response
+-> Treat this as an implementation bug against the existing final policy, not a new specification ambiguity; add failing tests/evals before changing `src/sanitizer.js`.
+
+Permanent control added
+-> IPv4 sentence-punctuation boundary tests plus EV-065 through EV-071.
 
 ### Username replacement labels were inconsistent
 

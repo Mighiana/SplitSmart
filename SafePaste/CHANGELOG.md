@@ -242,3 +242,17 @@ Improves readability and grading consistency without changing which username val
 
 Mapped requirement:
 R13, R12.
+
+## v1.16
+
+Changed:
+IPv4 token-boundary handling now redacts standalone valid non-loopback IPv4 addresses before sentence-ending periods, while preserving the trailing punctuation.
+
+Why:
+Manual Test 5 F7 showed `Connection received from 192.168.20.50.` remained unchanged because the detector treated the sentence-ending period like part of a larger dotted token or hostname. This was an implementation bug against the existing final policy, not a new specification ambiguity.
+
+Stakeholder impact:
+Improves privacy/security for people whose IP details appear in logs and for security reviewers, while preserving diagnostic usefulness for version contexts, loopback addresses, larger dotted numeric sequences, and hostname-embedded IPv4-shaped values.
+
+Mapped requirement:
+R6, R12, R14.

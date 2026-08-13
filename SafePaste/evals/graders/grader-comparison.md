@@ -31,6 +31,10 @@ No external model-as-judge API was added. That would conflict with SafePaste's l
 | EV-058 before Manual Test 4 refinement | PASS under syntactic IP property; FAIL under updated preservation property | FAIL | Disagreement | The old syntactic IP interpretation treated `Release 1.2.3.4...` as successful IPv4 redaction, but the human rubric found obvious release-version context was removed. | The specification needed to clarify direct prose version context without adding broad NLP. |
 | EV-058 after Manual Test 4 refinement | PASS | PASS | Agreement after spec change | The version-shaped value is preserved in direct `Release` prose context. | The version exception now covers direct prose version keywords as well as key/value fields. |
 | EV-062 | PASS | PASS | Agreement | `Server 10.20.30.40 failed` still redacts. | The prose version exception remains narrow and does not disable IP protection in ordinary network prose. |
+| EV-065 before Manual Test 5 fix | FAIL | FAIL | Agreement | The automated property grader failed because `192.168.20.50` remained visible; the human rubric also failed privacy/shareability. | The final spec already required standalone non-loopback IPv4 redaction. The implementation boundary treated sentence punctuation too much like hostname or dotted-token syntax. |
+| EV-065 after Manual Test 5 fix | PASS | PASS | Agreement after implementation fix | The IP is redacted and the sentence-ending period remains. | This was an implementation bug, not a new specification gap. |
+| EV-069 | PASS | PASS | Agreement | `Version 3.4.5.6 deployed.` remains unchanged. | The F7 fix does not weaken the narrow prose version exception. |
+| EV-071 | PASS | PASS | Agreement | `https://10.20.30.40.example.com/status` remains unchanged. | The F7 fix still preserves IPv4-shaped substrings embedded inside hostnames. |
 
 ## Automated Exact/Property Grader Run
 
@@ -42,9 +46,9 @@ node evals/graders/exact-property-grader.js
 
 Summary:
 
-- Cases graded after Manual Test 4: 16
-- Property checks: 69
-- Passed: 69
+- Cases graded after Manual Test 5: 19
+- Property checks: 80
+- Passed: 80
 - Failed: 0
 
 | Case ID | Expected property | Actual behavior | Result | Reason |
@@ -87,15 +91,19 @@ Summary:
 | EV-058 | Must preserve values: sanitized output equals input | `Release 1.2.3.4 passed QA yesterday.` | PASS | Prose version-context IPv4-shaped value remained unchanged. |
 | EV-062 | Original IP value no longer appears | Value absent from sanitized output. | PASS | Non-version prose IP address was redacted. |
 | EV-062 | Expected marker and prose context appear | `Server [REDACTED_IP_ADDRESS] failed` present. | PASS | Required context was preserved. |
+| EV-065 | Original IP value no longer appears | Value absent from sanitized output. | PASS | Standalone sentence-final IP address was redacted. |
+| EV-065 | Expected marker and sentence punctuation appear | `Connection received from [REDACTED_IP_ADDRESS].` present. | PASS | Required context and punctuation were preserved. |
+| EV-069 | Must preserve values: sanitized output equals input | `Version 3.4.5.6 deployed.` | PASS | Prose version-context IPv4-shaped value remained unchanged. |
+| EV-071 | Must preserve values: sanitized output equals input | `https://10.20.30.40.example.com/status` | PASS | Hostname-embedded IPv4-shaped value remained unchanged. |
 
 ## Human Rubric Summary
 
 The human rubric was applied manually in [human-rubric.md](human-rubric.md).
 
-- Current cases graded: 16
-- Current overall PASS: 16
+- Current cases graded: 19
+- Current overall PASS: 19
 - Overall FAIL: 0
-- Preserved before-refinement judgments: EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL
+- Preserved before-refinement judgments: EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, EV-065 FAIL
 
 ## Disagreement Analysis
 
@@ -186,6 +194,35 @@ FAIL, because the word `Release` directly before the value makes software-versio
 Specification inspection:
 Manual Test 4 clarified that the version-context exception should include direct `Version` and `Release` prose associations, case-insensitively, while avoiding broad NLP and continuing to redact non-version prose IP addresses.
 
+EV-065 was the key Manual Test 5 privacy failure. It was not a grader disagreement after the F7 property was added.
+
+Input:
+
+```text
+Connection received from 192.168.20.50.
+```
+
+Before Manual Test 5 fix:
+
+```text
+Connection received from 192.168.20.50.
+```
+
+After Manual Test 5 fix:
+
+```text
+Connection received from [REDACTED_IP_ADDRESS].
+```
+
+Automated property result before fix:
+FAIL, because the sensitive IPv4 value remained visible, the expected redaction marker was absent, the `IP_ADDRESS` category was absent, and the redaction count was 0 instead of 1.
+
+Human rubric result before fix:
+FAIL, because the output leaked a standalone valid non-loopback IPv4 address in ordinary network prose.
+
+Specification inspection:
+Manual Test 5 did not expose a new ambiguity. The final specification already required standalone valid non-loopback IPv4 addresses to redact unless they were loopback, version context, inside a larger dotted numeric token, or embedded in a hostname. The fix adjusted token-boundary handling so sentence-ending periods are preserved as punctuation rather than blocking the IP match.
+
 Action taken:
 
 - Updated EV-040 to require loopback preservation.
@@ -196,7 +233,9 @@ Action taken:
 - Added EV-058 through EV-064 for Manual Test 4 findings.
 - Added direct prose version-context and non-version prose IP regression tests.
 - Standardized current username markers on `[REDACTED_USERNAME]` while preserving historical evidence files.
-- Updated `SPEC_FINAL.md`, `CHANGELOG.md`, `DESIGN_DECISIONS.md`, and `AI_WORKLOG.md`.
+- Added EV-065 through EV-071 for Manual Test 5 findings and preservation guards.
+- Added sentence-final IPv4 boundary regression tests.
+- Updated `SPEC_FINAL.md` for earlier spec refinements; Manual Test 5 required `CHANGELOG.md`, `DESIGN_DECISIONS.md`, and `AI_WORKLOG.md` updates but no `SPEC_FINAL.md` change.
 - Reran unit tests, evals, and the automated exact/property grader.
 
 ## Unresolved Judgment Call
@@ -206,3 +245,5 @@ SafePaste now preserves IPv4 loopback addresses by default. A security/privacy e
 SafePaste also preserves IPv4-shaped values in a short list of version-related contexts. Future stakeholders may ask for additional field names or prose forms, but the current policy keeps the exception narrow to avoid weakening IP redaction.
 
 SafePaste now also preserves direct `Version` and `Release` prose associations. Ambiguous prose outside those keywords remains governed by ordinary IPv4 redaction.
+
+After Manual Test 5, the core sanitizer is frozen unless another high-severity privacy/security regression is found.

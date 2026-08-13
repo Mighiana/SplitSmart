@@ -1100,5 +1100,128 @@
       "categoriesInclude": ["IP_ADDRESS"],
       "redactionCount": 1
     }
+  },
+  {
+    "id": "EV-065",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Connection received from 192.168.20.50.",
+    "expected_behavior": "Redact standalone valid non-loopback IPv4 addresses before sentence-ending periods.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 5 F7 showed a standalone IPv4 address followed by a period remained visible.",
+    "result": "pending",
+    "notes": "Regression case for F7.",
+    "checks": {
+      "notContains": ["192.168.20.50"],
+      "contains": ["Connection received from ", "[REDACTED_IP_ADDRESS]."],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-066",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Request originated at 10.1.2.3.",
+    "expected_behavior": "Redact standalone valid non-loopback IPv4 addresses before sentence-ending periods.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 5 F7 requires the fix to generalize beyond the exact sentence and IP.",
+    "result": "pending",
+    "notes": "Regression case for F7.",
+    "checks": {
+      "notContains": ["10.1.2.3"],
+      "contains": ["Request originated at ", "[REDACTED_IP_ADDRESS]."],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-067",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Remote host 172.16.4.20 disconnected.",
+    "expected_behavior": "Continue redacting standalone valid non-loopback IPv4 addresses in network prose.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 5 confirmed normal network prose without version context should remain redaction-eligible.",
+    "result": "pending",
+    "notes": "Boundary case for F7.",
+    "checks": {
+      "notContains": ["172.16.4.20"],
+      "contains": ["Remote host ", "[REDACTED_IP_ADDRESS]", " disconnected."],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-068",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Peer address: 8.8.8.8",
+    "expected_behavior": "Continue redacting standalone valid non-loopback IPv4 addresses in peer-address context.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 5 requires standalone non-loopback IPv4 redaction unless a narrow preservation context applies.",
+    "result": "pending",
+    "notes": "Boundary case for F7.",
+    "checks": {
+      "notContains": ["8.8.8.8"],
+      "contains": ["Peer address: ", "[REDACTED_IP_ADDRESS]"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-069",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Version 3.4.5.6 deployed.",
+    "expected_behavior": "Preserve IPv4-shaped values in direct Version prose context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 5 requires version preservation to remain intact after the F7 fix.",
+    "result": "pending",
+    "notes": "Regression guard for F6 while fixing F7.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-070",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Release 5.6.7.8 passed QA.",
+    "expected_behavior": "Preserve IPv4-shaped values in direct Release prose context.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 5 requires release preservation to remain intact after the F7 fix.",
+    "result": "pending",
+    "notes": "Regression guard for F6 while fixing F7.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-071",
+    "layer": "product",
+    "category": "false-positive/ip-hostname",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "https://10.20.30.40.example.com/status",
+    "expected_behavior": "Preserve IPv4-shaped substrings embedded inside hostnames.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 5 requires complete IP token detection and preservation inside hostnames.",
+    "result": "pending",
+    "notes": "Regression guard for hostname boundary while fixing F7.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
   }
 ]

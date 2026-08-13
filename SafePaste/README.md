@@ -92,6 +92,7 @@ Key evidence files:
 - `evals/results_v1.md`
 - `evals/results_final.md`
 - `evals/graders/exact-property-grader.js`
+- `evals/graders/exact-property-results.md`
 - `evals/graders/human-rubric.md`
 - `evals/graders/grader-comparison.md`
 - `RED_TEAM.md`
@@ -113,6 +114,8 @@ Manual Test 2 extended the grader evidence with a real localhost disagreement. S
 Manual Test 3 extended the policy for structured account identifiers and version context. SafePaste now redacts explicit username fields such as `username=`, `user_name=`, and `user=`, preserves arbitrary names in prose, and preserves IPv4-shaped values in narrow version fields such as `release=` while still redacting explicit `client_ip=` and `server_ip=` values.
 
 Manual Test 4 extended version context to direct prose such as `Release 1.2.3.4` and standardized current username markers on `[REDACTED_USERNAME]`.
+
+Manual Test 5 fixed a standalone IPv4 false negative before sentence punctuation. SafePaste now redacts normal non-loopback IPv4 addresses such as `Connection received from 192.168.20.50.` while preserving version contexts, loopback addresses, larger dotted numeric sequences, and hostname-embedded IPv4-shaped substrings. After this fix, the core sanitizer is frozen unless another high-severity privacy/security regression is found.
 
 ## Known Limitations
 

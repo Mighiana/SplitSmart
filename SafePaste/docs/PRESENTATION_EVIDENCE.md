@@ -55,6 +55,7 @@ Decisions caused by those conflicts:
 | Version-field IPv4-shaped values preserved | Manual Test 3 F5 and grader disagreement | v1.13 | EV-052 through EV-057 |
 | Prose version IPv4-shaped values preserved | Manual Test 4 F6 and grader disagreement | v1.14 | `evals/manual_test_4.md`, EV-058 through EV-064 |
 | Username marker standardized | Manual Test 4 consistency review | v1.15 | EV-029, EV-044, EV-045 |
+| Sentence-final standalone IPv4 redaction fixed | Manual Test 5 F7 | v1.16 | `evals/manual_test_5.md`, EV-065 through EV-071 |
 
 ## 4. Harness
 
@@ -72,13 +73,13 @@ V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
-64/64 eval cases passed after Manual Test 4 fixes.
+71/71 eval cases passed after Manual Test 5 fixes.
 
 Session 7 grader result:
 
-- Automated exact/property grader: 16 cases, 69/69 property checks passed.
-- Human rubric: 16 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, and EV-058 FAIL.
-- Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; Manual Test 4 extended that same issue to direct prose `Release`/`Version` contexts.
+- Automated exact/property grader: 19 cases, 80/80 property checks passed.
+- Human rubric: 19 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL.
+- Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; Manual Test 4 extended that same issue to direct prose `Release`/`Version` contexts. Manual Test 5 F7 was not a grader disagreement after adding the correct property: both graders failed the visible standalone IPv4 address before the fix.
 
 Most interesting failures:
 
@@ -92,19 +93,20 @@ Most interesting failures:
 - Manual Test 3 F5: `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
 - Manual Test 4 F6: `Release 1.2.3.4 passed QA yesterday.` became `Release [REDACTED_IP_ADDRESS] passed QA yesterday.`
 - Manual Test 4 consistency review: current product used both `[REDACTED_USER]` and `[REDACTED_USERNAME]` for username redaction.
+- Manual Test 5 F7: `Connection received from 192.168.20.50.` remained unchanged because a sentence-ending period blocked IPv4 token matching.
 
 Categories tested:
-API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field and prose-version IPv4-shaped values, explicit IP fields, non-version prose IP addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
+API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field and prose-version IPv4-shaped values, sentence-final IPv4 punctuation, hostname-embedded IPv4-shaped values, explicit IP fields, non-version prose IP addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
-EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, EV-055, EV-058, and EV-062.
+EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, EV-055, EV-058, EV-062, EV-065, EV-069, and EV-071.
 
 ## 5a. Graders and the human in the loop
 
 | Grader | Location | Why chosen | Cases graded | Result |
 | --- | --- | --- | --- | --- |
-| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 16 | 69/69 property checks passed |
-| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 16 current cases plus preserved before/after disagreement evidence | 16 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, and EV-058 FAIL |
+| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 19 | 80/80 property checks passed |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 19 current cases plus preserved before/after evidence | 19 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL |
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
@@ -229,6 +231,18 @@ Extended the narrow version-context exception to direct `Version` and `Release` 
 
 Permanent engineering control:
 Unit tests plus EV-058 through EV-064.
+
+Failure:
+Standalone IPv4 before sentence punctuation was not redacted.
+
+Detection:
+Manual Test 5 F7 and local reproduction showed `Connection received from 192.168.20.50.` remained unchanged.
+
+Response:
+IPv4 token-boundary handling now treats sentence-ending periods as punctuation while preserving larger dotted numeric sequences and hostname-embedded values.
+
+Permanent engineering control:
+Unit tests plus EV-065 through EV-071.
 
 Consistency finding:
 Username replacement labels were inconsistent.

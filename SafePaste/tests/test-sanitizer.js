@@ -226,6 +226,31 @@ const tests = [
     assert.strictEqual(sanitize("Remote address: 172.20.10.15").sanitized, `Remote address: ${REDACTION_LABELS.IP_ADDRESS}`);
   }),
 
+  test("redacts standalone IPv4 addresses before sentence periods", () => {
+    assert.strictEqual(
+      sanitize("Connection received from 192.168.20.50.").sanitized,
+      `Connection received from ${REDACTION_LABELS.IP_ADDRESS}.`
+    );
+    assert.strictEqual(
+      sanitize("Request originated at 10.1.2.3.").sanitized,
+      `Request originated at ${REDACTION_LABELS.IP_ADDRESS}.`
+    );
+    assert.strictEqual(
+      sanitize("Remote host 172.16.4.20 disconnected.").sanitized,
+      `Remote host ${REDACTION_LABELS.IP_ADDRESS} disconnected.`
+    );
+    assert.strictEqual(
+      sanitize("Peer address: 8.8.8.8").sanitized,
+      `Peer address: ${REDACTION_LABELS.IP_ADDRESS}`
+    );
+  }),
+
+  test("preserves IPv4-shaped values in versions and hostnames", () => {
+    assert.strictEqual(sanitize("Version 3.4.5.6 deployed.").sanitized, "Version 3.4.5.6 deployed.");
+    assert.strictEqual(sanitize("Release 5.6.7.8 passed QA.").sanitized, "Release 5.6.7.8 passed QA.");
+    assert.strictEqual(sanitize("https://10.20.30.40.example.com/status").sanitized, "https://10.20.30.40.example.com/status");
+  }),
+
   test("preserves PWD path-like environment values", () => {
     const input = "PWD=/workspace/project npm test";
     const result = sanitize(input);

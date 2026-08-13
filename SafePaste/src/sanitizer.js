@@ -142,7 +142,7 @@
       rules.push({
         category: "IP_ADDRESS",
         label: REDACTION_LABELS.IP_ADDRESS,
-        pattern: /(^|[^A-Za-z0-9_.-])((?:\d{1,3}\.){3}\d{1,3})(?![A-Za-z0-9_.-])/g,
+        pattern: /(^|[^A-Za-z0-9_.-])((?:\d{1,3}\.){3}\d{1,3})(?=$|[^A-Za-z0-9_.-]|\.(?=$|[\s"')\]}]))/g,
         candidate: function (args) {
           return args[2];
         },
