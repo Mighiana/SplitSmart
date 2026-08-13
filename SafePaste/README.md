@@ -4,7 +4,7 @@ SafePaste is a privacy-aware browser-based log sanitizer for developers, IT supp
 
 ## Project Status
 
-This repository is being built as an academic Human-Centered AI software engineering project. The implementation is intentionally small, local-only, and auditable.
+This repository was built as an academic Human-Centered AI software engineering project. The implementation is intentionally small, local-only, dependency-free, and auditable.
 
 ## Motivation
 
@@ -16,15 +16,46 @@ See [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md) for the stakeholder map a
 
 ## Privacy Architecture
 
-SafePaste is designed to run entirely in the browser with no backend, no database, no analytics, no third-party scripts, and no storage of pasted logs. Pasted content must remain in memory only while the page is open.
+SafePaste runs entirely in the browser with no backend, no database, no analytics, no third-party scripts, no remote fonts, and no storage of pasted logs. Pasted content remains in page memory only while the page is open.
+
+Production files do not use `fetch`, `XMLHttpRequest`, `WebSocket`, browser storage APIs, cookies, IndexedDB, external resources, or `innerHTML`.
 
 ## How To Run
 
-Open `index.html` directly in a browser, or serve the folder with a local static server.
+Open `index.html` directly in a browser:
+
+```text
+SafePaste/index.html
+```
+
+Optional local preview for verification:
+
+```text
+node evals/static-server.js
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765/
+```
 
 ## How To Test
 
-Unit tests and evaluations will be added after the first implementation.
+Run from the `SafePaste/` directory:
+
+```text
+node tests/test-sanitizer.js
+node evals/run-evals.js
+node evals/run-red-team.js
+node evals/run-ui-smoke.js
+```
+
+To write final eval results:
+
+```text
+node evals/run-evals.js --write evals/results_final.md
+```
 
 ## Repository Structure
 
@@ -53,6 +84,20 @@ The project follows a specification-first engineering loop:
 6. preserve real failures
 7. iterate the implementation and final specification
 
+Key evidence files:
+
+- `SPEC_v1.md`
+- `SPEC_FINAL.md`
+- `evals/results_v1.md`
+- `evals/results_final.md`
+- `RED_TEAM.md`
+- `AI_WORKLOG.md`
+- `CHANGELOG.md`
+- `docs/PRESENTATION_EVIDENCE.md`
+
 ## Known Limitations
 
-The initial limitation is intentional scope: SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.
+- SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.
+- It cannot guarantee every possible secret format is detected.
+- Local path detection is intentionally narrow.
+- Browser automation failed in this environment, so actual OS clipboard permissions were not verified; `evals/run-ui-smoke.js` verifies that the app calls the Clipboard API.

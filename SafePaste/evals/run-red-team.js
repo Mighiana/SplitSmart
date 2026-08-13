@@ -120,6 +120,35 @@ const cases = [
       notContains: ["oneSecret", "twoSecret", "threeSecret"],
       contains: ["[REDACTED_PASSWORD]"]
     }
+  },
+  {
+    id: "RT-P13",
+    focus: "Basic authorization header",
+    input: "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+    expected: "Redact Basic authorization credential.",
+    checks: {
+      notContains: ["dXNlcjpwYXNzd29yZA=="],
+      contains: ["Authorization:", "[REDACTED_AUTHORIZATION_HEADER]"]
+    }
+  },
+  {
+    id: "RT-P14",
+    focus: "Token authorization header",
+    input: "Authorization: Token abcdefghijklmnopqrstuvwxyz",
+    expected: "Redact Token authorization credential.",
+    checks: {
+      notContains: ["abcdefghijklmnopqrstuvwxyz"],
+      contains: ["Authorization:", "[REDACTED_AUTHORIZATION_HEADER]"]
+    }
+  },
+  {
+    id: "RT-P15",
+    focus: "PWD false positive",
+    input: "PWD=/workspace/project npm test",
+    expected: "Preserve PWD path-like environment value.",
+    checks: {
+      equalsInput: true
+    }
   }
 ];
 

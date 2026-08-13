@@ -55,6 +55,26 @@ const tests = [
     assert(result.categories.includes("AUTHORIZATION_HEADER"), "authorization category reported");
   }),
 
+  test("redacts Basic authorization headers", () => {
+    const result = assertRedacted(
+      "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+      "dXNlcjpwYXNzd29yZA==",
+      REDACTION_LABELS.AUTHORIZATION_HEADER,
+      "basic authorization header"
+    );
+    assert(result.categories.includes("AUTHORIZATION_HEADER"), "authorization category reported");
+  }),
+
+  test("redacts Token authorization headers", () => {
+    const result = assertRedacted(
+      "Authorization: Token abcdefghijklmnopqrstuvwxyz",
+      "abcdefghijklmnopqrstuvwxyz",
+      REDACTION_LABELS.AUTHORIZATION_HEADER,
+      "token authorization header"
+    );
+    assert(result.categories.includes("AUTHORIZATION_HEADER"), "authorization category reported");
+  }),
+
   test("redacts standalone Bearer tokens", () => {
     const result = assertRedacted(
       "token=Bearer abcdefghijklmnopqrstuvwxyz123456",
@@ -133,6 +153,13 @@ const tests = [
 
   test("preserves ordinary text and short build IDs", () => {
     const input = "Build abc123xyz completed in 42ms";
+    const result = sanitize(input);
+    assert.strictEqual(result.sanitized, input);
+    assert.strictEqual(result.redactionCount, 0);
+  }),
+
+  test("preserves PWD path-like environment values", () => {
+    const input = "PWD=/workspace/project npm test";
     const result = sanitize(input);
     assert.strictEqual(result.sanitized, input);
     assert.strictEqual(result.redactionCount, 0);

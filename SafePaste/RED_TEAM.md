@@ -87,7 +87,24 @@ The v1 red-team runner tested:
 
 ## Controls Added Or Planned
 
-- Preserve JSON failures in `evals/results_v1.md`.
-- Fix quoted JSON key handling in `src/sanitizer.js`.
-- Keep unit tests and eval cases for JSON password/API key values.
-- Update `CHANGELOG.md` and `SPEC_FINAL.md` after the fix is validated.
+- Preserved JSON failures in `evals/results_v1.md`.
+- Fixed quoted JSON key handling in `src/sanitizer.js`.
+- Kept unit tests and eval cases for JSON password/API key values.
+- Added Basic/Token Authorization header red-team cases after security review.
+- Added `PWD` false-positive red-team case after security review.
+- Updated `CHANGELOG.md` and `SPEC_FINAL.md`.
+
+## Product Red-Team Run: Final
+
+Command:
+
+```text
+node evals/run-red-team.js
+```
+
+Summary after fixes:
+
+- Total cases: 15
+- Passed: 15
+- Failed: 0
+- Failure IDs: None

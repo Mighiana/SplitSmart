@@ -30,7 +30,18 @@ function listFiles(directory) {
 }
 
 function productionFiles() {
-  return ["index.html", "app.js", "styles.css", "src/sanitizer.js"];
+  return listFiles(".").filter((file) => {
+    const isCodeFile = /\.(?:html|css|js)$/.test(file);
+    const excluded = [
+      ".claude/",
+      "docs/",
+      "evals/",
+      "history/",
+      "tests/"
+    ].some((prefix) => file.startsWith(prefix));
+
+    return isCodeFile && !excluded;
+  });
 }
 
 function scanFiles(files, patterns) {
@@ -88,19 +99,27 @@ function evaluateStaticScan(kind) {
   }
 
   if (kind === "noExternalResources") {
-    const html = readText("index.html");
     const findings = [];
-    const externalUrl = /(?:src|href)=["']https?:\/\//gi;
-    const cdn = /\bcdn\b/gi;
-    if (externalUrl.test(html)) {
-      findings.push("external src/href URL");
-    }
-    if (cdn.test(html)) {
-      findings.push("cdn mention");
-    }
+    productionFiles().forEach((file) => {
+      const text = readText(file);
+      const patterns = [
+        { label: "external src/href URL", regex: /(?:src|href)=["']https?:\/\//gi },
+        { label: "external CSS import", regex: /@import\s+["']https?:\/\//gi },
+        { label: "external CSS url", regex: /url\(\s*["']?https?:\/\//gi },
+        { label: "external JS import", regex: /import\s+[^;]*["']https?:\/\//gi },
+        { label: "CDN mention", regex: /\bcdn\b/gi }
+      ];
+
+      patterns.forEach((pattern) => {
+        if (pattern.regex.test(text)) {
+          findings.push(`${file}: ${pattern.label}`);
+        }
+      });
+    });
+
     return {
       passed: findings.length === 0,
-      actual: findings.length === 0 ? "No external resource references found in index.html." : findings
+      actual: findings.length === 0 ? "No external resource references found in production files." : findings
     };
   }
 

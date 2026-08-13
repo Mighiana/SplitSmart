@@ -613,5 +613,58 @@
     "checks": {
       "staticScan": "statusAndFocus"
     }
+  },
+  {
+    "id": "EV-037",
+    "layer": "product",
+    "category": "authentication/token",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+    "expected_behavior": "Redact Basic Authorization header credential.",
+    "mapped_spec_requirement": "R5",
+    "justification": "Authorization headers may use schemes other than Bearer.",
+    "result": "pending",
+    "notes": "Added after security review finding SR-002.",
+    "checks": {
+      "notContains": ["dXNlcjpwYXNzd29yZA=="],
+      "contains": ["Authorization:", "[REDACTED_AUTHORIZATION_HEADER]"],
+      "categoriesInclude": ["AUTHORIZATION_HEADER"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-038",
+    "layer": "product",
+    "category": "authentication/token",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "Authorization: Token abcdefghijklmnopqrstuvwxyz",
+    "expected_behavior": "Redact Token Authorization header credential.",
+    "mapped_spec_requirement": "R5",
+    "justification": "Token authorization schemes are common in support logs.",
+    "result": "pending",
+    "notes": "Added after security review finding SR-002.",
+    "checks": {
+      "notContains": ["abcdefghijklmnopqrstuvwxyz"],
+      "contains": ["Authorization:", "[REDACTED_AUTHORIZATION_HEADER]"],
+      "categoriesInclude": ["AUTHORIZATION_HEADER"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-039",
+    "layer": "product",
+    "category": "false-positive",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "PWD=/workspace/project npm test",
+    "expected_behavior": "Preserve path-like PWD environment values.",
+    "mapped_spec_requirement": "R12, R14",
+    "justification": "PWD usually means present working directory in logs, not password.",
+    "result": "pending",
+    "notes": "Added after security review finding SR-003.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["PASSWORD"],
+      "redactionCount": 0
+    }
   }
 ]

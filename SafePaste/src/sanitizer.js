@@ -42,7 +42,7 @@
       {
         category: "AUTHORIZATION_HEADER",
         label: REDACTION_LABELS.AUTHORIZATION_HEADER,
-        pattern: /\b(Authorization\s*:\s*)(?:Bearer\s+)?[A-Za-z0-9._~+/=-]{12,}/gi,
+        pattern: /\b(Authorization\s*:\s*)(?:(?:Bearer|Basic|Token)\s+)?[A-Za-z0-9._~+/=-]{8,}/gi,
         replacement: function (match, prefix) {
           return prefix + REDACTION_LABELS.AUTHORIZATION_HEADER;
         }
@@ -70,7 +70,7 @@
       {
         category: "API_KEY",
         label: REDACTION_LABELS.API_KEY,
-        pattern: /(\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret)\b\s*[:=]\s*)(["']?)([A-Za-z0-9._~+/=-]{12,})(\2)/gi,
+        pattern: /((?:["']?)\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret)\b(?:["']?)\s*[:=]\s*)(["']?)([A-Za-z0-9._~+/=-]{12,})(\2)/gi,
         replacement: function (match, prefix, quoteStart, secret, quoteEnd) {
           return prefix + quoteStart + REDACTION_LABELS.API_KEY + quoteEnd;
         }
@@ -78,7 +78,7 @@
       {
         category: "PASSWORD",
         label: REDACTION_LABELS.PASSWORD,
-        pattern: /(\b(?:password|passwd|pwd)\b\s*[:=]\s*)(["']?)([^"'\s,;}{]{3,})(\2)/gi,
+        pattern: /((?:["']?)\b(?:password|passwd)\b(?:["']?)\s*[:=]\s*)(["']?)([^"'\s,;}{]{3,})(\2)/gi,
         replacement: function (match, prefix, quoteStart, secret, quoteEnd) {
           return prefix + quoteStart + REDACTION_LABELS.PASSWORD + quoteEnd;
         }

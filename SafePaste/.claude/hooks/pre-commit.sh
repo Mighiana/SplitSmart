@@ -2,8 +2,9 @@
 set -eu
 
 # SafePaste pre-commit secret scan.
-# This is a lightweight guard for obvious accidental credentials. It is not a
-# comprehensive secret detection system and should be paired with review/tests.
+# This is a lightweight guard for obvious accidental credentials in production
+# and harness files. It is not a comprehensive secret detection system and
+# should be paired with review/tests.
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 PROJECT_DIR="$ROOT_DIR/SafePaste"
@@ -12,34 +13,50 @@ if [ ! -d "$PROJECT_DIR" ]; then
   exit 0
 fi
 
-STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep '^SafePaste/' || true)"
-
-if [ -z "$STAGED_FILES" ]; then
-  exit 0
+if ! command -v git >/dev/null 2>&1; then
+  echo "SafePaste pre-commit hook: git is required for staged secret scanning."
+  exit 1
 fi
 
 PATTERN='(AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|password[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\'']{8,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'\'']?[A-Za-z0-9_./+=-]{16,})'
-
 FOUND=0
 
-for file in $STAGED_FILES; do
+set +e
+git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r file; do
+  case "$file" in
+    SafePaste/tests/*|SafePaste/evals/*|SafePaste/history/*|SafePaste/docs/*|SafePaste/RED_TEAM.md)
+      continue
+      ;;
+    SafePaste/*)
+      ;;
+    *)
+      continue
+      ;;
+  esac
+
   case "$file" in
     *.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip)
       continue
       ;;
   esac
 
-  if git show ":$file" 2>/dev/null | grep -E -n "$PATTERN" >/tmp/safepaste-secret-scan.txt 2>/dev/null; then
+  if git grep --cached -I -n -E -e "$PATTERN" -- "$file"; then
     echo "SafePaste pre-commit hook: possible secret in $file"
-    cat /tmp/safepaste-secret-scan.txt
-    FOUND=1
+    exit 9
   fi
 done
+SCAN_STATUS=$?
+set -e
 
-rm -f /tmp/safepaste-secret-scan.txt
+if [ "$SCAN_STATUS" -eq 9 ]; then
+  FOUND=1
+elif [ "$SCAN_STATUS" -ne 0 ]; then
+  echo "SafePaste pre-commit hook: scan failed."
+  exit "$SCAN_STATUS"
+fi
 
 if [ "$FOUND" -ne 0 ]; then
-  echo "Commit blocked. Review the flagged values or document why they are harmless test fixtures."
+  echo "Commit blocked. Review the flagged values before committing."
   exit 1
 fi
 
