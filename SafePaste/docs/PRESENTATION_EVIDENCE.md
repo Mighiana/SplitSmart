@@ -59,7 +59,13 @@ V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
-39/39 eval cases passed after adding fixes and three security-review regression cases.
+40/40 eval cases passed after adding fixes, three security-review regression cases, and the Session 7 localhost borderline case.
+
+Session 7 grader result:
+
+- Automated exact/property grader: 6 cases, 28/28 property checks passed.
+- Human rubric: 6 cases, 5 PASS and 1 NEEDS DISCUSSION.
+- Disagreement: EV-040 localhost passed automated IP redaction but needed human discussion for diagnostic usefulness.
 
 Most interesting failures:
 
@@ -72,7 +78,16 @@ Categories tested:
 API keys, passwords, emails, valid and invalid IPv4 addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
-EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, and EV-039.
+EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, and EV-040.
+
+## 5a. Graders and the human in the loop
+
+| Grader | Location | Why chosen | Cases graded | Result |
+| --- | --- | --- | --- | --- |
+| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 6 | 28/28 property checks passed |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 6 | 5 PASS, 1 NEEDS DISCUSSION |
+
+Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
 ## 6. Honest failures
 

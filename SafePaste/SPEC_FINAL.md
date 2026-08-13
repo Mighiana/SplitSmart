@@ -87,6 +87,9 @@ The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md
 
 `127.0.0.1`, private IPv4 ranges, and public IPv4 addresses are redacted by default because IP information may reveal environment or user details. The UI includes a user-controlled checkbox to preserve IPv4 addresses when exact network context is needed for troubleshooting.
 
+Session 7 grader finding:
+The exact/property grader passed `Localhost: 127.0.0.1` because default IPv4 redaction behaved as specified. The human rubric marked the same case as `NEEDS DISCUSSION` because localhost is often valuable debugging context and carries less privacy risk than many external IP addresses. This does not change the current product behavior, but it is now an explicit human-in-the-loop judgment call: reviewers should consider disabling IPv4 redaction when localhost or network debugging context is more important than uniform IP masking.
+
 ### `PWD=` Values
 
 `PWD=/some/path` is not treated as a password because `PWD` commonly means present working directory in shell logs. The final sanitizer preserves `PWD` values and handles usernames through the narrower path detector.
@@ -110,3 +113,4 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - Removed broad `pwd` password alias after security review found path false positives.
 - Expanded static privacy eval scanning to recursively scan production code files.
 - Updated the pre-commit hook to avoid `grep` dependency and fixed temp files.
+- Added Session 7 grader methodology and documented localhost redaction as a human-in-the-loop judgment call.

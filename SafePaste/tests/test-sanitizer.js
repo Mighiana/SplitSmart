@@ -197,6 +197,12 @@ const tests = [
     const result = sanitize("Connect to 192.168.0.10", { redactIpAddresses: false });
     assert.strictEqual(result.sanitized, "Connect to 192.168.0.10");
     assert.strictEqual(result.redactionCount, 0);
+  }),
+
+  test("redacts localhost by default as a valid IPv4 address", () => {
+    const result = sanitize("Localhost: 127.0.0.1");
+    assert.strictEqual(result.sanitized, `Localhost: ${REDACTION_LABELS.IP_ADDRESS}`);
+    assert(result.categories.includes("IP_ADDRESS"), "localhost categorized as IP by default");
   })
 ];
 

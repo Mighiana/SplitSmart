@@ -130,3 +130,17 @@ Improves hook portability and reduces the chance that a staged file is skipped b
 
 Mapped requirement:
 PS5 and harness component 3.
+
+## v1.8
+
+Changed:
+Added Session 7 grader methodology with an automated exact/property grader, a human rubric, a grader comparison, EV-040 for localhost, and a localhost unit regression test.
+
+Why:
+The grader comparison showed that automated IP redaction can pass while human diagnostic-usefulness judgment still needs discussion for `Localhost: 127.0.0.1`.
+
+Stakeholder impact:
+Makes the privacy vs diagnostic usefulness conflict more visible for developers, support recipients, and security reviewers without changing SafePaste's default local-only redaction behavior.
+
+Mapped requirement:
+R6, R10, R12, Human-Centered AI Session 7.

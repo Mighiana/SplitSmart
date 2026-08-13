@@ -666,5 +666,23 @@
       "categoriesExclude": ["PASSWORD"],
       "redactionCount": 0
     }
+  },
+  {
+    "id": "EV-040",
+    "layer": "product",
+    "category": "borderline/ip-diagnostic",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Localhost: 127.0.0.1",
+    "expected_behavior": "Default automated behavior redacts localhost as a valid IPv4 address while preserving the Localhost label.",
+    "mapped_spec_requirement": "R6, R10, R12",
+    "justification": "Session 7 grader comparison requires a borderline case where privacy redaction and debugging usefulness can diverge.",
+    "result": "pending",
+    "notes": "Added for Human-Centered AI Session 7 grader comparison; human rubric may judge diagnostic usefulness differently.",
+    "checks": {
+      "notContains": ["127.0.0.1"],
+      "contains": ["Localhost:", "[REDACTED_IP_ADDRESS]"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
   }
 ]

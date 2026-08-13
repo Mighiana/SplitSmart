@@ -54,6 +54,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: The revised hook still failed in this environment because `mktemp` was unavailable.
 - Resulting control: Replaced the `mktemp` approach with a pipe/read loop that handles spaces and does not rely on `grep` or fixed temp files; reran the hook successfully against the staged spaced filename.
 
+### 2026-08-13: Session 7 grader extension
+
+- Task: Extend SafePaste evaluation methodology with automated and human-style graders.
+- Instruction given: Add two grader styles without removing the existing eval set, include localhost as a borderline case, compare grader verdicts, and document any specification implications.
+- What AI produced: `evals/graders/exact-property-grader.js`, `evals/graders/human-rubric.md`, `evals/graders/grader-comparison.md`, EV-040, and a localhost unit regression test.
+- Accepted: Accepted after grader and test runs.
+- Manual changes: Human rubric judgments were applied manually by the AI-assisted development evaluator, not by an external study participant.
+- Failure or surprise: Automated grading passed EV-040, while the human rubric marked it `NEEDS DISCUSSION` because localhost redaction harms debugging context.
+- Resulting control: Updated `SPEC_FINAL.md` and `CHANGELOG.md` to document localhost redaction as a human-in-the-loop judgment call.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys
@@ -106,3 +116,20 @@ Human response
 
 Permanent control added
 -> Hook now uses `git diff --name-only | while IFS= read -r file` with explicit status handling.
+
+### Automated and human graders disagreed on localhost
+
+AI behavior
+-> The automated property grader treated `Localhost: 127.0.0.1` as a successful default IP redaction.
+
+Why it was problematic
+-> A human rubric found that redacting localhost can damage diagnostic usefulness even when privacy/security properties pass.
+
+How it was detected
+-> Session 7 grader comparison across EV-040.
+
+Human response
+-> Keep product behavior unchanged because the final spec already provides an IPv4 opt-out, but document the judgment call explicitly.
+
+Permanent control added
+-> EV-040, localhost unit regression test, `human-rubric.md`, `grader-comparison.md`, and a `SPEC_FINAL.md` clarification.

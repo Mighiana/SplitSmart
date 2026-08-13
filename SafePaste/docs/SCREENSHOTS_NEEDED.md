@@ -18,3 +18,6 @@ Do not create fake screenshots. Capture these from the actual project state and 
 14. `RED_TEAM.md` showing RT-P02 v1 failure and final red-team summary.
 15. `docs/PRESENTATION_EVIDENCE.md` for the final presentation evidence map.
 16. `AI_WORKLOG.md` section showing the hook `grep` and `mktemp` portability failures.
+17. `evals/graders/exact-property-grader.js` showing the automated property grader.
+18. `evals/graders/human-rubric.md` showing the rubric definition and EV-040 judgment.
+19. `evals/graders/grader-comparison.md` showing the automated vs human disagreement on localhost.

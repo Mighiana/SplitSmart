@@ -47,6 +47,7 @@ Run from the `SafePaste/` directory:
 ```text
 node tests/test-sanitizer.js
 node evals/run-evals.js
+node evals/graders/exact-property-grader.js
 node evals/run-red-team.js
 node evals/run-ui-smoke.js
 ```
@@ -90,10 +91,22 @@ Key evidence files:
 - `SPEC_FINAL.md`
 - `evals/results_v1.md`
 - `evals/results_final.md`
+- `evals/graders/exact-property-grader.js`
+- `evals/graders/human-rubric.md`
+- `evals/graders/grader-comparison.md`
 - `RED_TEAM.md`
 - `AI_WORKLOG.md`
 - `CHANGELOG.md`
 - `docs/PRESENTATION_EVIDENCE.md`
+
+## Grader Methodology
+
+SafePaste uses two grader styles:
+
+- Automated exact/property grading for deterministic privacy/security behavior, such as "the original secret is gone" and "required harmless context remains."
+- Human rubric grading for diagnostic usefulness, readability, proportionality, and shareability.
+
+No external model-as-judge API is used because sending logs to an external model would conflict with the local-only privacy architecture.
 
 ## Known Limitations
 
