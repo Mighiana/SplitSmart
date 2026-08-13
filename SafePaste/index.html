@@ -9,56 +9,101 @@
   </head>
   <body>
     <header class="site-header">
-      <div class="header-inner">
-        <p class="eyebrow">Local-only log review</p>
-        <h1>SafePaste</h1>
-        <p class="intro">Paste technical text, redact likely sensitive values in your browser, review the result, then copy only what you choose to share.</p>
-        <p class="privacy-note">No backend. No analytics. No browser storage. No network upload.</p>
+      <div class="app-shell header-inner">
+        <div class="brand-copy">
+          <div class="title-row">
+            <h1>SafePaste</h1>
+            <span class="trust-badge" aria-label="Local only privacy badge">
+              <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
+                <path d="M10 2.2 16 4.4v4.7c0 3.8-2.4 7.1-6 8.4-3.6-1.3-6-4.6-6-8.4V4.4l6-2.2Zm0 2L5.8 5.7v3.4c0 2.9 1.6 5.5 4.2 6.6 2.6-1.1 4.2-3.7 4.2-6.6V5.7L10 4.2Zm2.8 4.1-3.4 3.4-1.7-1.7-1 1 2.7 2.7 4.4-4.4-1-1Z"/>
+              </svg>
+              Local only
+            </span>
+          </div>
+          <p class="subtitle">Sanitize sensitive data before sharing logs.</p>
+        </div>
+        <ul class="trust-indicators" aria-label="Privacy guarantees">
+          <li>No backend</li>
+          <li>No analytics</li>
+          <li>No browser storage</li>
+          <li>No network upload</li>
+        </ul>
       </div>
     </header>
 
-    <main class="workspace" aria-labelledby="workspace-title">
-      <section class="toolbar" aria-labelledby="workspace-title">
+    <main class="app-shell workspace" aria-labelledby="workspace-title">
+      <section class="status-strip" aria-labelledby="workspace-title">
         <div>
+          <p class="eyebrow">Privacy review workspace</p>
           <h2 id="workspace-title">Sanitizer</h2>
           <p id="status-message" class="status" role="status" aria-live="polite">Ready. Paste logs to begin.</p>
         </div>
-        <label class="toggle">
-          <input id="redact-ip" type="checkbox" checked>
-          <span>Redact non-loopback IPv4 addresses</span>
-        </label>
       </section>
 
-      <section class="panes" aria-label="Original and sanitized text">
-        <div class="pane">
-          <label for="input-text">Original text</label>
-          <textarea id="input-text" spellcheck="false" placeholder="Paste logs or technical text here"></textarea>
-        </div>
+      <section class="workflow-grid" aria-label="Original and sanitized text">
+        <article class="pane original-pane">
+          <div class="panel-header">
+            <div>
+              <label for="input-text">Original text</label>
+              <p>Paste logs or technical text</p>
+            </div>
+          </div>
+          <textarea id="input-text" spellcheck="false" placeholder="Paste logs, stack traces, or config snippets here"></textarea>
+        </article>
 
-        <div class="pane">
-          <label for="output-text">Sanitized text</label>
-          <textarea id="output-text" spellcheck="false" readonly placeholder="Sanitized output appears here"></textarea>
-        </div>
+        <section class="actions" aria-label="Sanitizer options and actions">
+          <label class="toggle">
+            <input id="redact-ip" type="checkbox" checked>
+            <span class="toggle-copy">
+              <span class="toggle-title">Redact non-loopback IPv4 addresses</span>
+              <span class="toggle-help">Turn off when IP addresses are required for troubleshooting. Loopback addresses remain visible.</span>
+            </span>
+          </label>
+
+          <div class="button-row">
+            <button id="clear-button" type="button" class="secondary">Clear</button>
+            <button id="sanitize-button" type="button" aria-label="Sanitize log">Sanitize</button>
+            <button id="copy-button" type="button" disabled>Copy sanitized text</button>
+          </div>
+        </section>
+
+        <article class="pane sanitized-pane">
+          <div class="panel-header">
+            <div>
+              <label for="output-text">Sanitized text</label>
+              <p>Review before copying</p>
+            </div>
+            <div class="preview-state" aria-hidden="true">
+              <span class="state-badge waiting">Waiting for input</span>
+              <span class="state-badge ready">Ready to review</span>
+            </div>
+          </div>
+          <textarea id="output-text" spellcheck="false" readonly placeholder="Your sanitized log will appear here."></textarea>
+        </article>
+
+        <section class="summary" aria-labelledby="summary-title">
+          <div class="summary-count">
+            <p class="section-kicker">Redactions</p>
+            <h2 id="summary-title">Review Summary</h2>
+            <p><strong id="redaction-count">0</strong> redactions found</p>
+          </div>
+          <div class="summary-categories">
+            <h3>Categories Detected</h3>
+            <ul id="category-list" class="category-list" aria-label="Detected sensitive data categories">
+              <li>No review yet.</li>
+            </ul>
+          </div>
+        </section>
       </section>
 
-      <section class="actions" aria-label="Actions">
-        <button id="sanitize-button" type="button">Sanitize</button>
-        <button id="copy-button" type="button" disabled>Copy sanitized text</button>
-        <button id="clear-button" type="button" class="secondary">Clear</button>
-      </section>
-
-      <section class="summary" aria-labelledby="summary-title">
-        <div>
-          <h2 id="summary-title">Review Summary</h2>
-          <p><strong id="redaction-count">0</strong> redactions found</p>
-        </div>
-        <div>
-          <h3>Categories Detected</h3>
-          <ul id="category-list" class="category-list" aria-label="Detected sensitive data categories">
-            <li>No sensitive categories detected yet.</li>
-          </ul>
-        </div>
-      </section>
+      <footer class="privacy-footer" aria-label="Privacy status">
+        <ul>
+          <li>Processed locally</li>
+          <li>Nothing uploaded</li>
+          <li>Nothing saved</li>
+          <li>Review before sharing</li>
+        </ul>
+      </footer>
     </main>
 
     <script src="src/sanitizer.js"></script>

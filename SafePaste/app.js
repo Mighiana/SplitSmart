@@ -12,6 +12,7 @@
   const redactionCount = document.getElementById("redaction-count");
   const categoryList = document.getElementById("category-list");
   const statusMessage = document.getElementById("status-message");
+  let copyResetTimer = null;
 
   function renderCategories(categories) {
     categoryList.replaceChildren();
@@ -25,12 +26,23 @@
 
     categories.forEach(function (category) {
       const item = document.createElement("li");
+      item.className = "category-chip";
       item.textContent = category.replace(/_/g, " ");
       categoryList.appendChild(item);
     });
   }
 
+  function resetCopyFeedback() {
+    if (copyResetTimer && typeof clearTimeout === "function") {
+      clearTimeout(copyResetTimer);
+    }
+    copyResetTimer = null;
+    copyButton.textContent = "Copy sanitized text";
+  }
+
   function runSanitize() {
+    resetCopyFeedback();
+
     const result = sanitizer.sanitize(inputText.value, {
       redactIpAddresses: redactIp.checked
     });
@@ -41,13 +53,15 @@
     copyButton.disabled = result.sanitized.length === 0;
 
     if (result.redactionCount === 0) {
-      statusMessage.textContent = "Review complete. No sensitive patterns were detected.";
+      statusMessage.textContent = "No sensitive patterns detected. Review the text before sharing.";
     } else {
-      statusMessage.textContent = "Review complete. Check the sanitized text before sharing.";
+      const plural = result.redactionCount === 1 ? "value" : "values";
+      statusMessage.textContent = `Sanitized locally - ${result.redactionCount} sensitive ${plural} found. Review before copying.`;
     }
   }
 
   function clearAll() {
+    resetCopyFeedback();
     inputText.value = "";
     outputText.value = "";
     redactionCount.textContent = "0";
@@ -64,8 +78,16 @@
 
     try {
       await navigator.clipboard.writeText(outputText.value);
-      statusMessage.textContent = "Sanitized text copied. Review where you paste it next.";
+      copyButton.textContent = "Copied";
+      statusMessage.textContent = "Copied sanitized text. Review where you paste it next.";
+      if (typeof setTimeout === "function") {
+        copyResetTimer = setTimeout(function () {
+          copyButton.textContent = "Copy sanitized text";
+          copyResetTimer = null;
+        }, 1800);
+      }
     } catch (error) {
+      resetCopyFeedback();
       outputText.focus();
       outputText.select();
       statusMessage.textContent = "Clipboard permission unavailable. Sanitized text is selected for manual copy.";
