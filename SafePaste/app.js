@@ -12,7 +12,17 @@
   const redactionCount = document.getElementById("redaction-count");
   const categoryList = document.getElementById("category-list");
   const statusMessage = document.getElementById("status-message");
+  const outputPreview = optionalSelector("[data-output-preview]");
+  const scanRegion = optionalSelector("[data-scan-region]");
+  const workspaceShell = optionalSelector("[data-workspace-shell]");
   let copyResetTimer = null;
+
+  function optionalSelector(selector) {
+    if (typeof document.querySelector !== "function") {
+      return null;
+    }
+    return document.querySelector(selector);
+  }
 
   function renderCategories(categories) {
     categoryList.replaceChildren();
@@ -32,6 +42,87 @@
     });
   }
 
+  function markerCategory(marker) {
+    return marker.replace(/^\[REDACTED_/, "").replace(/\]$/, "").replace(/_/g, " ");
+  }
+
+  function markerSeverity(marker) {
+    if (/API_KEY|PASSWORD|AUTHORIZATION|BEARER|JWT|AWS|SLACK/.test(marker)) {
+      return "high";
+    }
+    if (/EMAIL|USERNAME|USER/.test(marker)) {
+      return "medium";
+    }
+    return "low";
+  }
+
+  function appendTextNode(parent, value) {
+    if (!value) {
+      return;
+    }
+    if (typeof document.createTextNode === "function") {
+      parent.appendChild(document.createTextNode(value));
+    } else {
+      const span = document.createElement("span");
+      span.textContent = value;
+      parent.appendChild(span);
+    }
+  }
+
+  function renderVisualPreview(value) {
+    if (!outputPreview) {
+      return;
+    }
+
+    outputPreview.replaceChildren();
+
+    if (!value) {
+      outputPreview.classList.add("empty");
+      outputPreview.textContent = "Your visual redaction preview appears here.";
+      return;
+    }
+
+    outputPreview.classList.remove("empty");
+
+    const markerPattern = /\[REDACTED_[A-Z_]+\]/g;
+    let cursor = 0;
+    let match = markerPattern.exec(value);
+
+    while (match) {
+      appendTextNode(outputPreview, value.slice(cursor, match.index));
+
+      const marker = match[0];
+      const bar = document.createElement("span");
+      bar.className = `redaction-bar ${markerSeverity(marker)}`;
+      bar.setAttribute("data-category", markerCategory(marker));
+      bar.textContent = "████████";
+      outputPreview.appendChild(bar);
+
+      cursor = match.index + marker.length;
+      match = markerPattern.exec(value);
+    }
+
+    appendTextNode(outputPreview, value.slice(cursor));
+  }
+
+  function pulseScan() {
+    [scanRegion, workspaceShell].forEach(function (element) {
+      if (element && element.classList) {
+        element.classList.add("is-scanning");
+      }
+    });
+
+    if (typeof setTimeout === "function") {
+      setTimeout(function () {
+        [scanRegion, workspaceShell].forEach(function (element) {
+          if (element && element.classList) {
+            element.classList.remove("is-scanning");
+          }
+        });
+      }, 420);
+    }
+  }
+
   function resetCopyFeedback() {
     if (copyResetTimer && typeof clearTimeout === "function") {
       clearTimeout(copyResetTimer);
@@ -42,12 +133,14 @@
 
   function runSanitize() {
     resetCopyFeedback();
+    pulseScan();
 
     const result = sanitizer.sanitize(inputText.value, {
       redactIpAddresses: redactIp.checked
     });
 
     outputText.value = result.sanitized;
+    renderVisualPreview(result.sanitized);
     redactionCount.textContent = String(result.redactionCount);
     renderCategories(result.categories);
     copyButton.disabled = result.sanitized.length === 0;
@@ -64,6 +157,7 @@
     resetCopyFeedback();
     inputText.value = "";
     outputText.value = "";
+    renderVisualPreview("");
     redactionCount.textContent = "0";
     renderCategories([]);
     copyButton.disabled = true;

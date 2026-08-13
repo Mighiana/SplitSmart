@@ -10,28 +10,41 @@
   <body>
     <header class="site-header">
       <div class="app-shell header-inner">
-        <div class="brand-copy">
-          <div class="title-row">
-            <h1>SafePaste</h1>
-            <span class="trust-badge" aria-label="Local only privacy badge">
-              <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
-                <path d="M10 2.2 16 4.4v4.7c0 3.8-2.4 7.1-6 8.4-3.6-1.3-6-4.6-6-8.4V4.4l6-2.2Zm0 2L5.8 5.7v3.4c0 2.9 1.6 5.5 4.2 6.6 2.6-1.1 4.2-3.7 4.2-6.6V5.7L10 4.2Zm2.8 4.1-3.4 3.4-1.7-1.7-1 1 2.7 2.7 4.4-4.4-1-1Z"/>
-              </svg>
-              Local only
-            </span>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
-          <p class="subtitle">Sanitize sensitive data before sharing logs.</p>
+          <div class="brand-copy">
+            <div class="title-row">
+              <h1>SafePaste</h1>
+              <span class="trust-badge" aria-label="Local only privacy badge">
+                <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
+                  <path d="M10 2.2 16 4.4v4.7c0 3.8-2.4 7.1-6 8.4-3.6-1.3-6-4.6-6-8.4V4.4l6-2.2Zm0 2L5.8 5.7v3.4c0 2.9 1.6 5.5 4.2 6.6 2.6-1.1 4.2-3.7 4.2-6.6V5.7L10 4.2Zm2.8 4.1-3.4 3.4-1.7-1.7-1 1 2.7 2.7 4.4-4.4-1-1Z"/>
+                </svg>
+                Local only
+              </span>
+            </div>
+            <p class="subtitle">Sanitize sensitive data before sharing logs.</p>
+          </div>
         </div>
-        <ul class="trust-indicators" aria-label="Privacy guarantees">
-          <li>No backend</li>
-          <li>No analytics</li>
-          <li>No browser storage</li>
-          <li>No network upload</li>
-        </ul>
+        <div class="trust-panel">
+          <div class="local-stamp" aria-label="Local only, no network egress">
+            <span>Local only</span>
+            <small>No network egress</small>
+          </div>
+          <ul class="trust-indicators" aria-label="Privacy guarantees">
+            <li>No backend</li>
+            <li>No analytics</li>
+            <li>No browser storage</li>
+            <li>No network upload</li>
+          </ul>
+        </div>
       </div>
     </header>
 
-    <main class="app-shell workspace" aria-labelledby="workspace-title">
+    <main class="app-shell workspace" aria-labelledby="workspace-title" data-workspace-shell>
       <section class="status-strip" aria-labelledby="workspace-title">
         <div>
           <p class="eyebrow">Privacy review workspace</p>
@@ -48,10 +61,19 @@
               <p>Paste logs or technical text</p>
             </div>
           </div>
-          <textarea id="input-text" spellcheck="false" placeholder="Paste logs, stack traces, or config snippets here"></textarea>
+          <div class="pane-body" data-scan-region>
+            <textarea id="input-text" spellcheck="false" placeholder="Paste logs, stack traces, or config snippets here"></textarea>
+          </div>
         </article>
 
         <section class="actions" aria-label="Sanitizer options and actions">
+          <div class="rule-strip" aria-label="Detection rule groups">
+            <span class="rule-chip high"><span class="rule-dot"></span>Credentials</span>
+            <span class="rule-chip high"><span class="rule-dot"></span>Tokens</span>
+            <span class="rule-chip medium"><span class="rule-dot"></span>Email</span>
+            <span class="rule-chip medium"><span class="rule-dot"></span>Usernames</span>
+            <span class="rule-chip low"><span class="rule-dot"></span>IPv4 optional</span>
+          </div>
           <label class="toggle">
             <input id="redact-ip" type="checkbox" checked>
             <span class="toggle-copy">
@@ -79,6 +101,10 @@
             </div>
           </div>
           <textarea id="output-text" spellcheck="false" readonly placeholder="Your sanitized log will appear here."></textarea>
+          <div class="visual-output-shell" aria-hidden="true">
+            <p class="visual-output-label">Visual redaction preview</p>
+            <pre class="visual-output empty" data-output-preview>Your visual redaction preview appears here.</pre>
+          </div>
         </article>
 
         <section class="summary" aria-labelledby="summary-title">
