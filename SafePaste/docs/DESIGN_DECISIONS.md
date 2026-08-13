@@ -118,7 +118,7 @@ Stakeholders affected:
 Developers, support recipients, and security reviewers.
 
 Known limitation:
-The context check only covers a small set of version-related field names and direct `Version`/`Release` prose associations.
+The context check only covers a small set of version-related field names and direct `Version`/`Release` prose associations. Manual Test 6 showed that `Firmware 1.2.3.4 installed successfully.` is likely firmware-version context to a human but remains redacted under the frozen deterministic policy.
 
 ## 2e. Username Replacement Marker
 
@@ -159,6 +159,26 @@ People whose IP information appears in logs, security reviewers, developers, and
 
 Known limitation:
 The rule remains a deterministic token-boundary rule and does not parse every possible log grammar.
+
+## 2g. Frozen Sanitizer After Manual Test 6
+
+Context:
+Manual Test 6 confirmed the post-F7 regression suite but identified `Firmware 1.2.3.4 installed successfully.` as a borderline over-redaction.
+
+Options considered:
+Add `Firmware` as another version keyword, add broader semantic/NLP classification, or document the limitation and keep the sanitizer frozen.
+
+Decision:
+Do not add another keyword exception. Keep the core sanitizer frozen unless a high-severity privacy/security failure is found.
+
+Reason:
+SafePaste's privacy architecture relies on narrow, auditable, local deterministic rules. Expanding contextual exceptions one keyword at a time can make behavior harder to reason about and may increase false-negative risk.
+
+Stakeholders affected:
+Developers, support recipients, people whose data appears in logs, and security reviewers.
+
+Known limitation:
+Some ambiguous IPv4-shaped version strings may be over-redacted when they fall outside the explicitly supported contexts.
 
 ## 3. Detection Sensitivity vs False Positives
 

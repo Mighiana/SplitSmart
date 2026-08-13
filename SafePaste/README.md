@@ -117,9 +117,12 @@ Manual Test 4 extended version context to direct prose such as `Release 1.2.3.4`
 
 Manual Test 5 fixed a standalone IPv4 false negative before sentence punctuation. SafePaste now redacts normal non-loopback IPv4 addresses such as `Connection received from 192.168.20.50.` while preserving version contexts, loopback addresses, larger dotted numeric sequences, and hostname-embedded IPv4-shaped substrings. After this fix, the core sanitizer is frozen unless another high-severity privacy/security regression is found.
 
+Manual Test 6 confirmed the frozen sanitizer and recorded a known borderline limitation: `Firmware 1.2.3.4 installed successfully.` is redacted as an IP address even though a human may read it as firmware-version context. SafePaste intentionally keeps contextual exceptions narrow and auditable instead of adding broad semantic/NLP classification.
+
 ## Known Limitations
 
 - SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.
 - It cannot guarantee every possible secret format is detected.
 - Local path detection is intentionally narrow.
+- Contextual IPv4 disambiguation is best-effort, not exhaustive. Ambiguous version-like strings outside the supported `Version`/`Release` contexts may be over-redacted.
 - Browser automation failed in this environment, so actual OS clipboard permissions were not verified; `evals/run-ui-smoke.js` verifies that the app calls the Clipboard API.

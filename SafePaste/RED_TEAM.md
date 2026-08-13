@@ -95,6 +95,31 @@ The v1 red-team runner tested:
 - Updated RT-P02 after Manual Test 3 so quoted JSON `user` values are redacted as structured usernames while preserving the v1 failure evidence above.
 - Updated `CHANGELOG.md` and `SPEC_FINAL.md`.
 
+## Manual Test 6 Borderline Limitation Review
+
+This was reviewed after the core sanitizer freeze. It is not treated as a high-severity privacy/security regression.
+
+Input:
+
+```text
+Firmware 1.2.3.4 installed successfully.
+```
+
+Current output:
+
+```text
+Firmware [REDACTED_IP_ADDRESS] installed successfully.
+```
+
+Automated/security interpretation:
+PASS. The IPv4-shaped value is redacted, so privacy protection is preserved.
+
+Human usefulness interpretation:
+NEEDS DISCUSSION. The value is likely a firmware version, so redaction may remove useful troubleshooting context.
+
+Decision:
+Do not add a speculative `Firmware` keyword exception. SafePaste uses narrow, auditable contextual rules rather than broad semantic/NLP classification. The known trade-off is that ambiguous IPv4-shaped version strings outside supported contexts may be over-redacted.
+
 ## Product Red-Team Run: Final
 
 Command:

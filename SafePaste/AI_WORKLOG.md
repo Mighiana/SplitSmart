@@ -104,6 +104,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: The IPv4 validator and policy were correct, but the regex boundary rejected IP candidates followed by any dot, so a normal sentence-ending period caused `192.168.20.50.` and `10.1.2.3.` to remain visible.
 - Resulting control: Sentence-punctuation IPv4 unit tests, EV-065 and EV-066 privacy evals, EV-069 through EV-071 preservation guards, and a core sanitizer freeze after F7 unless a high-severity privacy/security regression is found.
 
+### 2026-08-13: Manual Test 6 final methodology close-out
+
+- Task: Complete the final SafePaste methodology pass after real manual Test 6 results.
+- Instruction given: Treat the core sanitizer as frozen unless a high-severity privacy/security failure is found; record `Firmware 1.2.3.4 installed successfully.` as a known borderline limitation and human-vs-automated-grader disagreement rather than adding another keyword exception.
+- What AI produced: `evals/manual_test_6.md`, EV-072, updated exact/property grader selection, human rubric judgment, grader comparison, design decision, red-team limitation note, final spec limitation clarification, README known limitation, presentation evidence, and final results refresh.
+- Accepted: Accepted after complete unit tests, evals, exact/property grader, red-team, UI smoke, static/privacy scan, and secret scan were rerun.
+- Manual changes: None outside the documented evidence and documentation patches.
+- Failure or surprise: The automated grader passes the firmware case under current privacy behavior, while the human rubric marks it `NEEDS DISCUSSION` because it is likely firmware-version context.
+- Resulting control: The firmware case is preserved as a known limitation and grader disagreement. No sanitizer feature change was made because this is not a high-severity privacy/security regression.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys
@@ -275,6 +285,23 @@ Human response
 
 Permanent control added
 -> IPv4 sentence-punctuation boundary tests plus EV-065 through EV-071.
+
+### Ambiguous firmware version context is over-redacted
+
+AI behavior
+-> The frozen sanitizer redacts `Firmware 1.2.3.4 installed successfully.` as an IP address.
+
+Why it was problematic
+-> A human evaluator may reasonably interpret `1.2.3.4` as firmware version context, so redaction can reduce diagnostic usefulness.
+
+How it was detected
+-> Manual Test 6 and local reproduction.
+
+Human response
+-> Record the case as a known limitation and human-vs-automated-grader disagreement; do not add a speculative keyword exception.
+
+Permanent control added
+-> EV-072, `manual_test_6.md`, human rubric and grader-comparison entries, and a documented sanitizer freeze unless a high-severity privacy/security regression is found.
 
 ### Username replacement labels were inconsistent
 

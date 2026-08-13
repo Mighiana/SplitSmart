@@ -35,6 +35,7 @@ No external model-as-judge API was added. That would conflict with SafePaste's l
 | EV-065 after Manual Test 5 fix | PASS | PASS | Agreement after implementation fix | The IP is redacted and the sentence-ending period remains. | This was an implementation bug, not a new specification gap. |
 | EV-069 | PASS | PASS | Agreement | `Version 3.4.5.6 deployed.` remains unchanged. | The F7 fix does not weaken the narrow prose version exception. |
 | EV-071 | PASS | PASS | Agreement | `https://10.20.30.40.example.com/status` remains unchanged. | The F7 fix still preserves IPv4-shaped substrings embedded inside hostnames. |
+| EV-072 Manual Test 6 | PASS | NEEDS DISCUSSION | Disagreement | Automated grading passes because the valid non-loopback IPv4-shaped token is redacted under the narrow deterministic policy. Human review sees `Firmware 1.2.3.4` as likely version context, so diagnostic usefulness and proportionality suffer. | Contextual disambiguation is intentionally best-effort rather than exhaustive. The sanitizer remains frozen instead of adding a speculative `Firmware` keyword exception. |
 
 ## Automated Exact/Property Grader Run
 
@@ -46,9 +47,9 @@ node evals/graders/exact-property-grader.js
 
 Summary:
 
-- Cases graded after Manual Test 5: 19
-- Property checks: 80
-- Passed: 80
+- Cases graded after Manual Test 6: 20
+- Property checks: 86
+- Passed: 86
 - Failed: 0
 
 | Case ID | Expected property | Actual behavior | Result | Reason |
@@ -95,13 +96,16 @@ Summary:
 | EV-065 | Expected marker and sentence punctuation appear | `Connection received from [REDACTED_IP_ADDRESS].` present. | PASS | Required context and punctuation were preserved. |
 | EV-069 | Must preserve values: sanitized output equals input | `Version 3.4.5.6 deployed.` | PASS | Prose version-context IPv4-shaped value remained unchanged. |
 | EV-071 | Must preserve values: sanitized output equals input | `https://10.20.30.40.example.com/status` | PASS | Hostname-embedded IPv4-shaped value remained unchanged. |
+| EV-072 | Original IPv4-shaped value no longer appears | Value absent from sanitized output. | PASS | Current deterministic policy redacted the ambiguous firmware value. |
+| EV-072 | Expected marker and firmware context appear | `Firmware [REDACTED_IP_ADDRESS] installed successfully.` present. | PASS | Required current-policy context was preserved. |
 
 ## Human Rubric Summary
 
 The human rubric was applied manually in [human-rubric.md](human-rubric.md).
 
-- Current cases graded: 19
+- Current cases graded: 20
 - Current overall PASS: 19
+- Current overall NEEDS DISCUSSION: 1
 - Overall FAIL: 0
 - Preserved before-refinement judgments: EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, EV-065 FAIL
 
@@ -223,6 +227,29 @@ FAIL, because the output leaked a standalone valid non-loopback IPv4 address in 
 Specification inspection:
 Manual Test 5 did not expose a new ambiguity. The final specification already required standalone valid non-loopback IPv4 addresses to redact unless they were loopback, version context, inside a larger dotted numeric token, or embedded in a hostname. The fix adjusted token-boundary handling so sentence-ending periods are preserved as punctuation rather than blocking the IP match.
 
+EV-072 is the Manual Test 6 known borderline limitation and current grader disagreement.
+
+Input:
+
+```text
+Firmware 1.2.3.4 installed successfully.
+```
+
+Current output:
+
+```text
+Firmware [REDACTED_IP_ADDRESS] installed successfully.
+```
+
+Automated property result:
+PASS, because the current deterministic policy redacts valid non-loopback IPv4-shaped values unless they are in a narrow supported preservation context.
+
+Human rubric result:
+NEEDS DISCUSSION, because `Firmware 1.2.3.4` is likely a firmware version and redaction removes useful diagnostic context.
+
+Specification inspection:
+This is a known limitation rather than a new product change. SafePaste uses narrow, auditable contextual rules instead of general semantic or NLP classification. Adding every plausible version keyword would increase complexity and false-negative risk. The final specification now clarifies that contextual disambiguation is best-effort and not exhaustive.
+
 Action taken:
 
 - Updated EV-040 to require loopback preservation.
@@ -235,6 +262,7 @@ Action taken:
 - Standardized current username markers on `[REDACTED_USERNAME]` while preserving historical evidence files.
 - Added EV-065 through EV-071 for Manual Test 5 findings and preservation guards.
 - Added sentence-final IPv4 boundary regression tests.
+- Added EV-072 for the Manual Test 6 firmware-version known limitation and grader disagreement.
 - Updated `SPEC_FINAL.md` for earlier spec refinements; Manual Test 5 required `CHANGELOG.md`, `DESIGN_DECISIONS.md`, and `AI_WORKLOG.md` updates but no `SPEC_FINAL.md` change.
 - Reran unit tests, evals, and the automated exact/property grader.
 
@@ -247,3 +275,5 @@ SafePaste also preserves IPv4-shaped values in a short list of version-related c
 SafePaste now also preserves direct `Version` and `Release` prose associations. Ambiguous prose outside those keywords remains governed by ordinary IPv4 redaction.
 
 After Manual Test 5, the core sanitizer is frozen unless another high-severity privacy/security regression is found.
+
+Manual Test 6 confirms the sanitizer remains frozen. `Firmware 1.2.3.4` is intentionally documented as a borderline limitation rather than a new keyword exception.

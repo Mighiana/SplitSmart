@@ -2,9 +2,9 @@
 
 Grader type: automated exact/property checks over deterministic sanitizer output.
 
-Cases graded: EV-001, EV-005, EV-013, EV-029, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-049, EV-050, EV-052, EV-055, EV-058, EV-062, EV-065, EV-069, EV-071
-Property checks: 80
-Passed: 80
+Cases graded: EV-001, EV-005, EV-013, EV-029, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-049, EV-050, EV-052, EV-055, EV-058, EV-062, EV-065, EV-069, EV-071, EV-072
+Property checks: 86
+Passed: 86
 Failed: 0
 
 | Case ID | Expected property | Actual behavior | Result | Reason |
@@ -89,3 +89,9 @@ EV-069 | Redaction count is 0 | Redaction count: 0 | PASS | Redaction count matc
 EV-071 | Must preserve values: sanitized output equals input | https://10.20.30.40.example.com/status | PASS | Output preserved exactly as required.
 EV-071 | Detected category excludes IP_ADDRESS | Categories: none | PASS | Unexpected category was absent.
 EV-071 | Redaction count is 0 | Redaction count: 0 | PASS | Redaction count matched.
+EV-072 | Original sensitive value no longer appears: 1.2.3.4 | Value absent from sanitized output. | PASS | Sensitive value was removed.
+EV-072 | Expected marker or harmless context appears: Firmware  | Expected text present. | PASS | Required marker/context was preserved.
+EV-072 | Expected marker or harmless context appears: [REDACTED_IP_ADDRESS] | Expected text present. | PASS | Required marker/context was preserved.
+EV-072 | Expected marker or harmless context appears:  installed successfully. | Expected text present. | PASS | Required marker/context was preserved.
+EV-072 | Detected category includes IP_ADDRESS | Categories: IP_ADDRESS | PASS | Expected category was reported.
+EV-072 | Redaction count is 1 | Redaction count: 1 | PASS | Redaction count matched.

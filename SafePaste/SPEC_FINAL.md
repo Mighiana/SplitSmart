@@ -101,6 +101,9 @@ IPv4-shaped values are preserved when they are clearly associated with narrow ve
 Manual Test 3 grader finding:
 The automated syntactic IP interpretation could treat `release=1.2.3.4` as successful IPv4 redaction, but the human rubric judged that output as a diagnostic-usefulness failure because release version context was removed. Manual Test 4 extended the same finding to prose: `Release 1.2.3.4 passed QA yesterday.` The final policy preserves narrow version contexts while continuing to redact explicit IP fields and ordinary network prose such as `Server 10.20.30.40 failed`, `Client 8.8.8.8 disconnected`, and `Remote address: 172.20.10.15`.
 
+Manual Test 6 grader finding:
+`Firmware 1.2.3.4 installed successfully.` remains redacted under the current deterministic policy even though human review considers it likely firmware-version context. This is a known limitation rather than a trigger for another keyword exception. Contextual disambiguation is best-effort and intentionally not exhaustive.
+
 ### `PWD=` Values
 
 `PWD=/some/path` is not treated as a password because `PWD` commonly means present working directory in shell logs. The final sanitizer preserves `PWD` values and handles usernames through the narrower path detector.
@@ -128,7 +131,7 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - The app does not parse all programming languages, structured logs, or custom secret formats.
 - Local path detection is intentionally narrow to reduce false positives.
 - Structured username detection is intentionally limited to explicit account-like fields and does not attempt general personal-name recognition.
-- Natural-language version handling is intentionally limited to direct `Version` and `Release` associations.
+- Natural-language version handling is intentionally limited to direct `Version` and `Release` associations. Other ambiguous IPv4-shaped version strings, such as firmware versions, may be over-redacted because SafePaste avoids broad semantic/NLP classification.
 - The app distinguishes loopback from other IPv4 addresses, but it does not separately classify public and private non-loopback ranges.
 - Browser-level OS clipboard permission was not verified because in-app browser automation failed in this environment; a no-dependency UI smoke test verified that the copy button calls the Clipboard API.
 - A temporary local verification server exists under `evals/` for testing only. The production app remains static and can be opened directly from `index.html`.

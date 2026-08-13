@@ -1223,5 +1223,23 @@
       "categoriesExclude": ["IP_ADDRESS"],
       "redactionCount": 0
     }
+  },
+  {
+    "id": "EV-072",
+    "layer": "product",
+    "category": "known-limitation/ip-firmware-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "Firmware 1.2.3.4 installed successfully.",
+    "expected_behavior": "Current deterministic policy redacts this ambiguous IPv4-shaped value because firmware is not in the narrow Version/Release exception list.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 6 identified a human-vs-automated disagreement: this is likely firmware-version context, but SafePaste intentionally avoids broad semantic/NLP classification.",
+    "result": "pending",
+    "notes": "Known borderline limitation; not a sanitizer feature request while the core sanitizer is frozen.",
+    "checks": {
+      "notContains": ["1.2.3.4"],
+      "contains": ["Firmware ", "[REDACTED_IP_ADDRESS]", " installed successfully."],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
   }
 ]

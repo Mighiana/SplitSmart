@@ -256,3 +256,17 @@ Improves privacy/security for people whose IP details appear in logs and for sec
 
 Mapped requirement:
 R6, R12, R14.
+
+## v1.17
+
+Changed:
+Documented Manual Test 6's firmware-version borderline case as a known limitation and grader disagreement; no sanitizer feature change was made.
+
+Why:
+`Firmware 1.2.3.4 installed successfully.` is likely firmware-version context to a human, but the frozen deterministic sanitizer redacts it as an IP address because only narrow `Version`/`Release` contexts are exempt. Adding another keyword exception would be speculative and could make the rule set harder to audit.
+
+Stakeholder impact:
+Keeps the privacy/security posture stable while honestly surfacing a diagnostic-usefulness limitation for developers and support recipients.
+
+Mapped requirement:
+R6, R12, R14.

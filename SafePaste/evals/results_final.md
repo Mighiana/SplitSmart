@@ -1,49 +1,44 @@
 # SafePaste Final Evaluation Results
 
-Refreshed after Manual Test 5 fixes on 2026-08-13.
+Refreshed after Manual Test 6 close-out on 2026-08-13.
 
 ## Commands Run
 
 ```text
 node tests/test-sanitizer.js
 node evals/run-evals.js --write evals/results_final.md
-node evals/graders/exact-property-grader.js
+node evals/graders/exact-property-grader.js --write evals/graders/exact-property-results.md
 node evals/run-red-team.js
 node evals/run-ui-smoke.js
 rg -n "fetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|document\.cookie|innerHTML|https?://|<script[^>]+src=|TODO.*security|bypass" SafePaste
 rg -n 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN .*PRIVATE KEY-----|password\s*[:=]\s*[^,\s;}{]{8,}|api[_-]?key\s*[:=]\s*[A-Za-z0-9_./+=-]{16,}' SafePaste
 ```
 
-## Before Manual Test 5 Fix
-
-- Unit tests after adding F7 regression tests but before changing production code: 36/37 passed.
-- Full eval set after adding EV-065 through EV-071 but before changing production code: 69/71 passed; failures were EV-065 and EV-066.
-- Automated exact/property grader before fix: 19 cases, 80 property checks, 76 passed, 4 failed; failing property checks were for EV-065.
-
-## After Results
+## Final Methodology Results
 
 - Unit tests: 37 total, 37 passed, 0 failed.
-- Eval cases: 71 total, 71 passed, 0 failed.
-- Automated exact/property grader: 19 cases, 80 property checks, 80 passed, 0 failed.
-- Human rubric: 19 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL.
+- Eval cases: 72 total, 72 passed, 0 failed.
+- Automated exact/property grader: 20 cases, 86 property checks, 86 passed, 0 failed.
+- Human rubric: 20 current cases graded; 19 PASS, 0 FAIL, 1 NEEDS DISCUSSION for EV-072.
 - Red-team cases: 15 total, 15 passed, 0 failed.
 - UI smoke: PASS.
 - Privacy/static scan: contextual documentation, tests, evals, history, local static server, local script tags, and scan-pattern hits only; no production network, persistence, cookie, or unsafe DOM finding.
 - Secret scan: synthetic fixtures in tests/evals/history/docs only; no production hardcoded credential finding.
+- Network/persistence API review: production app remains static/local-only and does not use `fetch`, `XMLHttpRequest`, `WebSocket`, storage APIs, cookies, IndexedDB, or `innerHTML`.
 - Remaining failures from executed checks: none.
 
-## Manual Test 5 Finding Fixed
+## Manual Test 6 Known Limitation
 
-- F7: Standalone valid non-loopback IPv4 addresses before sentence-ending periods now redact, preserving the period as punctuation.
-- Preservation guards still pass for direct version context, loopback addresses, larger dotted numeric sequences, and hostname-embedded IPv4-shaped values.
-- `SPEC_v1.md` was not modified.
-- `SPEC_FINAL.md` was not changed for F7 because the finding exposed an implementation bug against the existing final policy rather than a genuine specification ambiguity.
-- Core sanitizer freeze is now in effect unless another high-severity privacy/security regression is found.
+- Input: `Firmware 1.2.3.4 installed successfully.`
+- Current output: `Firmware [REDACTED_IP_ADDRESS] installed successfully.`
+- Automated exact/property verdict: PASS under the current deterministic privacy policy.
+- Human rubric verdict: NEEDS DISCUSSION because the value is likely firmware-version context and redaction can reduce diagnostic usefulness.
+- Action taken: documented as a known limitation and grader disagreement; no sanitizer change was made because the core sanitizer is frozen unless a high-severity privacy/security regression appears.
 
 ## Summary
 
-- Total eval cases: 71
-- Passed: 71
+- Total eval cases: 72
+- Passed: 72
 - Failed: 0
 - Failure IDs: None
 
@@ -122,3 +117,4 @@ EV-068 | product | ip | Security / compliance team | R6, R12 | PASS
 EV-069 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
 EV-070 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
 EV-071 | product | false-positive/ip-hostname | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-072 | product | known-limitation/ip-firmware-version | Developer / IT support engineer | R6, R12, R14 | PASS
