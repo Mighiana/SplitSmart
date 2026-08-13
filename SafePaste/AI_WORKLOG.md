@@ -114,6 +114,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: The automated grader passes the firmware case under current privacy behavior, while the human rubric marks it `NEEDS DISCUSSION` because it is likely firmware-version context.
 - Resulting control: The firmware case is preserved as a known limitation and grader disagreement. No sanitizer feature change was made because this is not a high-severity privacy/security regression.
 
+### 2026-08-13: Manual Test 7 product behavior and human-control evaluation
+
+- Task: Record a successful manual evaluation of the IPv4 redaction toggle.
+- Instruction given: Treat the core sanitizer as frozen, record Run A with IPv4 redaction on and Run B with IPv4 redaction off, and do not modify sanitizer behavior.
+- What AI produced: `evals/manual_test_7.md`, human rubric rows for MT-7A and MT-7B, and presentation evidence documenting the toggle as a scoped human-control mechanism.
+- Accepted: Accepted as a successful product-behavior and human-control evaluation; no sanitizer behavior changed.
+- Manual changes: User performed Manual Test 7 and confirmed the observed behavior for both toggle settings.
+- Failure or surprise: None. The toggle behaved as intended.
+- Resulting control: The IPv4 toggle is documented as scoped to IP redaction only: disabling IPv4 protection preserves network IPs for diagnostic usefulness while unrelated email and credential rules continue to redact.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys

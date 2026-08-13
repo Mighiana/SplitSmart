@@ -29,6 +29,7 @@ Decisions caused by those conflicts:
 
 - Non-loopback IPv4 addresses are redacted by default but can be preserved by user choice.
 - Loopback IPv4 addresses are preserved after Manual Test 2 showed localhost redaction harmed diagnostic usefulness.
+- Manual Test 7 confirmed the IPv4 toggle is scoped correctly: turning IPv4 redaction off preserves network IPs for diagnostics while unrelated email and credential redaction still works.
 - IPv4-shaped values in narrow version fields are preserved after Manual Test 3 showed release context was over-redacted.
 - Direct prose version contexts are preserved after Manual Test 4 showed `Release 1.2.3.4` was over-redacted.
 - Explicit structured username fields are redacted while arbitrary names in prose are preserved.
@@ -57,6 +58,7 @@ Decisions caused by those conflicts:
 | Username marker standardized | Manual Test 4 consistency review | v1.15 | EV-029, EV-044, EV-045 |
 | Sentence-final standalone IPv4 redaction fixed | Manual Test 5 F7 | v1.16 | `evals/manual_test_5.md`, EV-065 through EV-071 |
 | Firmware-version limitation documented without sanitizer change | Manual Test 6 grader disagreement | v1.17 | `evals/manual_test_6.md`, EV-072 |
+| IPv4 toggle scoped human control confirmed | Manual Test 7 successful product-behavior evaluation | No product/spec change | `evals/manual_test_7.md`, `evals/graders/human-rubric.md` |
 
 ## 4. Harness
 
@@ -79,7 +81,7 @@ Final result:
 Session 7 grader result:
 
 - Automated exact/property grader: 20 cases, 86/86 property checks passed.
-- Human rubric: 20 current cases graded; 19 current PASS and 1 current NEEDS DISCUSSION for EV-072. Preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL.
+- Human rubric: 20 current eval cases plus 2 Manual Test 7 control runs graded; 21 PASS and 1 NEEDS DISCUSSION for EV-072. Preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL.
 - Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; Manual Test 4 extended that same issue to direct prose `Release`/`Version` contexts. Manual Test 5 F7 was not a grader disagreement after adding the correct property: both graders failed the visible standalone IPv4 address before the fix. Manual Test 6 EV-072 is a current disagreement: automated privacy grading passes `Firmware 1.2.3.4...` redaction, while human review marks it `NEEDS DISCUSSION`.
 
 Most interesting failures:
@@ -96,9 +98,10 @@ Most interesting failures:
 - Manual Test 4 consistency review: current product used both `[REDACTED_USER]` and `[REDACTED_USERNAME]` for username redaction.
 - Manual Test 5 F7: `Connection received from 192.168.20.50.` remained unchanged because a sentence-ending period blocked IPv4 token matching.
 - Manual Test 6 limitation: `Firmware 1.2.3.4 installed successfully.` is redacted, although human review considers it likely firmware-version context.
+- Manual Test 7 success: IPv4 redaction off preserved network IPs, while email and credential redaction continued to work.
 
 Categories tested:
-API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field and prose-version IPv4-shaped values, sentence-final IPv4 punctuation, hostname-embedded IPv4-shaped values, known borderline firmware-version limitation, explicit IP fields, non-version prose IP addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
+API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field and prose-version IPv4-shaped values, sentence-final IPv4 punctuation, hostname-embedded IPv4-shaped values, known borderline firmware-version limitation, explicit IP fields, non-version prose IP addresses, scoped IPv4 toggle behavior, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
 EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, EV-055, EV-058, EV-062, EV-065, EV-069, EV-071, and EV-072.
@@ -108,7 +111,7 @@ EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, 
 | Grader | Location | Why chosen | Cases graded | Result |
 | --- | --- | --- | --- | --- |
 | Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 20 | 86/86 property checks passed |
-| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 20 current cases plus preserved before/after evidence | 19 current PASS, 1 current NEEDS DISCUSSION for EV-072; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, shareability, and human-control trade-offs require judgment. | 20 current eval cases plus 2 Manual Test 7 control runs and preserved before/after evidence | 21 PASS, 1 NEEDS DISCUSSION for EV-072; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL, EV-058 FAIL, and EV-065 FAIL |
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
@@ -257,6 +260,18 @@ No sanitizer change was made. The case was documented as a current automated-vs-
 
 Permanent engineering control:
 EV-072, `manual_test_6.md`, `human-rubric.md`, and `grader-comparison.md`.
+
+Successful control evaluation:
+IPv4 toggle is scoped correctly.
+
+Detection:
+Manual Test 7 Run A confirmed network IPv4 redaction on; Run B confirmed network IPv4 preservation when the toggle is off.
+
+Response:
+No sanitizer behavior change was made.
+
+Permanent engineering control:
+`manual_test_7.md` and human rubric rows MT-7A/MT-7B.
 
 Consistency finding:
 Username replacement labels were inconsistent.
