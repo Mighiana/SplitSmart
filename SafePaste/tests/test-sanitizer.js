@@ -45,6 +45,14 @@ const tests = [
     assert(!result.categories.includes("IP_ADDRESS"), "invalid IP not categorized");
   }),
 
+  test("preserves IPv4-like substrings inside larger dotted numeric sequences", () => {
+    const input = "1.2.3.4.5";
+    const result = sanitize(input);
+    assert.strictEqual(result.sanitized, input);
+    assert(!result.categories.includes("IP_ADDRESS"), "larger dotted sequence not categorized");
+    assert.strictEqual(result.redactionCount, 0);
+  }),
+
   test("redacts Bearer tokens", () => {
     const result = assertRedacted(
       "curl -H 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456'",
@@ -199,10 +207,41 @@ const tests = [
     assert.strictEqual(result.redactionCount, 0);
   }),
 
-  test("redacts localhost by default as a valid IPv4 address", () => {
-    const result = sanitize("Localhost: 127.0.0.1");
-    assert.strictEqual(result.sanitized, `Localhost: ${REDACTION_LABELS.IP_ADDRESS}`);
-    assert(result.categories.includes("IP_ADDRESS"), "localhost categorized as IP by default");
+  test("preserves 127.0.0.1 loopback by default", () => {
+    const input = "127.0.0.1";
+    const result = sanitize(input);
+    assert.strictEqual(result.sanitized, input);
+    assert(!result.categories.includes("IP_ADDRESS"), "loopback not categorized as redacted IP");
+  }),
+
+  test("preserves 127.0.0.2 loopback by default", () => {
+    const input = "127.0.0.2";
+    const result = sanitize(input);
+    assert.strictEqual(result.sanitized, input);
+    assert.strictEqual(result.redactionCount, 0);
+  }),
+
+  test("preserves 127.255.255.255 loopback by default", () => {
+    const input = "127.255.255.255";
+    const result = sanitize(input);
+    assert.strictEqual(result.sanitized, input);
+    assert.strictEqual(result.redactionCount, 0);
+  }),
+
+  test("redacts Linux home path username", () => {
+    const result = sanitize("/home/alice/project/error.log");
+    assert.strictEqual(result.sanitized, "/home/[REDACTED_USER]/project/error.log");
+    assert(result.categories.includes("PATH_OR_USERNAME"), "Linux home path category reported");
+  }),
+
+  test("redacts Linux home path username with trailing slash", () => {
+    const result = sanitize("/home/bob/");
+    assert.strictEqual(result.sanitized, "/home/[REDACTED_USER]/");
+  }),
+
+  test("preserves non-home Linux system paths", () => {
+    assert.strictEqual(sanitize("/var/log/nginx/error.log").sanitized, "/var/log/nginx/error.log");
+    assert.strictEqual(sanitize("/usr/local/bin").sanitized, "/usr/local/bin");
   })
 ];
 

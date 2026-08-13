@@ -16,7 +16,11 @@ No external model-as-judge API was added. That would conflict with SafePaste's l
 | EV-013 | PASS | PASS | Agreement | Invalid IP-like fixture is preserved. | False-positive requirements can be expressed as exact preservation properties. |
 | EV-029 | PASS | PASS | Agreement | Username is redacted while path shape remains useful. | Narrow path redaction supports both privacy and troubleshooting. |
 | EV-039 | PASS | PASS | Agreement | `PWD=/workspace/project` is preserved. | The v1.3 change reduced a false positive that mattered to human usefulness. |
-| EV-040 | PASS | NEEDS DISCUSSION | Disagreement | Automated grading confirms valid IPv4 redaction. Human rubric finds that redacting `127.0.0.1` can remove important localhost debugging context. | The specification is explicit about default IP redaction plus user opt-out, but this case should remain documented as a human-in-the-loop judgment call. |
+| EV-040 before Manual Test 2 refinement | PASS | NEEDS DISCUSSION | Disagreement | Automated grading confirmed valid IPv4 redaction. Human rubric found that redacting `127.0.0.1` removed important localhost debugging context. | The specification treated loopback as part of default IP redaction, but the grader disagreement exposed a real spec refinement need. |
+| EV-040 after Manual Test 2 refinement | PASS | PASS | Agreement after spec change | Automated grading now checks preservation of loopback. Human rubric agrees diagnostic usefulness is improved. | The spec now distinguishes loopback from other valid IPv4 addresses. |
+| EV-041 | PASS | PASS | Agreement | Automated and human graders both preserve `1.2.3.4.5`. | IPv4 detection must require complete IPv4 tokens, not substrings inside larger dotted numeric sequences. |
+| EV-044 | PASS | PASS | Agreement | Automated and human graders both redact only the username segment in `/home/alice/...`. | Linux home paths are covered by the accepted local path/username policy. |
+| EV-046 | PASS | PASS | Agreement | Automated and human graders both preserve `/var/log/nginx/error.log`. | The path policy must stay narrow and avoid broad Linux path redaction. |
 
 ## Automated Exact/Property Grader Run
 
@@ -28,9 +32,9 @@ node evals/graders/exact-property-grader.js
 
 Summary:
 
-- Cases graded: 6
-- Property checks: 28
-- Passed: 28
+- Cases graded after Manual Test 2: 9
+- Property checks: 36
+- Passed: 36
 - Failed: 0
 
 | Case ID | Expected property | Actual behavior | Result | Reason |
@@ -58,24 +62,23 @@ Summary:
 | EV-039 | Must preserve values: sanitized output equals input | `PWD=/workspace/project npm test` | PASS | Output preserved exactly as required. |
 | EV-039 | Detected category excludes `PASSWORD` | Categories: none | PASS | Unexpected category was absent. |
 | EV-039 | Redaction count is 0 | Redaction count: 0 | PASS | Redaction count matched. |
-| EV-040 | Original sensitive value no longer appears: `127.0.0.1` | Value absent from sanitized output. | PASS | Sensitive value was removed. |
-| EV-040 | Expected marker or harmless context appears: `Localhost:` | Expected text present. | PASS | Required marker/context was preserved. |
-| EV-040 | Expected marker or harmless context appears: `[REDACTED_IP_ADDRESS]` | Expected text present. | PASS | Required marker/context was preserved. |
-| EV-040 | Detected category includes `IP_ADDRESS` | Categories: `IP_ADDRESS` | PASS | Expected category was reported. |
-| EV-040 | Redaction count is 1 | Redaction count: 1 | PASS | Redaction count matched. |
+| EV-040 | Must preserve values: sanitized output equals input | `Localhost: 127.0.0.1` | PASS | Output preserved exactly as required after policy refinement. |
+| EV-041 | Must preserve values: sanitized output equals input | `1.2.3.4.5` | PASS | Output preserved exactly as required. |
+| EV-044 | Original sensitive value no longer appears: `alice` | Value absent from sanitized output. | PASS | Username was removed. |
+| EV-046 | Must preserve values: sanitized output equals input | `/var/log/nginx/error.log` | PASS | Non-home system path remained unchanged. |
 
 ## Human Rubric Summary
 
 The human rubric was applied manually in [human-rubric.md](human-rubric.md).
 
-- Cases graded: 6
-- Overall PASS: 5
+- Current cases graded: 9
+- Current overall PASS: 9
 - Overall FAIL: 0
-- Overall NEEDS DISCUSSION: 1
+- Preserved before-refinement judgment: 1 NEEDS DISCUSSION for EV-040
 
 ## Disagreement Analysis
 
-EV-040 is the only disagreement.
+EV-040 was the key disagreement before Manual Test 2 policy refinement.
 
 Input:
 
@@ -83,29 +86,35 @@ Input:
 Localhost: 127.0.0.1
 ```
 
-Current output:
+Before Manual Test 2 policy refinement:
 
 ```text
 Localhost: [REDACTED_IP_ADDRESS]
 ```
 
-Automated grader result:
+After Manual Test 2 policy refinement:
+
+```text
+Localhost: 127.0.0.1
+```
+
+Original automated grader result:
 PASS, because the valid IPv4 value is removed, the redaction marker appears, the `Localhost:` label remains, the `IP_ADDRESS` category is reported, and the redaction count is 1.
 
 Human rubric result:
 NEEDS DISCUSSION, because localhost is often important debugging context and does not carry the same privacy risk as many public or private network addresses.
 
 Specification inspection:
-`SPEC_FINAL.md` already states that localhost and private IPs are redacted by default and that the user can disable IPv4 redaction when exact network context is needed. The disagreement does not require changing product behavior, but it does expose a specification communication gap: the final spec should explicitly name this as a human-in-the-loop judgment call rather than only a settled implementation decision.
+Manual Test 2 showed this was more than a communication gap. The final policy now preserves IPv4 loopback addresses in `127.0.0.0/8`, while continuing to redact other valid IPv4 addresses when IPv4 redaction is enabled.
 
 Action taken:
 
-- Added EV-040 to the eval set.
-- Added a localhost unit regression test.
-- Updated `SPEC_FINAL.md` to document the Session 7 grader finding.
-- Updated `CHANGELOG.md` because the grader finding caused a specification/documentation change.
+- Updated EV-040 to require loopback preservation.
+- Added EV-041 through EV-047 for Manual Test 2 findings.
+- Added loopback, dotted-sequence, and Linux path regression tests.
+- Updated `SPEC_FINAL.md`, `CHANGELOG.md`, `DESIGN_DECISIONS.md`, and `AI_WORKLOG.md`.
 - Reran unit tests, evals, and the automated exact/property grader.
 
 ## Unresolved Judgment Call
 
-SafePaste still redacts localhost by default. A security/privacy evaluator may prefer that consistent rule; a developer or support recipient may prefer preserving localhost for troubleshooting. The current product resolves this by defaulting to privacy and leaving an IPv4 opt-out under user control.
+SafePaste now preserves IPv4 loopback addresses by default. A security/privacy evaluator may prefer uniform IP masking, but the accepted final policy prioritizes diagnostic usefulness for `127.0.0.0/8` because it usually identifies the local machine rather than a remote person or organization.

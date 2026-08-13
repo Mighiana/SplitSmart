@@ -25,7 +25,7 @@ Secondary users:
 
 The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md). The final implementation keeps the two key conflicts visible:
 
-- Privacy vs diagnostic usefulness: IP addresses are redacted by default, but users can disable IPv4 redaction when troubleshooting needs exact network context.
+- Privacy vs diagnostic usefulness: non-loopback IPv4 addresses are redacted by default, IPv4 loopback addresses in `127.0.0.0/8` are preserved for diagnostic usefulness, and users can disable IPv4 redaction when troubleshooting needs exact network context.
 - Detection sensitivity vs false positives: high-risk credential contexts are redacted, while ordinary build IDs, UUID-like trace IDs, semantic versions, and `PWD` path values are preserved.
 
 ## 4. Functional Requirements
@@ -35,11 +35,11 @@ The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md
 - R3: Application produces sanitized output.
 - R4: Application detects email addresses.
 - R5: Application detects common credentials and tokens, including key/value secrets, quoted JSON credential keys, JWTs, Bearer tokens, Basic/Token Authorization headers, AWS-style access keys, and recognizable Slack-style tokens.
-- R6: Application detects valid IPv4 addresses and does not classify invalid octets as IPv4.
+- R6: Application detects valid non-loopback IPv4 addresses, does not classify invalid octets as IPv4, and does not redact IPv4-like substrings inside larger dotted numeric sequences.
 - R7: Application shows detected sensitive-data categories.
 - R8: Application shows a redaction count.
 - R9: User can copy sanitized output.
-- R10: User can choose whether IPv4 addresses are redacted.
+- R10: User can choose whether redaction-eligible IPv4 addresses are redacted.
 - R11: User can review original and sanitized text before sharing.
 - R12: Application preserves non-sensitive context where practical.
 - R13: Local file paths and usernames are redacted only for common user-directory path forms that are reasonably detectable.
@@ -85,14 +85,22 @@ The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md
 
 ### Localhost and Private IPs
 
-`127.0.0.1`, private IPv4 ranges, and public IPv4 addresses are redacted by default because IP information may reveal environment or user details. The UI includes a user-controlled checkbox to preserve IPv4 addresses when exact network context is needed for troubleshooting.
+Public IPv4 addresses and private non-loopback IPv4 ranges are redacted by default because IP information may reveal environment or user details. IPv4 loopback addresses in `127.0.0.0/8` are preserved by default because Manual Test 2 showed that redacting localhost can be unnecessarily destructive for troubleshooting and usually identifies the local machine rather than a remote person or organization.
 
 Session 7 grader finding:
-The exact/property grader passed `Localhost: 127.0.0.1` because default IPv4 redaction behaved as specified. The human rubric marked the same case as `NEEDS DISCUSSION` because localhost is often valuable debugging context and carries less privacy risk than many external IP addresses. This does not change the current product behavior, but it is now an explicit human-in-the-loop judgment call: reviewers should consider disabling IPv4 redaction when localhost or network debugging context is more important than uniform IP masking.
+The exact/property grader originally passed `Localhost: 127.0.0.1` because default IPv4 redaction behaved as specified. The human rubric marked the same case as `NEEDS DISCUSSION` because localhost is often valuable debugging context and carries less privacy risk than many external IP addresses. Manual Test 2 resolved this as a specification refinement: preserve IPv4 loopback addresses, continue redacting other valid IPv4 addresses when IPv4 redaction is enabled, and keep the user-controlled IPv4 opt-out for broader network debugging cases.
+
+### IPv4 Token Boundaries
+
+IPv4 redaction only applies when the candidate is a complete IPv4 token. A valid-looking four-octet substring inside a larger dotted numeric sequence, such as `1.2.3.4.5`, must remain unchanged.
 
 ### `PWD=` Values
 
 `PWD=/some/path` is not treated as a password because `PWD` commonly means present working directory in shell logs. The final sanitizer preserves `PWD` values and handles usernames through the narrower path detector.
+
+### Linux Home Paths
+
+Recognized local home-directory forms include Windows `C:\Users\name\...`, macOS `/Users/name/...`, and Linux `/home/name/...`. SafePaste redacts only the username segment in those forms. It does not redact general system paths such as `/var/log/nginx/error.log` or `/usr/local/bin`.
 
 ### JSON Credential Keys
 
@@ -103,6 +111,7 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - Detection is deterministic and pattern-based; it cannot prove that every secret is removed.
 - The app does not parse all programming languages, structured logs, or custom secret formats.
 - Local path detection is intentionally narrow to reduce false positives.
+- The app distinguishes loopback from other IPv4 addresses, but it does not separately classify public and private non-loopback ranges.
 - Browser-level OS clipboard permission was not verified because in-app browser automation failed in this environment; a no-dependency UI smoke test verified that the copy button calls the Clipboard API.
 - A temporary local verification server exists under `evals/` for testing only. The production app remains static and can be opened directly from `index.html`.
 
@@ -114,3 +123,6 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - Expanded static privacy eval scanning to recursively scan production code files.
 - Updated the pre-commit hook to avoid `grep` dependency and fixed temp files.
 - Added Session 7 grader methodology and documented localhost redaction as a human-in-the-loop judgment call.
+- Refined Manual Test 2 policy so `127.0.0.0/8` loopback addresses are preserved by default.
+- Added complete-token IPv4 detection to avoid redacting substrings inside larger dotted numeric sequences.
+- Fixed Linux `/home/name/...` username redaction while preserving non-home Linux paths.

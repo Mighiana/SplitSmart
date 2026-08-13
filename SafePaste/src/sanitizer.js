@@ -35,6 +35,14 @@
     });
   }
 
+  function isLoopbackIpv4(candidate) {
+    return isValidIpv4(candidate) && candidate.split(".")[0] === "127";
+  }
+
+  function isRedactableIpv4(candidate) {
+    return isValidIpv4(candidate) && !isLoopbackIpv4(candidate);
+  }
+
   function buildRules(options) {
     const redactIpAddresses = options.redactIpAddresses !== false;
 
@@ -91,13 +99,18 @@
       {
         category: "PATH_OR_USERNAME",
         label: REDACTION_LABELS.PATH_OR_USERNAME,
-        pattern: /\b(?:[A-Za-z]:\\Users\\|\/home\/|\/Users\/)([A-Za-z0-9._-]+)([^\s"'<>]*)/g,
-        replacement: function () {
-          const match = arguments[0];
-          if (match.indexOf("\\") !== -1) {
-            return match.replace(/^(?:[A-Za-z]:\\Users\\)[A-Za-z0-9._-]+/, "C:\\Users\\[REDACTED_USER]");
+        pattern: /(^|[^A-Za-z0-9/\\._-])((?:[A-Za-z]:\\Users\\|\/home\/|\/Users\/)([A-Za-z0-9._-]+)([^\s"'<>]*))/g,
+        candidate: function (args) {
+          return args[2];
+        },
+        indexOffset: function (args) {
+          return args[1].length;
+        },
+        replacement: function (match, prefix, pathValue) {
+          if (pathValue.indexOf("\\") !== -1) {
+            return prefix + pathValue.replace(/^([A-Za-z]:\\Users\\)[A-Za-z0-9._-]+/, "$1[REDACTED_USER]");
           }
-          return match.replace(/^((?:\/home\/|\/Users\/))[A-Za-z0-9._-]+/, "$1[REDACTED_USER]");
+          return prefix + pathValue.replace(/^((?:\/home\/|\/Users\/))[A-Za-z0-9._-]+/, "$1[REDACTED_USER]");
         }
       }
     ];
@@ -106,8 +119,17 @@
       rules.push({
         category: "IP_ADDRESS",
         label: REDACTION_LABELS.IP_ADDRESS,
-        pattern: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
-        validator: isValidIpv4
+        pattern: /(^|[^A-Za-z0-9_.-])((?:\d{1,3}\.){3}\d{1,3})(?![A-Za-z0-9_.-])/g,
+        candidate: function (args) {
+          return args[2];
+        },
+        indexOffset: function (args) {
+          return args[1].length;
+        },
+        validator: isRedactableIpv4,
+        replacement: function (match, prefix) {
+          return prefix + REDACTION_LABELS.IP_ADDRESS;
+        }
       });
     }
 
@@ -124,15 +146,17 @@
         const args = Array.prototype.slice.call(arguments);
         const match = args[0];
         const offset = args[args.length - 2];
+        const candidate = rule.candidate ? rule.candidate(args) : match;
+        const indexOffset = rule.indexOffset ? rule.indexOffset(args) : 0;
 
-        if (rule.validator && !rule.validator(match)) {
+        if (rule.validator && !rule.validator(candidate)) {
           return match;
         }
 
         matches.push({
           category: rule.category,
-          text: match,
-          index: offset
+          text: candidate,
+          index: offset + indexOffset
         });
 
         if (rule.replacement) {
@@ -159,6 +183,7 @@
   return {
     sanitize: sanitize,
     isValidIpv4: isValidIpv4,
+    isLoopbackIpv4: isLoopbackIpv4,
     REDACTION_LABELS: REDACTION_LABELS
   };
 });

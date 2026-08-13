@@ -29,16 +29,56 @@ Options considered:
 Always redact, never redact, or provide user-controlled behavior.
 
 Decision:
-Redact valid IPv4 addresses by default and provide a checkbox to preserve them. Redact common user-directory path usernames while preserving path shape.
+Redact valid non-loopback IPv4 addresses by default and provide a checkbox to preserve them. Preserve IPv4 loopback addresses in `127.0.0.0/8` because they are usually local diagnostic context. Redact common user-directory path usernames while preserving path shape.
 
 Reason:
-Default privacy protection helps data subjects and security stakeholders, while the checkbox gives developers control when exact network context matters.
+Default privacy protection helps data subjects and security stakeholders. Manual Test 2 showed that localhost redaction can be disproportionately harmful for debugging, so loopback addresses are preserved while the checkbox still gives developers control when other exact network context matters.
 
 Stakeholders affected:
 All four stakeholder groups.
 
 Known limitation:
-The app does not classify public, private, and localhost IPs differently.
+The app distinguishes loopback from other IPv4 addresses, but it does not separately classify public and private non-loopback ranges.
+
+## 2a. Complete IPv4 Tokens
+
+Context:
+Manual Test 2 showed that `1.2.3.4.5` became `[REDACTED_IP_ADDRESS].5`.
+
+Options considered:
+Keep the broad regex, special-case `1.2.3.4.5`, or require IPv4 candidates to be complete tokens.
+
+Decision:
+Require IPv4 candidates to be complete tokens and preserve valid-looking substrings inside larger dotted numeric sequences.
+
+Reason:
+Special-casing one input would not address the root cause. Complete-token detection better supports false-positive control.
+
+Stakeholders affected:
+Developers, support recipients, and security reviewers.
+
+Known limitation:
+The rule is still regex-based and may not understand every surrounding syntax used in network tooling.
+
+## 2b. Linux Home Path Usernames
+
+Context:
+Manual Test 2 showed `/home/usman/projects/safepaste/server.log` was not redacted even though the accepted path policy covers recognized home-directory forms.
+
+Options considered:
+Leave Linux paths unchanged, redact entire paths, or redact only the username segment for recognized home-directory prefixes.
+
+Decision:
+Redact only the username segment for `/home/name/...`, `/Users/name/...`, and Windows `C:\Users\name\...`; preserve non-home system paths.
+
+Reason:
+This protects personal usernames without destroying path shape or useful diagnostic context.
+
+Stakeholders affected:
+People whose data appears in logs, developers, and support recipients.
+
+Known limitation:
+Only common home-directory forms are handled.
 
 ## 3. Detection Sensitivity vs False Positives
 

@@ -55,10 +55,9 @@ const cases = [
     id: "RT-P06",
     focus: "localhost",
     input: "local service bound to 127.0.0.1:8080",
-    expected: "Redact localhost by default because valid IPv4 redaction is enabled.",
+    expected: "Preserve localhost loopback after Manual Test 2 policy refinement.",
     checks: {
-      notContains: ["127.0.0.1"],
-      contains: ["[REDACTED_IP_ADDRESS]", ":8080"]
+      contains: ["127.0.0.1", ":8080"]
     }
   },
   {

@@ -108,6 +108,8 @@ SafePaste uses two grader styles:
 
 No external model-as-judge API is used because sending logs to an external model would conflict with the local-only privacy architecture.
 
+Manual Test 2 extended the grader evidence with a real localhost disagreement. SafePaste now preserves IPv4 loopback addresses in `127.0.0.0/8`, while continuing to redact other valid IPv4 addresses when IPv4 redaction is enabled.
+
 ## Known Limitations
 
 - SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.

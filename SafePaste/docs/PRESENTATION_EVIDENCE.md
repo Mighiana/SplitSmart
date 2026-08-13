@@ -27,7 +27,8 @@ Two main conflicts:
 
 Decisions caused by those conflicts:
 
-- IPv4 addresses are redacted by default but can be preserved by user choice.
+- Non-loopback IPv4 addresses are redacted by default but can be preserved by user choice.
+- Loopback IPv4 addresses are preserved after Manual Test 2 showed localhost redaction harmed diagnostic usefulness.
 - Generic secrets require credential-like key context.
 - `PWD` path values are preserved because security review showed they were false positives.
 
@@ -42,6 +43,10 @@ Decisions caused by those conflicts:
 | Hook moved away from `grep` and fixed temp file | Manual hook failure and SR-005 | v1.5 | `evals/results_v1.md`, `.claude/hooks/pre-commit.sh` |
 | External-resource scan expanded across production files | Final security review | v1.6 | `evals/run-evals.js`, `evals/results_final.md` |
 | Hook path loop made space-safe without `mktemp` | Final hook smoke test | v1.7 | `AI_WORKLOG.md`, `.claude/hooks/pre-commit.sh` |
+| Grader methodology added and localhost disagreement recorded | Session 7 requirement | v1.8 | `evals/graders/grader-comparison.md` |
+| IPv4 token boundary fixed | Manual Test 2 F1 | v1.9 | `evals/manual_test_2.md`, EV-041 |
+| Loopback addresses preserved | Manual Test 2 F2 and grader disagreement | v1.10 | EV-040, EV-042, EV-043 |
+| Linux home usernames redacted narrowly | Manual Test 2 F3 | v1.11 | EV-044 through EV-047 |
 
 ## 4. Harness
 
@@ -59,13 +64,13 @@ V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
-40/40 eval cases passed after adding fixes, three security-review regression cases, and the Session 7 localhost borderline case.
+47/47 eval cases passed after Manual Test 2 fixes.
 
 Session 7 grader result:
 
-- Automated exact/property grader: 6 cases, 28/28 property checks passed.
-- Human rubric: 6 cases, 5 PASS and 1 NEEDS DISCUSSION.
-- Disagreement: EV-040 localhost passed automated IP redaction but needed human discussion for diagnostic usefulness.
+- Automated exact/property grader: 9 cases, 36/36 property checks passed.
+- Human rubric: 9 current cases passed; the preserved before-refinement localhost judgment remains NEEDS DISCUSSION.
+- Disagreement: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`.
 
 Most interesting failures:
 
@@ -73,19 +78,21 @@ Most interesting failures:
 - Basic and Token Authorization headers were missed by security review.
 - `PWD=/workspace/project` was over-redacted in v1.
 - The first hook version used unavailable `grep` and exited successfully without scanning.
+- Manual Test 2 F1: `1.2.3.4.5` became `[REDACTED_IP_ADDRESS].5`.
+- Manual Test 2 F3: `/home/usman/...` did not redact the username.
 
 Categories tested:
-API keys, passwords, emails, valid and invalid IPv4 addresses, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
+API keys, passwords, emails, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
-EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, and EV-040.
+EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, and EV-046.
 
 ## 5a. Graders and the human in the loop
 
 | Grader | Location | Why chosen | Cases graded | Result |
 | --- | --- | --- | --- | --- |
-| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 6 | 28/28 property checks passed |
-| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 6 | 5 PASS, 1 NEEDS DISCUSSION |
+| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 9 | 36/36 property checks passed |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 9 current cases plus preserved before/after localhost evidence | 9 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION |
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
@@ -150,3 +157,27 @@ Removed the temporary file and rewrote the hook loop without `mktemp`.
 
 Permanent engineering control:
 Hook now uses a `read -r` loop and was rerun successfully against a staged path containing a space.
+
+Failure:
+IPv4 substring false positive.
+
+Detection:
+Manual Test 2 F1 and local reproduction showed `1.2.3.4.5` became `[REDACTED_IP_ADDRESS].5`.
+
+Response:
+IPv4 detector now requires complete IPv4 tokens.
+
+Permanent engineering control:
+Unit test plus EV-041.
+
+Failure:
+Linux home path username was not redacted.
+
+Detection:
+Manual Test 2 F3 and local reproduction showed `/home/usman/projects/safepaste/server.log` remained unchanged.
+
+Response:
+Path detector now redacts only the username segment for `/home/name/...`.
+
+Permanent engineering control:
+Unit tests plus EV-044 through EV-047.

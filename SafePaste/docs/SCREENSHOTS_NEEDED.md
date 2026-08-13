@@ -21,3 +21,5 @@ Do not create fake screenshots. Capture these from the actual project state and 
 17. `evals/graders/exact-property-grader.js` showing the automated property grader.
 18. `evals/graders/human-rubric.md` showing the rubric definition and EV-040 judgment.
 19. `evals/graders/grader-comparison.md` showing the automated vs human disagreement on localhost.
+20. `evals/manual_test_2.md` showing real before/after evidence for F1, F2, and F3.
+21. Final terminal output showing 28/28 unit tests and all eval/grader checks after Manual Test 2 fixes.

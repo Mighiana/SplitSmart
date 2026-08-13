@@ -144,3 +144,45 @@ Makes the privacy vs diagnostic usefulness conflict more visible for developers,
 
 Mapped requirement:
 R6, R10, R12, Human-Centered AI Session 7.
+
+## v1.9
+
+Changed:
+IPv4 detection now requires complete IPv4 tokens and preserves larger dotted numeric sequences such as `1.2.3.4.5`.
+
+Why:
+Manual Test 2 F1 showed that the previous detector redacted a valid-looking four-octet substring inside a larger dotted numeric sequence, producing `[REDACTED_IP_ADDRESS].5`.
+
+Stakeholder impact:
+Improves developer trust and diagnostic usefulness by reducing false-positive redaction.
+
+Mapped requirement:
+R6, R12, R14.
+
+## v1.10
+
+Changed:
+IPv4 loopback addresses in `127.0.0.0/8` are now preserved by default while other valid IPv4 addresses remain redacted when IPv4 redaction is enabled.
+
+Why:
+Manual Test 2 F2 and the grader comparison showed a real stakeholder/specification conflict: automated privacy grading considered localhost redaction successful, while human diagnostic-usefulness grading considered it unnecessarily destructive.
+
+Stakeholder impact:
+Improves troubleshooting usefulness for developers and support recipients while retaining privacy defaults for non-loopback IPv4 addresses.
+
+Mapped requirement:
+R6, R10, R12.
+
+## v1.11
+
+Changed:
+Linux home-directory usernames in `/home/name/...` are now redacted by replacing only the username segment; non-home paths such as `/var/log/nginx/error.log` and `/usr/local/bin` remain unchanged.
+
+Why:
+Manual Test 2 F3 showed `/home/usman/projects/safepaste/server.log` remained visible even though the accepted username/path policy covers reasonably detectable local home paths.
+
+Stakeholder impact:
+Improves privacy for people whose local usernames appear in logs while preserving diagnostic path context for support recipients.
+
+Mapped requirement:
+R13, R12, R14.

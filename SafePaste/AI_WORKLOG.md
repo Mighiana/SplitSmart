@@ -64,6 +64,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: Automated grading passed EV-040, while the human rubric marked it `NEEDS DISCUSSION` because localhost redaction harms debugging context.
 - Resulting control: Updated `SPEC_FINAL.md` and `CHANGELOG.md` to document localhost redaction as a human-in-the-loop judgment call.
 
+### 2026-08-13: Manual Test 2 follow-up
+
+- Task: Continue the engineering loop from real manual Test 2 results.
+- Instruction given: Fix IPv4 substring false positives, resolve loopback policy, investigate Linux home path username coverage, update graders/docs, and rerun all checks.
+- What AI produced: `evals/manual_test_2.md`, new unit regressions, EV-041 through EV-047, sanitizer fixes, grader updates, and specification/changelog/design-decision updates.
+- Accepted: Pending full verification after documentation updates.
+- Manual changes: None outside the documented code and evidence patches.
+- Failure or surprise: Local reproduction confirmed all three user-observed findings before code changes. The Linux `/home/` detector existed conceptually, but a leading word-boundary prevented matching paths that start with `/home/`.
+- Resulting control: Complete-token IPv4 detection, loopback preservation policy, Linux home-path username tests/evals, and updated grader comparison.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys
@@ -129,7 +139,41 @@ How it was detected
 -> Session 7 grader comparison across EV-040.
 
 Human response
--> Keep product behavior unchanged because the final spec already provides an IPv4 opt-out, but document the judgment call explicitly.
+-> Manual Test 2 adopted a policy change: preserve IPv4 loopback addresses in `127.0.0.0/8`.
 
 Permanent control added
--> EV-040, localhost unit regression test, `human-rubric.md`, `grader-comparison.md`, and a `SPEC_FINAL.md` clarification.
+-> EV-040, loopback preservation tests, `human-rubric.md`, `grader-comparison.md`, and a `SPEC_FINAL.md` refinement that preserves `127.0.0.0/8`.
+
+### IPv4 detector redacted substrings inside larger dotted numeric sequences
+
+AI behavior
+-> The IPv4 regex matched `1.2.3.4` inside `1.2.3.4.5`.
+
+Why it was problematic
+-> It created a false positive and produced confusing output: `[REDACTED_IP_ADDRESS].5`.
+
+How it was detected
+-> Manual Test 2 F1 and local reproduction.
+
+Human response
+-> Add a regression test and eval before fixing.
+
+Permanent control added
+-> Complete-token IPv4 detection plus EV-041.
+
+### Linux home path usernames were not redacted
+
+AI behavior
+-> The path detector did not redact `/home/usman/...` because its leading boundary prevented matching a path starting with `/home/`.
+
+Why it was problematic
+-> The accepted path policy covers reasonably detectable local home-directory usernames.
+
+How it was detected
+-> Manual Test 2 F3 and local reproduction.
+
+Human response
+-> Add Linux home-path and non-home-path regression tests before fixing.
+
+Permanent control added
+-> Linux home-path username redaction plus EV-044 through EV-047.
