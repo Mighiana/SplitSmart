@@ -270,3 +270,17 @@ Keeps the privacy/security posture stable while honestly surfacing a diagnostic-
 
 Mapped requirement:
 R6, R12, R14.
+
+## v1.18
+
+Changed:
+Added final completion evidence: product-behavior harness, accessibility static checker, accessibility review, product behavior review, harness review, final completion report, eval `grader` metadata, and refreshed final evidence docs.
+
+Why:
+Final completion mode required verifiable evidence for UI behavior, accessibility checks, grader methodology, harness components, security/privacy review, secret scanning, and presentation readiness without changing the frozen sanitizer.
+
+Stakeholder impact:
+Improves grading confidence and presentation readiness for evaluators while preserving the audited product behavior.
+
+Mapped requirement:
+Human-Centered AI final completion gate, product behavior tests, accessibility/human evaluation, harness final check, and presentation evidence requirements.

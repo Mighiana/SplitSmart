@@ -124,6 +124,16 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Failure or surprise: None. The toggle behaved as intended.
 - Resulting control: The IPv4 toggle is documented as scoped to IP redaction only: disabling IPv4 protection preserves network IPs for diagnostic usefulness while unrelated email and credential rules continue to redact.
 
+### 2026-08-13: Final completion mode
+
+- Task: Complete every remaining Human-Centered AI project requirement and produce verifiable final evidence while the sanitizer is frozen.
+- Instruction given: Verify product behavior, accessibility/human evaluation, automated and human graders, grader comparison, engineering history, final specs, changelog, harness, privacy/static review, secret scan, eval set, red-team report, design decisions, presentation evidence, README, and final completion report.
+- What AI produced: `evals/run-product-behavior.js`, `evals/run-accessibility-checks.js`, `docs/PRODUCT_BEHAVIOR_REVIEW.md`, `docs/ACCESSIBILITY_REVIEW.md`, `docs/HARNESS_REVIEW.md`, `docs/FINAL_COMPLETION_REPORT.md`, README/harness/presentation/red-team/design/eval metadata updates, and refreshed final result artifacts.
+- Accepted: Accepted after unit tests, evals, exact/property grader, red-team, UI smoke, product behavior checks, accessibility static checks, eval metadata validation, production static scans, production credential scan, whole-tree secret scan, and hook execution passed or were documented with rationale.
+- Manual changes: Browser-only clipboard permission, tab-order traversal, and screen-reader behavior were not automated and are listed as NOT VERIFIED manual checks.
+- Failure or surprise: Eval metadata validation initially needed to treat EV-023's empty input as intentional rather than missing. No high-severity privacy/security regression was found.
+- Resulting control: Final completion report uses PASS/FAIL/NOT VERIFIED statuses and links to evidence files; no sanitizer behavior changed.
+
 ## Most Important AI Failures
 
 ### Initial sanitizer missed quoted JSON credential keys

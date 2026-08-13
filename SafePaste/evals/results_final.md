@@ -1,6 +1,6 @@
 # SafePaste Final Evaluation Results
 
-Refreshed after Manual Test 6 close-out on 2026-08-13.
+Refreshed in final completion mode on 2026-08-13.
 
 ## Commands Run
 
@@ -10,30 +10,36 @@ node evals/run-evals.js --write evals/results_final.md
 node evals/graders/exact-property-grader.js --write evals/graders/exact-property-results.md
 node evals/run-red-team.js
 node evals/run-ui-smoke.js
-rg -n "fetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|document\.cookie|innerHTML|https?://|<script[^>]+src=|TODO.*security|bypass" SafePaste
-rg -n 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN .*PRIVATE KEY-----|password\s*[:=]\s*[^,\s;}{]{8,}|api[_-]?key\s*[:=]\s*[A-Za-z0-9_./+=-]{16,}' SafePaste
+node evals/run-product-behavior.js
+node evals/run-accessibility-checks.js
 ```
 
-## Final Methodology Results
+## Final Completion Results
 
 - Unit tests: 37 total, 37 passed, 0 failed.
 - Eval cases: 72 total, 72 passed, 0 failed.
+- Eval metadata: 72/72 cases include required fields including `grader`; EV-023 intentionally has an empty input string for the empty-input eval.
 - Automated exact/property grader: 20 cases, 86 property checks, 86 passed, 0 failed.
-- Human rubric: 20 current cases graded; 19 PASS, 0 FAIL, 1 NEEDS DISCUSSION for EV-072.
+- Human rubric: 20 current eval cases plus 2 Manual Test 7 control runs graded; 21 PASS, 0 FAIL, 1 NEEDS DISCUSSION for EV-072.
 - Red-team cases: 15 total, 15 passed, 0 failed.
 - UI smoke: PASS.
-- Privacy/static scan: contextual documentation, tests, evals, history, local static server, local script tags, and scan-pattern hits only; no production network, persistence, cookie, or unsafe DOM finding.
-- Secret scan: synthetic fixtures in tests/evals/history/docs only; no production hardcoded credential finding.
-- Network/persistence API review: production app remains static/local-only and does not use `fetch`, `XMLHttpRequest`, `WebSocket`, storage APIs, cookies, IndexedDB, or `innerHTML`.
+- Local server smoke: PASS, HTTP 200 from `http://127.0.0.1:8765/`.
+- Product behavior harness: 5 total, 5 passed, 0 failed.
+- Accessibility static checks: 10 total, 10 passed, 0 failed.
+- Production network/storage/unsafe-DOM scan: PASS, no matches in production files.
+- Production external runtime resource scan: PASS, no remote URLs/imports/url() references in production files.
+- Production hardcoded credential scan: PASS, no matches in production files.
+- Whole-tree secret scan: PASS with rationale; 42 synthetic/evidence hits reviewed in tests/evals/history/docs, 0 production secret findings.
+- Pre-commit hook: PASS.
 - Remaining failures from executed checks: none.
 
-## Manual Test 6 Known Limitation
+## Manual Checks For Human
 
-- Input: `Firmware 1.2.3.4 installed successfully.`
-- Current output: `Firmware [REDACTED_IP_ADDRESS] installed successfully.`
-- Automated exact/property verdict: PASS under the current deterministic privacy policy.
-- Human rubric verdict: NEEDS DISCUSSION because the value is likely firmware-version context and redaction can reduce diagnostic usefulness.
-- Action taken: documented as a known limitation and grader disagreement; no sanitizer change was made because the core sanitizer is frozen unless a high-severity privacy/security regression appears.
+- Real browser OS clipboard permission and paste verification: NOT VERIFIED.
+- Browser keyboard traversal and logical tab order: NOT VERIFIED.
+- Screen-reader announcement quality for live status messages: NOT VERIFIED.
+
+The eval set has 72 cases because earlier instructions required preserving accumulated cases; cases were not removed to satisfy the approximate 30-50 target.
 
 ## Summary
 

@@ -37,7 +37,7 @@ Decisions caused by those conflicts:
 - Generic secrets require credential-like key context.
 - `PWD` path values are preserved because security review showed they were false positives.
 
-## 3. Spec: v1 -> final
+## 3. Spec v1 -> final + changelog
 
 | Change | Trigger | Changelog entry | Supporting evidence |
 | --- | --- | --- | --- |
@@ -59,8 +59,9 @@ Decisions caused by those conflicts:
 | Sentence-final standalone IPv4 redaction fixed | Manual Test 5 F7 | v1.16 | `evals/manual_test_5.md`, EV-065 through EV-071 |
 | Firmware-version limitation documented without sanitizer change | Manual Test 6 grader disagreement | v1.17 | `evals/manual_test_6.md`, EV-072 |
 | IPv4 toggle scoped human control confirmed | Manual Test 7 successful product-behavior evaluation | No product/spec change | `evals/manual_test_7.md`, `evals/graders/human-rubric.md` |
+| Final completion evidence added | Final completion gate | v1.18 | `docs/FINAL_COMPLETION_REPORT.md`, `docs/ACCESSIBILITY_REVIEW.md`, `docs/PRODUCT_BEHAVIOR_REVIEW.md`, `docs/HARNESS_REVIEW.md` |
 
-## 4. Harness
+## 4. Harness components and why
 
 | Component | Location in repository | Purpose | Concrete example where it mattered |
 | --- | --- | --- | --- |
@@ -69,14 +70,25 @@ Decisions caused by those conflicts:
 | Hook | `.claude/hooks/pre-commit.sh` | Lightweight staged secret scan | Manual invocation exposed a portability failure that was fixed |
 | Permission policy | `.claude/settings.json` | Documents approval boundaries | Keeps dependency/network/destructive actions explicit |
 | Evaluation runners | `evals/run-evals.js`, `evals/run-red-team.js`, `evals/run-ui-smoke.js` | Tie behavior to spec requirements and adversarial checks | Preserved v1 failures and verified final fixes |
+| Product behavior harness | `evals/run-product-behavior.js` | Verifies empty input, clear, copy, IPv4 toggle, and large multiline behavior | Manual Test 7 and final completion mode required product workflow evidence |
+| Accessibility checker | `evals/run-accessibility-checks.js` | Automates label, semantic HTML, focus CSS, live-region, and text-state checks | Final completion mode required accessibility evidence |
 
-## 5. Evaluations
+Full harness review:
+`docs/HARNESS_REVIEW.md`
+
+## 5. Evals and results
 
 V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
 72/72 eval cases passed after Manual Test 6 close-out.
+
+Final product behavior:
+5/5 product behavior checks passed in `evals/run-product-behavior.js`; see `docs/PRODUCT_BEHAVIOR_REVIEW.md`.
+
+Final accessibility review:
+10/10 automated static accessibility checks passed in `evals/run-accessibility-checks.js`; browser keyboard traversal, logical tab order, and screen-reader announcement quality remain NOT VERIFIED pending a human browser/assistive-technology pass. See `docs/ACCESSIBILITY_REVIEW.md`.
 
 Session 7 grader result:
 
@@ -115,7 +127,7 @@ EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, 
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
-## 6. Honest failures
+## 6. Honest AI/product failures and responses
 
 Failure:
 Quoted JSON credential keys were not redacted.

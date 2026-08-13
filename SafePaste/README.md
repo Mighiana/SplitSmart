@@ -20,6 +20,21 @@ SafePaste runs entirely in the browser with no backend, no database, no analytic
 
 Production files do not use `fetch`, `XMLHttpRequest`, `WebSocket`, browser storage APIs, cookies, IndexedDB, external resources, or `innerHTML`.
 
+## Features
+
+- Redacts common credentials, tokens, emails, structured usernames, home-path usernames, and redaction-eligible IPv4 addresses.
+- Preserves useful context such as request IDs, build IDs, Unicode text, system paths, invalid IPv4-like values, loopback addresses, and narrow software version contexts.
+- Shows sanitized output side by side with the original text for human review.
+- Shows redaction count and detected categories.
+- Provides Clear and Copy controls.
+- Provides a scoped IPv4 toggle for privacy-versus-diagnostic-usefulness control.
+
+## IPv4 User Control
+
+By default, SafePaste redacts valid non-loopback IPv4 addresses and preserves `127.0.0.0/8` loopback addresses. The `Redact non-loopback IPv4 addresses` checkbox lets the user turn off network IPv4 redaction when exact network context is needed for troubleshooting.
+
+Manual Test 7 confirmed that this toggle is scoped: when IPv4 redaction is off, network IPs remain visible, but unrelated email and credential redaction still works.
+
 ## How To Run
 
 Open `index.html` directly in a browser:
@@ -50,6 +65,8 @@ node evals/run-evals.js
 node evals/graders/exact-property-grader.js
 node evals/run-red-team.js
 node evals/run-ui-smoke.js
+node evals/run-product-behavior.js
+node evals/run-accessibility-checks.js
 ```
 
 To write final eval results:
@@ -72,6 +89,16 @@ SafePaste/
   history/v1/
   .claude/
 ```
+
+## Harness
+
+The AI engineering harness is documented in [docs/HARNESS_REVIEW.md](docs/HARNESS_REVIEW.md).
+
+- `AGENTS.md` records persistent AI development instructions.
+- `.claude/agents/security-reviewer.md` defines a security-review role.
+- `.claude/hooks/pre-commit.sh` runs a lightweight staged secret scan.
+- `.claude/settings.json` documents approval boundaries and discouraged actions.
+- `evals/` contains unit-linked evals, red-team checks, product behavior checks, accessibility checks, and graders.
 
 ## Methodology
 
@@ -98,6 +125,10 @@ Key evidence files:
 - `RED_TEAM.md`
 - `AI_WORKLOG.md`
 - `CHANGELOG.md`
+- `docs/ACCESSIBILITY_REVIEW.md`
+- `docs/FINAL_COMPLETION_REPORT.md`
+- `docs/HARNESS_REVIEW.md`
+- `docs/PRODUCT_BEHAVIOR_REVIEW.md`
 - `docs/PRESENTATION_EVIDENCE.md`
 
 ## Grader Methodology

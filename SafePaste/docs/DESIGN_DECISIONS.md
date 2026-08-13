@@ -60,6 +60,26 @@ Developers, support recipients, and security reviewers.
 Known limitation:
 The rule is still regex-based and may not understand every surrounding syntax used in network tooling.
 
+## 2a.1. Loopback Preservation
+
+Context:
+Manual Test 2 showed `127.0.0.1` was redacted even though localhost is usually local debugging context.
+
+Options considered:
+Redact every syntactically valid IPv4 address, preserve all private ranges, preserve only loopback, or require the user to toggle all IPv4 behavior manually.
+
+Decision:
+Preserve IPv4 loopback addresses in `127.0.0.0/8` by default while continuing to redact other valid non-loopback IPv4 addresses unless the user disables IPv4 redaction.
+
+Reason:
+Loopback generally identifies the local machine and is highly useful for debugging. Preserving all private ranges would be broader and riskier, while redacting loopback caused a real human diagnostic-usefulness concern.
+
+Stakeholders affected:
+Developers, support recipients, people whose data appears in logs, and security reviewers.
+
+Known limitation:
+SafePaste does not separately classify every private, carrier-grade NAT, documentation, or reserved IP range. Only `127.0.0.0/8` receives this default preservation treatment.
+
 ## 2b. Linux Home Path Usernames
 
 Context:
