@@ -29,6 +29,8 @@ Decisions caused by those conflicts:
 
 - Non-loopback IPv4 addresses are redacted by default but can be preserved by user choice.
 - Loopback IPv4 addresses are preserved after Manual Test 2 showed localhost redaction harmed diagnostic usefulness.
+- IPv4-shaped values in narrow version fields are preserved after Manual Test 3 showed release context was over-redacted.
+- Explicit structured username fields are redacted while arbitrary names in prose are preserved.
 - Generic secrets require credential-like key context.
 - `PWD` path values are preserved because security review showed they were false positives.
 
@@ -47,6 +49,8 @@ Decisions caused by those conflicts:
 | IPv4 token boundary fixed | Manual Test 2 F1 | v1.9 | `evals/manual_test_2.md`, EV-041 |
 | Loopback addresses preserved | Manual Test 2 F2 and grader disagreement | v1.10 | EV-040, EV-042, EV-043 |
 | Linux home usernames redacted narrowly | Manual Test 2 F3 | v1.11 | EV-044 through EV-047 |
+| Structured username fields redacted | Manual Test 3 F4 | v1.12 | `evals/manual_test_3.md`, EV-048 through EV-051 |
+| Version-field IPv4-shaped values preserved | Manual Test 3 F5 and grader disagreement | v1.13 | EV-052 through EV-057 |
 
 ## 4. Harness
 
@@ -64,13 +68,13 @@ V1 result:
 34/36 eval cases passed. EV-004 and EV-005 failed because quoted JSON credential keys were not redacted.
 
 Final result:
-47/47 eval cases passed after Manual Test 2 fixes.
+57/57 eval cases passed after Manual Test 3 fixes.
 
 Session 7 grader result:
 
-- Automated exact/property grader: 9 cases, 36/36 property checks passed.
-- Human rubric: 9 current cases passed; the preserved before-refinement localhost judgment remains NEEDS DISCUSSION.
-- Disagreement: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`.
+- Automated exact/property grader: 14 cases, 60/60 property checks passed.
+- Human rubric: 14 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL.
+- Disagreements: EV-040 originally passed automated IP redaction but needed human discussion for diagnostic usefulness; Manual Test 2 refined the spec to preserve `127.0.0.0/8`. EV-052 exposed a Manual Test 3 syntactic-IP vs version-context disagreement; the final spec preserves narrow version-field values.
 
 Most interesting failures:
 
@@ -80,19 +84,21 @@ Most interesting failures:
 - The first hook version used unavailable `grep` and exited successfully without scanning.
 - Manual Test 2 F1: `1.2.3.4.5` became `[REDACTED_IP_ADDRESS].5`.
 - Manual Test 2 F3: `/home/usman/...` did not redact the username.
+- Manual Test 3 F4: `username=musman24`, `user_name=alice_dev`, and `user=bob-admin` remained visible.
+- Manual Test 3 F5: `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
 
 Categories tested:
-API keys, passwords, emails, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
+API keys, passwords, emails, structured usernames, valid and invalid IPv4 addresses, loopback IPv4, dotted numeric false positives, version-field IPv4-shaped values, explicit IP fields, Authorization headers, Bearer tokens, JWTs, AWS-style keys, Slack-style tokens, false positives, paths/usernames, Linux home paths, Unicode, multiline logs, HTML-like input, static privacy checks, and accessibility/usability checks.
 
 Representative eval cases:
-EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, and EV-046.
+EV-004, EV-005, EV-013, EV-026, EV-037, EV-038, EV-039, EV-040, EV-041, EV-044, EV-046, EV-048, EV-050, EV-052, and EV-055.
 
 ## 5a. Graders and the human in the loop
 
 | Grader | Location | Why chosen | Cases graded | Result |
 | --- | --- | --- | --- | --- |
-| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 9 | 36/36 property checks passed |
-| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 9 current cases plus preserved before/after localhost evidence | 9 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION |
+| Automated exact/property grader | `evals/graders/exact-property-grader.js` | SafePaste sanitizer behavior is deterministic and can be checked by properties without sending data anywhere. | 14 | 60/60 property checks passed |
+| Human rubric | `evals/graders/human-rubric.md` | Diagnostic usefulness, readability, proportionality, and shareability require judgment. | 14 current cases plus preserved before/after disagreement evidence | 14 current PASS; before-refinement EV-040 remains NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL |
 
 Model-as-judge was not used because an external LLM API would conflict with SafePaste's local-only privacy architecture.
 
@@ -181,3 +187,27 @@ Path detector now redacts only the username segment for `/home/name/...`.
 
 Permanent engineering control:
 Unit tests plus EV-044 through EV-047.
+
+Failure:
+Structured username fields remained visible.
+
+Detection:
+Manual Test 3 F4 and local reproduction showed `username=musman24`, `user_name=alice_dev`, and `user=bob-admin` were unchanged.
+
+Response:
+Added a narrow structured username detector for explicit account fields and quoted JSON equivalents.
+
+Permanent engineering control:
+Unit tests plus EV-048 through EV-051.
+
+Failure:
+Version-field value was over-redacted as an IP address.
+
+Detection:
+Manual Test 3 F5 and grader comparison showed `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
+
+Response:
+Added a narrow version-field context exception while keeping `client_ip=` and `server_ip=` redaction.
+
+Permanent engineering control:
+Unit tests plus EV-052 through EV-057.

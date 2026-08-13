@@ -21,6 +21,13 @@ No external model-as-judge API was added. That would conflict with SafePaste's l
 | EV-041 | PASS | PASS | Agreement | Automated and human graders both preserve `1.2.3.4.5`. | IPv4 detection must require complete IPv4 tokens, not substrings inside larger dotted numeric sequences. |
 | EV-044 | PASS | PASS | Agreement | Automated and human graders both redact only the username segment in `/home/alice/...`. | Linux home paths are covered by the accepted local path/username policy. |
 | EV-046 | PASS | PASS | Agreement | Automated and human graders both preserve `/var/log/nginx/error.log`. | The path policy must stay narrow and avoid broad Linux path redaction. |
+| EV-048 before Manual Test 3 refinement | FAIL | FAIL | Agreement | The added property grader failed because structured username values remained visible; the human rubric also failed privacy/shareability. | `SPEC_v1.md` was ambiguous about explicit structured username fields, so `SPEC_FINAL.md` needed a narrow account-identifier policy. |
+| EV-048 after Manual Test 3 refinement | PASS | PASS | Agreement after spec change | Structured username values are redacted while field names remain. | Explicit account fields have enough privacy signal to redact without arbitrary name detection. |
+| EV-049 | PASS | PASS | Agreement | Quoted JSON username value is redacted and `role` context remains. | JSON username fields are practical to support with the same structured-field policy. |
+| EV-050 | PASS | PASS | Agreement | `name=Muhammad` remains unchanged. | The username policy must not become arbitrary personal-name detection. |
+| EV-052 before Manual Test 3 refinement | PASS under syntactic IP property; FAIL under updated preservation property | FAIL | Disagreement | The old syntactic IP interpretation treated `release=1.2.3.4` as successful IPv4 redaction, but the human rubric found that version context was unnecessarily removed. | The specification needed a narrow contextual exception for version-related fields. |
+| EV-052 after Manual Test 3 refinement | PASS | PASS | Agreement after spec change | The version-shaped value is preserved in `release=` context. | Context can matter even when a token is syntactically IPv4-shaped. |
+| EV-055 | PASS | PASS | Agreement | `client_ip=10.20.30.40` is still redacted. | The version-field exception is narrow and does not disable general IPv4 redaction. |
 
 ## Automated Exact/Property Grader Run
 
@@ -32,9 +39,9 @@ node evals/graders/exact-property-grader.js
 
 Summary:
 
-- Cases graded after Manual Test 2: 9
-- Property checks: 36
-- Passed: 36
+- Cases graded after Manual Test 3: 14
+- Property checks: 60
+- Passed: 60
 - Failed: 0
 
 | Case ID | Expected property | Actual behavior | Result | Reason |
@@ -66,15 +73,23 @@ Summary:
 | EV-041 | Must preserve values: sanitized output equals input | `1.2.3.4.5` | PASS | Output preserved exactly as required. |
 | EV-044 | Original sensitive value no longer appears: `alice` | Value absent from sanitized output. | PASS | Username was removed. |
 | EV-046 | Must preserve values: sanitized output equals input | `/var/log/nginx/error.log` | PASS | Non-home system path remained unchanged. |
+| EV-048 | Original sensitive username values no longer appear | Values absent from sanitized output. | PASS | Structured username values were removed. |
+| EV-048 | Required field names and `[REDACTED_USERNAME]` markers appear | Expected text present. | PASS | Field context was preserved. |
+| EV-049 | JSON username value no longer appears | Value absent from sanitized output. | PASS | Structured JSON username value was removed. |
+| EV-049 | JSON role context remains | `"role":"admin"` present. | PASS | Harmless context was preserved. |
+| EV-050 | Must preserve values: sanitized output equals input | `name=Muhammad` | PASS | Arbitrary name field remained unchanged. |
+| EV-052 | Must preserve values: sanitized output equals input | `release=1.2.3.4` | PASS | Version-field IPv4-shaped value remained unchanged. |
+| EV-055 | Original IP value no longer appears | Value absent from sanitized output. | PASS | Explicit IP field was redacted. |
+| EV-055 | Expected marker and field context appear | `client_ip=[REDACTED_IP_ADDRESS]` present. | PASS | Required context was preserved. |
 
 ## Human Rubric Summary
 
 The human rubric was applied manually in [human-rubric.md](human-rubric.md).
 
-- Current cases graded: 9
-- Current overall PASS: 9
+- Current cases graded: 14
+- Current overall PASS: 14
 - Overall FAIL: 0
-- Preserved before-refinement judgment: 1 NEEDS DISCUSSION for EV-040
+- Preserved before-refinement judgments: EV-040 NEEDS DISCUSSION, EV-048 FAIL, EV-052 FAIL
 
 ## Disagreement Analysis
 
@@ -107,14 +122,47 @@ NEEDS DISCUSSION, because localhost is often important debugging context and doe
 Specification inspection:
 Manual Test 2 showed this was more than a communication gap. The final policy now preserves IPv4 loopback addresses in `127.0.0.0/8`, while continuing to redact other valid IPv4 addresses when IPv4 redaction is enabled.
 
+EV-052 was the key disagreement before Manual Test 3 policy refinement.
+
+Input:
+
+```text
+release=1.2.3.4
+```
+
+Before Manual Test 3 policy refinement:
+
+```text
+release=[REDACTED_IP_ADDRESS]
+```
+
+After Manual Test 3 policy refinement:
+
+```text
+release=1.2.3.4
+```
+
+Pre-refinement automated syntactic interpretation:
+PASS, because `1.2.3.4` is a valid non-loopback IPv4-shaped token and was removed.
+
+Human rubric result:
+FAIL, because `release=1.2.3.4` is more plausibly software version context than an address to contact or identify a network participant.
+
+Specification inspection:
+Manual Test 3 showed a real specification gap. The final policy now preserves IPv4-shaped values only when they are immediately associated with narrow version-related fields such as `release=`, `version=`, `app_version=`, or `software_version=`, while continuing to redact explicit IP fields.
+
 Action taken:
 
 - Updated EV-040 to require loopback preservation.
 - Added EV-041 through EV-047 for Manual Test 2 findings.
 - Added loopback, dotted-sequence, and Linux path regression tests.
+- Added EV-048 through EV-057 for Manual Test 3 findings.
+- Added structured username, arbitrary-name preservation, version-field, and explicit-IP-field regression tests.
 - Updated `SPEC_FINAL.md`, `CHANGELOG.md`, `DESIGN_DECISIONS.md`, and `AI_WORKLOG.md`.
 - Reran unit tests, evals, and the automated exact/property grader.
 
 ## Unresolved Judgment Call
 
 SafePaste now preserves IPv4 loopback addresses by default. A security/privacy evaluator may prefer uniform IP masking, but the accepted final policy prioritizes diagnostic usefulness for `127.0.0.0/8` because it usually identifies the local machine rather than a remote person or organization.
+
+SafePaste also preserves IPv4-shaped values in a short list of version-related fields. Future stakeholders may ask for additional field names, but the current policy keeps the exception narrow to avoid weakening IP redaction.

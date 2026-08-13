@@ -29,7 +29,7 @@ Options considered:
 Always redact, never redact, or provide user-controlled behavior.
 
 Decision:
-Redact valid non-loopback IPv4 addresses by default and provide a checkbox to preserve them. Preserve IPv4 loopback addresses in `127.0.0.0/8` because they are usually local diagnostic context. Redact common user-directory path usernames while preserving path shape.
+Redact valid non-loopback IPv4 addresses by default and provide a checkbox to preserve them. Preserve IPv4 loopback addresses in `127.0.0.0/8` because they are usually local diagnostic context. Preserve IPv4-shaped values in narrow version-related fields. Redact common user-directory path usernames and explicit structured username fields while preserving surrounding context.
 
 Reason:
 Default privacy protection helps data subjects and security stakeholders. Manual Test 2 showed that localhost redaction can be disproportionately harmful for debugging, so loopback addresses are preserved while the checkbox still gives developers control when other exact network context matters.
@@ -79,6 +79,46 @@ People whose data appears in logs, developers, and support recipients.
 
 Known limitation:
 Only common home-directory forms are handled.
+
+## 2c. Structured Username Fields
+
+Context:
+Manual Test 3 showed `username=musman24`, `user_name=alice_dev`, and `user=bob-admin` remained visible.
+
+Options considered:
+Leave all non-path usernames visible, redact arbitrary names anywhere in text, or redact only explicit structured username/account fields.
+
+Decision:
+Redact values of explicit username fields such as `username=`, `user_name=`, `user-name=`, and `user=`, including quoted JSON equivalents when practical. Preserve `name=Muhammad` and prose such as `User alice reported...`.
+
+Reason:
+Explicit account fields have a strong privacy signal. Arbitrary personal-name detection would create too many false positives and damage diagnostic usefulness.
+
+Stakeholders affected:
+People whose data appears in logs, developers, and support recipients.
+
+Known limitation:
+Only simple account-like field values are handled; arbitrary names in prose are intentionally out of scope.
+
+## 2d. Version-Field IPv4-Shaped Values
+
+Context:
+Manual Test 3 showed `release=1.2.3.4` became `release=[REDACTED_IP_ADDRESS]`.
+
+Options considered:
+Keep purely syntactic IPv4 redaction, disable IPv4 redaction broadly, special-case one release string, or preserve IPv4-shaped values only in narrow version-related fields.
+
+Decision:
+Preserve IPv4-shaped values when immediately preceded by version-related fields such as `version=`, `release=`, `app_version=`, or `software_version=`. Continue redacting `client_ip=...`, `server_ip=...`, and other non-loopback IPv4 values.
+
+Reason:
+This resolves the automated-vs-human grader disagreement without weakening general IP protection. The rule is small enough to audit and avoids hardcoding the specific observed value.
+
+Stakeholders affected:
+Developers, support recipients, and security reviewers.
+
+Known limitation:
+The context check only covers a small set of version-related field names.
 
 ## 3. Detection Sensitivity vs False Positives
 

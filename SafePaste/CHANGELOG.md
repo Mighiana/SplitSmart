@@ -186,3 +186,31 @@ Improves privacy for people whose local usernames appear in logs while preservin
 
 Mapped requirement:
 R13, R12, R14.
+
+## v1.12
+
+Changed:
+Explicit structured username fields now redact account-like values using `[REDACTED_USERNAME]`. Covered forms include `username=`, `user_name=`, `user-name=`, `user=`, and quoted JSON equivalents such as `"username":"..."` and `"user":"..."`.
+
+Why:
+Manual Test 3 F4 showed structured usernames remained visible. `SPEC_v1.md` allowed username redaction when reasonably detectable but did not clearly require these structured fields, so the ambiguity was resolved in `SPEC_FINAL.md`.
+
+Stakeholder impact:
+Improves privacy for people whose account identifiers appear in logs while preserving arbitrary names in `name=` fields and prose to avoid excessive false positives.
+
+Mapped requirement:
+R13, R12, R14.
+
+## v1.13
+
+Changed:
+IPv4-shaped values are now preserved when they are clearly values of narrow version-related fields such as `release=`, `version=`, `app_version=`, and `software_version=`.
+
+Why:
+Manual Test 3 F5 showed `release=1.2.3.4` was redacted as an IP address even though human evaluation judged it to be useful version context. The automated syntactic interpretation and human usefulness judgment disagreed, exposing a specification gap.
+
+Stakeholder impact:
+Improves diagnostic usefulness for developers and support recipients while preserving privacy protection for explicit IP fields such as `client_ip=10.20.30.40` and `server_ip=8.8.8.8`.
+
+Mapped requirement:
+R6, R12, R14.

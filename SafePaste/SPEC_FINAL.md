@@ -25,8 +25,8 @@ Secondary users:
 
 The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md). The final implementation keeps the two key conflicts visible:
 
-- Privacy vs diagnostic usefulness: non-loopback IPv4 addresses are redacted by default, IPv4 loopback addresses in `127.0.0.0/8` are preserved for diagnostic usefulness, and users can disable IPv4 redaction when troubleshooting needs exact network context.
-- Detection sensitivity vs false positives: high-risk credential contexts are redacted, while ordinary build IDs, UUID-like trace IDs, semantic versions, and `PWD` path values are preserved.
+- Privacy vs diagnostic usefulness: non-loopback IPv4 addresses are redacted by default, IPv4 loopback addresses in `127.0.0.0/8` are preserved for diagnostic usefulness, and IPv4-shaped values in narrow version-related fields are preserved as software version context.
+- Detection sensitivity vs false positives: high-risk credential contexts and explicit structured username fields are redacted, while ordinary build IDs, UUID-like trace IDs, semantic versions, arbitrary prose names, and `PWD` path values are preserved.
 
 ## 4. Functional Requirements
 
@@ -35,15 +35,15 @@ The stakeholder map remains in [docs/STAKEHOLDER_MAP.md](docs/STAKEHOLDER_MAP.md
 - R3: Application produces sanitized output.
 - R4: Application detects email addresses.
 - R5: Application detects common credentials and tokens, including key/value secrets, quoted JSON credential keys, JWTs, Bearer tokens, Basic/Token Authorization headers, AWS-style access keys, and recognizable Slack-style tokens.
-- R6: Application detects valid non-loopback IPv4 addresses, does not classify invalid octets as IPv4, and does not redact IPv4-like substrings inside larger dotted numeric sequences.
+- R6: Application detects valid non-loopback IPv4 addresses, does not classify invalid octets as IPv4, does not redact IPv4-like substrings inside larger dotted numeric sequences, and preserves IPv4-shaped values in narrow version-related fields.
 - R7: Application shows detected sensitive-data categories.
 - R8: Application shows a redaction count.
 - R9: User can copy sanitized output.
 - R10: User can choose whether redaction-eligible IPv4 addresses are redacted.
 - R11: User can review original and sanitized text before sharing.
 - R12: Application preserves non-sensitive context where practical.
-- R13: Local file paths and usernames are redacted only for common user-directory path forms that are reasonably detectable.
-- R14: Ordinary short identifiers such as `abc123xyz`, UUID-like trace IDs, semantic versions, and path-like `PWD` values remain unchanged unless there is stronger evidence they are sensitive.
+- R13: Usernames are redacted only when they appear in common user-directory path forms or explicit structured username fields that are reasonably detectable.
+- R14: Ordinary short identifiers such as `abc123xyz`, UUID-like trace IDs, semantic versions, arbitrary prose names, and path-like `PWD` values remain unchanged unless there is stronger evidence they are sensitive.
 - R15: The app provides a clear/reset action.
 
 ## 5. Privacy And Security Requirements
@@ -94,6 +94,13 @@ The exact/property grader originally passed `Localhost: 127.0.0.1` because defau
 
 IPv4 redaction only applies when the candidate is a complete IPv4 token. A valid-looking four-octet substring inside a larger dotted numeric sequence, such as `1.2.3.4.5`, must remain unchanged.
 
+### Version-Related IPv4-Shaped Values
+
+IPv4-shaped values are preserved when they are clearly values of narrow version-related fields: `version=`, `release=`, `app_version=`, `app-version=`, `software_version=`, or `software-version=`, including quoted JSON-style keys where the same immediate field context is present. This is a contextual exception to IP redaction, not a general opt-out.
+
+Manual Test 3 grader finding:
+The automated syntactic IP interpretation could treat `release=1.2.3.4` as successful IPv4 redaction, but the human rubric judged that output as a diagnostic-usefulness failure because release version context was removed. The final policy preserves narrow version-field values while continuing to redact explicit IP fields such as `client_ip=10.20.30.40` and `server_ip=8.8.8.8`.
+
 ### `PWD=` Values
 
 `PWD=/some/path` is not treated as a password because `PWD` commonly means present working directory in shell logs. The final sanitizer preserves `PWD` values and handles usernames through the narrower path detector.
@@ -101,6 +108,12 @@ IPv4 redaction only applies when the candidate is a complete IPv4 token. A valid
 ### Linux Home Paths
 
 Recognized local home-directory forms include Windows `C:\Users\name\...`, macOS `/Users/name/...`, and Linux `/home/name/...`. SafePaste redacts only the username segment in those forms. It does not redact general system paths such as `/var/log/nginx/error.log` or `/usr/local/bin`.
+
+### Structured Username Fields
+
+Explicit structured username fields are redacted because they strongly indicate account identifiers. Supported key forms include `username=`, `user_name=`, `user-name=`, and `user=`, plus quoted JSON equivalents such as `"username":"..."` or `"user":"..."` when the value is a simple account-like token.
+
+SafePaste does not attempt arbitrary personal-name detection in prose or generic `name=` fields. For example, `name=Muhammad` and `User alice reported that the service failed after deployment.` remain unchanged. This preserves diagnostic usefulness and avoids broad personal-name false positives.
 
 ### JSON Credential Keys
 
@@ -111,6 +124,7 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - Detection is deterministic and pattern-based; it cannot prove that every secret is removed.
 - The app does not parse all programming languages, structured logs, or custom secret formats.
 - Local path detection is intentionally narrow to reduce false positives.
+- Structured username detection is intentionally limited to explicit account-like fields and does not attempt general personal-name recognition.
 - The app distinguishes loopback from other IPv4 addresses, but it does not separately classify public and private non-loopback ranges.
 - Browser-level OS clipboard permission was not verified because in-app browser automation failed in this environment; a no-dependency UI smoke test verified that the copy button calls the Clipboard API.
 - A temporary local verification server exists under `evals/` for testing only. The production app remains static and can be opened directly from `index.html`.
@@ -126,3 +140,5 @@ Quoted JSON keys such as `"password":"..."`, `"apiKey":"..."`, and `"client_secr
 - Refined Manual Test 2 policy so `127.0.0.0/8` loopback addresses are preserved by default.
 - Added complete-token IPv4 detection to avoid redacting substrings inside larger dotted numeric sequences.
 - Fixed Linux `/home/name/...` username redaction while preserving non-home Linux paths.
+- Added Manual Test 3 structured username redaction for explicit account fields while preserving arbitrary names.
+- Added Manual Test 3 version-field context so IPv4-shaped software versions are preserved while explicit IP fields still redact.

@@ -804,5 +804,179 @@
       "categoriesExclude": ["PATH_OR_USERNAME"],
       "redactionCount": 0
     }
+  },
+  {
+    "id": "EV-048",
+    "layer": "product",
+    "category": "structured-username",
+    "stakeholder_user_type": "Person whose data appears in the logs",
+    "input": "username=musman24\nuser_name=alice_dev\nuser=bob-admin",
+    "expected_behavior": "Redact values of explicit structured username fields while preserving field names.",
+    "mapped_spec_requirement": "R13, R12",
+    "justification": "Manual Test 3 F4 showed explicit account identifiers remained visible even though structured username fields provide a strong privacy signal.",
+    "result": "pending",
+    "notes": "Regression case for F4.",
+    "checks": {
+      "notContains": ["musman24", "alice_dev", "bob-admin"],
+      "contains": ["username=[REDACTED_USERNAME]", "user_name=[REDACTED_USERNAME]", "user=[REDACTED_USERNAME]"],
+      "categoriesInclude": ["USERNAME"],
+      "redactionCount": 3
+    }
+  },
+  {
+    "id": "EV-049",
+    "layer": "product",
+    "category": "structured-username",
+    "stakeholder_user_type": "Person whose data appears in the logs",
+    "input": "{\"username\":\"musman24\",\"role\":\"admin\"}",
+    "expected_behavior": "Redact quoted JSON username values while preserving JSON structure and harmless fields.",
+    "mapped_spec_requirement": "R13, R12",
+    "justification": "Manual Test 3 F4 requested quoted JSON equivalents when practical.",
+    "result": "pending",
+    "notes": "Regression case for F4 JSON form.",
+    "checks": {
+      "notContains": ["musman24"],
+      "contains": ["\"username\":\"[REDACTED_USERNAME]\"", "\"role\":\"admin\""],
+      "categoriesInclude": ["USERNAME"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-050",
+    "layer": "product",
+    "category": "false-positive/username",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "name=Muhammad",
+    "expected_behavior": "Preserve arbitrary personal-name fields that are not explicit username/account identifiers.",
+    "mapped_spec_requirement": "R12, R14",
+    "justification": "Manual Test 3 F4 rejects arbitrary personal-name detection because it would create excessive false positives.",
+    "result": "pending",
+    "notes": "Boundary case for structured username policy.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["USERNAME"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-051",
+    "layer": "product",
+    "category": "false-positive/username",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "User alice reported that the service failed after deployment.",
+    "expected_behavior": "Preserve prose references to people; do not attempt arbitrary personal-name detection.",
+    "mapped_spec_requirement": "R12, R14",
+    "justification": "Manual Test 3 F4 keeps name detection scoped to explicit structured username/account fields.",
+    "result": "pending",
+    "notes": "Boundary case for structured username policy.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["USERNAME"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-052",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "release=1.2.3.4",
+    "expected_behavior": "Preserve IPv4-shaped values when they are clearly release version values.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 3 F5 showed syntactic IPv4 redaction can remove useful version context.",
+    "result": "pending",
+    "notes": "Regression case for F5.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-053",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "version=10.20.30.40",
+    "expected_behavior": "Preserve IPv4-shaped values when they are clearly version field values.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 3 F5 requires a narrow version-field context policy rather than disabling IPv4 redaction.",
+    "result": "pending",
+    "notes": "Regression case for F5.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-054",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "app_version=2.4.6.8",
+    "expected_behavior": "Preserve IPv4-shaped values when they are clearly app version values.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 3 F5 lists app_version as a version-related field.",
+    "result": "pending",
+    "notes": "Regression case for F5.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
+  },
+  {
+    "id": "EV-055",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "client_ip=10.20.30.40",
+    "expected_behavior": "Continue redacting IPv4-shaped values in explicit IP fields.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 3 F5 requires the version-field exception to stay narrow and not disable IPv4 redaction.",
+    "result": "pending",
+    "notes": "Boundary case for F5.",
+    "checks": {
+      "notContains": ["10.20.30.40"],
+      "contains": ["client_ip=", "[REDACTED_IP_ADDRESS]"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-056",
+    "layer": "product",
+    "category": "ip",
+    "stakeholder_user_type": "Security / compliance team",
+    "input": "server_ip=8.8.8.8",
+    "expected_behavior": "Continue redacting IPv4-shaped values in explicit IP fields.",
+    "mapped_spec_requirement": "R6, R12",
+    "justification": "Manual Test 3 F5 requires retaining IP redaction outside narrow version-related contexts.",
+    "result": "pending",
+    "notes": "Boundary case for F5.",
+    "checks": {
+      "notContains": ["8.8.8.8"],
+      "contains": ["server_ip=", "[REDACTED_IP_ADDRESS]"],
+      "categoriesInclude": ["IP_ADDRESS"],
+      "redactionCount": 1
+    }
+  },
+  {
+    "id": "EV-057",
+    "layer": "product",
+    "category": "false-positive/ip-version",
+    "stakeholder_user_type": "Developer / IT support engineer",
+    "input": "software_version=3.5.7.9",
+    "expected_behavior": "Preserve IPv4-shaped values when they are clearly software version values.",
+    "mapped_spec_requirement": "R6, R12, R14",
+    "justification": "Manual Test 3 F5 lists software_version as a version-related field.",
+    "result": "pending",
+    "notes": "Regression case for F5.",
+    "checks": {
+      "equalsInput": true,
+      "categoriesExclude": ["IP_ADDRESS"],
+      "redactionCount": 0
+    }
   }
 ]

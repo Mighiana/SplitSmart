@@ -9,7 +9,7 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Task: Establish SafePaste methodology and preserved v1 requirements before writing product code.
 - Instruction given: Build SafePaste as a privacy-aware local browser sanitizer with stakeholder analysis, v1 specification, harness, evaluations, red-team testing, and honest evidence.
 - What AI produced: Initial repository structure, README skeleton, stakeholder map, `SPEC_v1.md`, `AGENTS.md`, and changelog skeleton.
-- Accepted: Pending verification and commit.
+- Accepted: Accepted after SafePaste files were staged, committed, and pushed while unrelated workspace changes were left untouched.
 - Manual changes: None at this stage.
 - Failure or surprise: Existing workspace is a different Flutter project with unrelated modified debug-symbol files, so SafePaste is being created in a contained `SafePaste/` subdirectory.
 - Resulting control: Stage and commit only SafePaste files; do not modify or revert unrelated workspace changes.
@@ -69,10 +69,20 @@ This file records meaningful AI-assisted engineering decisions and real failures
 - Task: Continue the engineering loop from real manual Test 2 results.
 - Instruction given: Fix IPv4 substring false positives, resolve loopback policy, investigate Linux home path username coverage, update graders/docs, and rerun all checks.
 - What AI produced: `evals/manual_test_2.md`, new unit regressions, EV-041 through EV-047, sanitizer fixes, grader updates, and specification/changelog/design-decision updates.
-- Accepted: Pending full verification after documentation updates.
+- Accepted: Accepted after unit tests, full evals, graders, red-team, UI smoke, static checks, secret scan, hook, commit, and push passed.
 - Manual changes: None outside the documented code and evidence patches.
 - Failure or surprise: Local reproduction confirmed all three user-observed findings before code changes. The Linux `/home/` detector existed conceptually, but a leading word-boundary prevented matching paths that start with `/home/`.
 - Resulting control: Complete-token IPv4 detection, loopback preservation policy, Linux home-path username tests/evals, and updated grader comparison.
+
+### 2026-08-13: Manual Test 3 follow-up
+
+- Task: Continue the engineering loop from real manual Test 3 results.
+- Instruction given: Preserve prior evidence, keep `SPEC_v1.md` unchanged, investigate structured username coverage and version/IP false positives, update graders/docs, and rerun checks.
+- What AI produced: `evals/manual_test_3.md`, new unit regressions, EV-048 through EV-057, structured username redaction, narrow version-field IPv4 preservation, grader updates, and specification/changelog/design-decision updates.
+- Accepted: Accepted after unit tests, full evals, exact/property grader, red-team, UI smoke, static checks, and secret scan passed.
+- Manual changes: None outside the documented code, test, eval, and evidence patches.
+- Failure or surprise: Adding the structured `user=` policy intentionally changed the expected handling of JSON `"user":"sam"` in the password JSON test and RT-P02; it is now redacted as a username rather than preserved as harmless context.
+- Resulting control: Explicit username-field tests/evals, arbitrary-name preservation tests/evals, version-field IPv4 false-positive tests/evals, and updated grader comparison for the F5 automated-vs-human disagreement.
 
 ## Most Important AI Failures
 
@@ -177,3 +187,37 @@ Human response
 
 Permanent control added
 -> Linux home-path username redaction plus EV-044 through EV-047.
+
+### Structured username fields remained visible
+
+AI behavior
+-> The sanitizer preserved `username=musman24`, `user_name=alice_dev`, and `user=bob-admin`.
+
+Why it was problematic
+-> Explicit account identifiers have a strong privacy signal and can identify the person whose data appears in logs.
+
+How it was detected
+-> Manual Test 3 F4 and local reproduction.
+
+Human response
+-> Treat `SPEC_v1.md` as ambiguous, resolve the final policy in `SPEC_FINAL.md`, and add failing tests/evals before fixing.
+
+Permanent control added
+-> Structured username unit tests plus EV-048 and EV-049, with EV-050 and EV-051 preserving arbitrary names.
+
+### Version fields were over-redacted as IP addresses
+
+AI behavior
+-> The sanitizer redacted `release=1.2.3.4` as an IP address.
+
+Why it was problematic
+-> The automated syntactic redaction looked privacy-protective, but human review found it removed useful software version context.
+
+How it was detected
+-> Manual Test 3 F5, local reproduction, and the grader-disagreement analysis.
+
+Human response
+-> Preserve IPv4-shaped values only in narrow version-related fields; continue redacting explicit IP fields.
+
+Permanent control added
+-> Version-field unit tests plus EV-052 through EV-057.

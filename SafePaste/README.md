@@ -110,6 +110,8 @@ No external model-as-judge API is used because sending logs to an external model
 
 Manual Test 2 extended the grader evidence with a real localhost disagreement. SafePaste now preserves IPv4 loopback addresses in `127.0.0.0/8`, while continuing to redact other valid IPv4 addresses when IPv4 redaction is enabled.
 
+Manual Test 3 extended the policy for structured account identifiers and version context. SafePaste now redacts explicit username fields such as `username=`, `user_name=`, and `user=`, preserves arbitrary names in prose, and preserves IPv4-shaped values in narrow version fields such as `release=` while still redacting explicit `client_ip=` and `server_ip=` values.
+
 ## Known Limitations
 
 - SafePaste uses deterministic local detection rules rather than cloud services or external AI classification.

@@ -1,6 +1,6 @@
 # SafePaste Final Evaluation Results
 
-Refreshed after Manual Test 2 fixes on 2026-08-13.
+Refreshed after Manual Test 3 fixes on 2026-08-13.
 
 ## Commands Run
 
@@ -16,26 +16,25 @@ rg -n 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z
 
 ## After Results
 
-- Unit tests: 28 total, 28 passed, 0 failed.
-- Eval cases: 47 total, 47 passed, 0 failed.
-- Automated exact/property grader: 9 cases, 36 property checks, 36 passed, 0 failed.
-- Human rubric: 9 current cases passed; the preserved pre-refinement EV-040 localhost judgment was NEEDS DISCUSSION.
+- Unit tests: 33 total, 33 passed, 0 failed.
+- Eval cases: 57 total, 57 passed, 0 failed.
+- Automated exact/property grader: 14 cases, 60 property checks, 60 passed, 0 failed.
+- Human rubric: 14 current cases passed; preserved before-refinement judgments include EV-040 NEEDS DISCUSSION, EV-048 FAIL, and EV-052 FAIL.
 - Red-team cases: 15 total, 15 passed, 0 failed.
 - UI smoke: PASS.
-- Privacy/static scan: contextual documentation, test, eval-runner, local server, and scan-pattern hits only; no production network, persistence, cookie, or unsafe DOM finding.
-- Secret scan: synthetic fixtures in tests/evals/docs only; no production hardcoded credential finding.
+- Privacy/static scan: contextual documentation, history, eval-runner, local static server, local script tags, and scan-pattern hits only; no production network, persistence, cookie, or unsafe DOM finding.
+- Secret scan: synthetic fixtures in tests/evals/history/docs only; no production hardcoded credential finding.
 - Remaining failures from executed checks: none.
 
-## Manual Test 2 Findings Fixed
+## Manual Test 3 Findings Fixed
 
-- F1: `1.2.3.4.5` is now preserved as a larger dotted numeric sequence instead of partially redacted.
-- F2: IPv4 loopback addresses in `127.0.0.0/8` are now preserved by final policy while other valid IPv4 addresses still redact.
-- F3: Linux home-path usernames are now redacted narrowly for recognized `/home/<user>/...` paths, while non-home system paths remain unchanged.
+- F4: Explicit structured username fields now redact account-like values while preserving field names and avoiding arbitrary personal-name detection.
+- F5: IPv4-shaped values in narrow version-related fields now remain visible, while explicit `client_ip=` and `server_ip=` values still redact.
 
 ## Summary
 
-- Total eval cases: 47
-- Passed: 47
+- Total eval cases: 57
+- Passed: 57
 - Failed: 0
 - Failure IDs: None
 
@@ -90,3 +89,13 @@ EV-044 | product | path-or-username | Person whose data appears in the logs | R1
 EV-045 | product | path-or-username | Person whose data appears in the logs | R13, R12 | PASS
 EV-046 | product | false-positive/path | Support recipient | R12, R14 | PASS
 EV-047 | product | false-positive/path | Support recipient | R12, R14 | PASS
+EV-048 | product | structured-username | Person whose data appears in the logs | R13, R12 | PASS
+EV-049 | product | structured-username | Person whose data appears in the logs | R13, R12 | PASS
+EV-050 | product | false-positive/username | Developer / IT support engineer | R12, R14 | PASS
+EV-051 | product | false-positive/username | Developer / IT support engineer | R12, R14 | PASS
+EV-052 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-053 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-054 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS
+EV-055 | product | ip | Security / compliance team | R6, R12 | PASS
+EV-056 | product | ip | Security / compliance team | R6, R12 | PASS
+EV-057 | product | false-positive/ip-version | Developer / IT support engineer | R6, R12, R14 | PASS

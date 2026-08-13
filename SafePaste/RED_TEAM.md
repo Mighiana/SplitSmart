@@ -92,6 +92,7 @@ The v1 red-team runner tested:
 - Kept unit tests and eval cases for JSON password/API key values.
 - Added Basic/Token Authorization header red-team cases after security review.
 - Added `PWD` false-positive red-team case after security review.
+- Updated RT-P02 after Manual Test 3 so quoted JSON `user` values are redacted as structured usernames while preserving the v1 failure evidence above.
 - Updated `CHANGELOG.md` and `SPEC_FINAL.md`.
 
 ## Product Red-Team Run: Final

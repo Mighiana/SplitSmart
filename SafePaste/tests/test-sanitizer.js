@@ -116,7 +116,9 @@ const tests = [
       REDACTION_LABELS.PASSWORD,
       "password JSON"
     );
-    assert(result.sanitized.includes('"user":"sam"'), "JSON context preserved");
+    assert(result.sanitized.includes('"user":"[REDACTED_USERNAME]"'), "structured user value redacted");
+    assert(result.categories.includes("USERNAME"), "USERNAME category reported");
+    assert.strictEqual(result.redactionCount, 2);
   }),
 
   test("redacts API key key=value", () => {
@@ -164,6 +166,45 @@ const tests = [
     const result = sanitize(input);
     assert.strictEqual(result.sanitized, input);
     assert.strictEqual(result.redactionCount, 0);
+  }),
+
+  test("redacts explicit structured username fields", () => {
+    const result = sanitize("username=musman24\nuser_name=alice_dev\nuser=bob-admin");
+    assert(!result.sanitized.includes("musman24"), "username value removed");
+    assert(!result.sanitized.includes("alice_dev"), "user_name value removed");
+    assert(!result.sanitized.includes("bob-admin"), "user value removed");
+    assert(result.sanitized.includes("username=[REDACTED_USERNAME]"), "username marker present");
+    assert(result.sanitized.includes("user_name=[REDACTED_USERNAME]"), "user_name marker present");
+    assert(result.sanitized.includes("user=[REDACTED_USERNAME]"), "user marker present");
+    assert(result.categories.includes("USERNAME"), "USERNAME category reported");
+    assert.strictEqual(result.redactionCount, 3);
+  }),
+
+  test("redacts explicit structured username JSON fields", () => {
+    const result = sanitize('{"username":"musman24","role":"admin"}');
+    assert.strictEqual(result.sanitized, '{"username":"[REDACTED_USERNAME]","role":"admin"}');
+    assert(result.categories.includes("USERNAME"), "USERNAME category reported");
+    assert.strictEqual(result.redactionCount, 1);
+  }),
+
+  test("preserves arbitrary personal names outside explicit username fields", () => {
+    assert.strictEqual(sanitize("name=Muhammad").sanitized, "name=Muhammad");
+    assert.strictEqual(
+      sanitize("User alice reported that the service failed after deployment.").sanitized,
+      "User alice reported that the service failed after deployment."
+    );
+  }),
+
+  test("preserves IPv4-shaped values in version-related fields", () => {
+    assert.strictEqual(sanitize("release=1.2.3.4").sanitized, "release=1.2.3.4");
+    assert.strictEqual(sanitize("version=10.20.30.40").sanitized, "version=10.20.30.40");
+    assert.strictEqual(sanitize("app_version=2.4.6.8").sanitized, "app_version=2.4.6.8");
+    assert.strictEqual(sanitize("software_version=3.5.7.9").sanitized, "software_version=3.5.7.9");
+  }),
+
+  test("redacts IPv4-shaped values in IP-specific fields", () => {
+    assert.strictEqual(sanitize("client_ip=10.20.30.40").sanitized, `client_ip=${REDACTION_LABELS.IP_ADDRESS}`);
+    assert.strictEqual(sanitize("server_ip=8.8.8.8").sanitized, `server_ip=${REDACTION_LABELS.IP_ADDRESS}`);
   }),
 
   test("preserves PWD path-like environment values", () => {

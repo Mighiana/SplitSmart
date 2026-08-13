@@ -16,6 +16,7 @@
     API_KEY: "[REDACTED_API_KEY]",
     PASSWORD: "[REDACTED_PASSWORD]",
     EMAIL: "[REDACTED_EMAIL]",
+    USERNAME: "[REDACTED_USERNAME]",
     IP_ADDRESS: "[REDACTED_IP_ADDRESS]",
     PATH_OR_USERNAME: "[REDACTED_PATH]"
   };
@@ -39,8 +40,15 @@
     return isValidIpv4(candidate) && candidate.split(".")[0] === "127";
   }
 
-  function isRedactableIpv4(candidate) {
-    return isValidIpv4(candidate) && !isLoopbackIpv4(candidate);
+  function hasVersionFieldPrefix(source, candidateIndex) {
+    const beforeCandidate = source.slice(0, candidateIndex);
+    return /(?:^|[^A-Za-z0-9_-])["']?(?:version|release|app[_-]?version|software[_-]?version)["']?\s*[:=]\s*["']?$/i.test(beforeCandidate);
+  }
+
+  function isRedactableIpv4(candidate, context) {
+    return isValidIpv4(candidate) &&
+      !isLoopbackIpv4(candidate) &&
+      !(context && hasVersionFieldPrefix(context.source, context.index));
   }
 
   function buildRules(options) {
@@ -97,6 +105,20 @@
         pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
       },
       {
+        category: "USERNAME",
+        label: REDACTION_LABELS.USERNAME,
+        pattern: /((?:["']?)\b(?:username|user[_-]?name|user)\b(?:["']?)\s*[:=]\s*)(["']?)([A-Za-z0-9][A-Za-z0-9._-]{2,63})(\2)(?=$|[\s,;}\]])/gi,
+        candidate: function (args) {
+          return args[3];
+        },
+        indexOffset: function (args) {
+          return args[1].length + args[2].length;
+        },
+        replacement: function (match, prefix, quoteStart, username, quoteEnd) {
+          return prefix + quoteStart + REDACTION_LABELS.USERNAME + quoteEnd;
+        }
+      },
+      {
         category: "PATH_OR_USERNAME",
         label: REDACTION_LABELS.PATH_OR_USERNAME,
         pattern: /(^|[^A-Za-z0-9/\\._-])((?:[A-Za-z]:\\Users\\|\/home\/|\/Users\/)([A-Za-z0-9._-]+)([^\s"'<>]*))/g,
@@ -146,17 +168,23 @@
         const args = Array.prototype.slice.call(arguments);
         const match = args[0];
         const offset = args[args.length - 2];
+        const fullText = args[args.length - 1];
         const candidate = rule.candidate ? rule.candidate(args) : match;
         const indexOffset = rule.indexOffset ? rule.indexOffset(args) : 0;
+        const candidateIndex = offset + indexOffset;
 
-        if (rule.validator && !rule.validator(candidate)) {
+        if (rule.validator && !rule.validator(candidate, {
+          source: fullText,
+          index: candidateIndex,
+          match: match
+        })) {
           return match;
         }
 
         matches.push({
           category: rule.category,
           text: candidate,
-          index: offset + indexOffset
+          index: candidateIndex
         });
 
         if (rule.replacement) {

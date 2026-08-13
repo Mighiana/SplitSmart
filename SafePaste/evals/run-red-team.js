@@ -17,10 +17,10 @@ const cases = [
     id: "RT-P02",
     focus: "credential inside JSON",
     input: "{\"password\":\"jsonPassword123\",\"user\":\"sam\"}",
-    expected: "Redact quoted JSON password.",
+    expected: "Redact quoted JSON password and structured user value.",
     checks: {
-      notContains: ["jsonPassword123"],
-      contains: ["[REDACTED_PASSWORD]", "\"user\":\"sam\""]
+      notContains: ["jsonPassword123", "\"user\":\"sam\""],
+      contains: ["[REDACTED_PASSWORD]", "\"user\":\"[REDACTED_USERNAME]\""]
     }
   },
   {
