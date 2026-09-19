@@ -67,3 +67,5 @@ firestore-debug.log
 ui-debug.log
 .firebase/
 .runtimeconfig.json
+
+.vs/
