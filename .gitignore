@@ -6,9 +6,16 @@
 build/
 *.iml
 
-# NOTE: debug-symbols/ is intentionally COMMITTED (not ignored). Those files
-# decode obfuscated crash reports and are small (~15 MB/release); keeping them
-# in the private repo means they can never be lost and always match a release.
+# Obfuscation maps: they reverse `--obfuscate`, so they must never be public.
+# Keep them out of git and archive each release's folder privately
+# (or upload them to Crashlytics) so crash reports can still be decoded.
+debug-symbols/
+
+# Raw screenshots / UI dumps can show real names, emails and photos.
+# Only the masked screenshots/final/ set is published.
+screenshots/raw/
+screenshots/ui.xml
+screenshots/ss_current.png
 
 # Build/JVM crash logs & temp working files
 hs_err_pid*.log

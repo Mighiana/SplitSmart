@@ -7,21 +7,21 @@ import 'package:splitzee/providers/app_state.dart';
 /// Firestore security rules rely on.
 void main() {
   group('accountTierFrom', () {
-    test('no session â†’ local', () {
+    test('no session → local', () {
       expect(
         accountTierFrom(signedIn: false, isAnonymous: false),
         AccountTier.local,
       );
     });
 
-    test('anonymous session â†’ guest', () {
+    test('anonymous session → guest', () {
       expect(
         accountTierFrom(signedIn: true, isAnonymous: true),
         AccountTier.guest,
       );
     });
 
-    test('real account â†’ full', () {
+    test('real account → full', () {
       expect(
         accountTierFrom(signedIn: true, isAnonymous: false),
         AccountTier.full,
@@ -98,7 +98,7 @@ void main() {
       expect(restored.store, 'play');
     });
 
-    test('null map â†’ none', () {
+    test('null map → none', () {
       final e = Entitlement.fromMap(null);
       expect(e.premium, isFalse);
       expect(e.isActive, isFalse);
@@ -167,9 +167,9 @@ void main() {
       final g = GroupData(
         id: 1,
         name: 'X',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: const ['You'],
       );
       expect(g.isPremiumGroup, isFalse);
@@ -179,9 +179,9 @@ void main() {
       final g = GroupData(
         id: 1,
         name: 'X',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: const ['You'],
         isPremiumGroup: true,
       );
@@ -197,9 +197,9 @@ void main() {
       final g = GroupData(
         id: 99,
         name: 'Roadtrip',
-        emoji: 'ðŸš—',
+        emoji: '🚗',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         // "Sam" is a guest who joined accountlessly.
         members: const ['You', 'Sam'],
         expenses: [
@@ -207,14 +207,14 @@ void main() {
             id: 1,
             desc: 'Gas',
             amount: 40,
-            cat: 'ðŸš—',
+            cat: '🚗',
             paidBy: 'You',
             date: '2026-01-01',
           ),
         ],
       );
       final bal = state.getAllBalances(g);
-      // You paid 40, each owes 20 â†’ You +20, Sam -20.
+      // You paid 40, each owes 20 → You +20, Sam -20.
       expect(bal['You'], 20.0);
       expect(bal['Sam'], -20.0);
     });

@@ -55,7 +55,15 @@ service cloud.firestore {
           && optStr(request.resource.data, 'cat', 32)
           && optStr(request.resource.data, 'subcat', 64)
           && optMap(request.resource.data, 'splits', 50)
-          && optMap(request.resource.data, 'splitIds', 50);
+          && optMap(request.resource.data, 'splitIds', 50)
+          // Other members' apps parse these fields, so wrong types or huge
+          // values must be rejected (the client writes 16 known keys).
+          && request.resource.data.size() <= 20
+          && optStr(request.resource.data, 'date', 40)
+          && optStr(request.resource.data, 'receiptUrl', 2048)
+          && optStr(request.resource.data, 'createdBy', 128)
+          && optStr(request.resource.data, 'updatedBy', 128)
+          && request.resource.data.get('receipt', false) is bool;
     }
     // SEC-C3: validate a settlement document's client-supplied fields.
     function validSettlement() {
@@ -65,7 +73,10 @@ service cloud.firestore {
           && request.resource.data.get('to', '') is string
           && request.resource.data.get('to', '').size() <= 100
           && optStr(request.resource.data, 'fromId', 128)
-          && optStr(request.resource.data, 'toId', 128);
+          && optStr(request.resource.data, 'toId', 128)
+          && request.resource.data.size() <= 12
+          && optStr(request.resource.data, 'method', 40)
+          && optStr(request.resource.data, 'date', 40);
     }
     // SEC-C4: shared group document shape limits. Rules cannot prove every
     // nested value is perfect, but they can prevent obvious bloat/tampering.
@@ -129,7 +140,8 @@ service cloud.firestore {
           && request.resource.data.get('status', 'pending') == 'pending';
     }
     function validSupportTicket() {
-      return request.resource.data.get('message', '') is string
+      return request.resource.data.size() <= 15
+          && request.resource.data.get('message', '') is string
           && request.resource.data.get('message', '').size() <= 5000
           && request.resource.data.get('type', '') is string
           && request.resource.data.get('type', '').size() <= 60
@@ -368,6 +380,7 @@ service cloud.firestore {
     // the caller must stamp their own uid and stay within size limits.
     match /support_tickets/{ticketId} {
       allow create: if request.auth != null
+                    && request.resource.data.size() <= 15
                     && request.resource.data.get('uid', '') == request.auth.uid
                     && request.resource.data.get('message', '') is string
                     && request.resource.data.get('message', '').size() <= 5000

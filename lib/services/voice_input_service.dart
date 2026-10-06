@@ -132,25 +132,22 @@ class VoiceInputService {
       'eighty': 80, 'ninety': 90, 'hundred': 100,
     };
 
-    // "three fifty" → 3.50
-    final twoWordMatch = RegExp(r'\b(\w+)\s+(\w+)\b').allMatches(text);
-    for (final m in twoWordMatch) {
-      final w1 = m.group(1)!;
-      final w2 = m.group(2)!;
-      if (wordNumbers.containsKey(w1) && wordNumbers.containsKey(w2)) {
-        final v1 = wordNumbers[w1]!;
-        final v2 = wordNumbers[w2]!;
-        if (v1 < 100 && v2 < 100) {
-          return v1 + v2 / 100; // "three fifty" → 3.50
-        }
+    // Match whole words only, so "money" is not read as "one".
+    final words = RegExp(r'[a-z]+').allMatches(text).map((m) => m.group(0)!).toList();
+
+    // "three fifty" → 3.50 (adjacent pairs, so a leading word can't hide it)
+    for (var i = 0; i + 1 < words.length; i++) {
+      final v1 = wordNumbers[words[i]];
+      final v2 = wordNumbers[words[i + 1]];
+      if (v1 != null && v2 != null && v1 < 100 && v2 < 100) {
+        return v1 + v2 / 100;
       }
     }
 
     // Single word: "twenty" → 20
-    for (final entry in wordNumbers.entries) {
-      if (text.contains(entry.key) && entry.value > 0) {
-        return entry.value;
-      }
+    for (final w in words) {
+      final v = wordNumbers[w];
+      if (v != null && v > 0) return v;
     }
 
     return null;
