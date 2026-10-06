@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../providers/app_state.dart';
 import 'auth_service.dart';
+import 'cloud_doc_parser.dart';
 
 /// Cloud Firestore data service — replaces SQLite for synced data.
 ///
@@ -192,35 +193,7 @@ class FirestoreService {
       final ed = e.data();
       final eid = e.id.hashCode;
       _docIdCache[eid] = e.id; // BUG-1 fix: cache expense doc ID
-      Map<String, double>? splits;
-      if (ed['splits'] != null) {
-        splits = Map<String, double>.from(
-          (ed['splits'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
-        );
-      }
-      Map<String, double>? splitIds;
-      if (ed['splitIds'] != null) {
-        splitIds = Map<String, double>.from(
-          (ed['splitIds'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
-        );
-      }
-      return ExpenseData(
-        id: eid,
-        desc: ed['desc'] ?? '',
-        amount: (ed['amount'] as num?)?.toDouble() ?? 0,
-        cat: ed['cat'] ?? '💰',
-        paidBy: ed['paidBy'] ?? '',
-        paidById: ed['paidById'],
-        date: ed['date'] ?? '',
-        receipt: ed['receipt'] ?? false,
-        receiptPath: ed['receiptUrl'],
-        splits: splits,
-        splitIds: splitIds,
-        createdBy: ed['createdBy'],
-        updatedBy: ed['updatedBy'],
-        addedBy: ed['addedBy'],
-        subcat: ed['subcat'],
-      );
+      return CloudDocParser.expense(ed, eid);
     }).toList();
 
     // Load settlements
@@ -229,18 +202,9 @@ class FirestoreService {
         .collection('settlements')
         .orderBy('createdAt', descending: false)
         .get();
-    final settlements = setSnap.docs.map((s) {
-      final sd = s.data();
-      return SettlementData(
-        from: sd['from'] ?? '',
-        to: sd['to'] ?? '',
-        fromId: sd['fromId'],
-        toId: sd['toId'],
-        amount: (sd['amount'] as num?)?.toDouble() ?? 0,
-        method: sd['method'] ?? 'Cash',
-        date: sd['date'] ?? '',
-      );
-    }).toList();
+    final settlements = setSnap.docs
+        .map((s) => CloudDocParser.settlement(s.data()))
+        .toList();
 
     final gid = groupDocId.hashCode;
     _docIdCache[gid] = groupDocId; // BUG-1 fix: cache group doc ID
@@ -540,40 +504,9 @@ class FirestoreService {
         .collection('expenses')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map((e) {
-              final ed = e.data();
-              Map<String, double>? splits;
-              if (ed['splits'] != null) {
-                splits = Map<String, double>.from(
-                  (ed['splits'] as Map).map(
-                      (k, v) => MapEntry(k.toString(), (v as num).toDouble())),
-                );
-              }
-              Map<String, double>? splitIds;
-              if (ed['splitIds'] != null) {
-                splitIds = Map<String, double>.from(
-                  (ed['splitIds'] as Map).map(
-                      (k, v) => MapEntry(k.toString(), (v as num).toDouble())),
-                );
-              }
-              return ExpenseData(
-                id: e.id.hashCode,
-                desc: ed['desc'] ?? '',
-                amount: (ed['amount'] as num?)?.toDouble() ?? 0,
-                cat: ed['cat'] ?? '💰',
-                paidBy: ed['paidBy'] ?? '',
-                paidById: ed['paidById'],
-                date: ed['date'] ?? '',
-                receipt: ed['receipt'] ?? false,
-                receiptPath: ed['receiptUrl'],
-                splits: splits,
-                splitIds: splitIds,
-                createdBy: ed['createdBy'],
-                updatedBy: ed['updatedBy'],
-                addedBy: ed['addedBy'],
-                subcat: ed['subcat'],
-              );
-            }).toList());
+        .map((snap) => snap.docs
+            .map((e) => CloudDocParser.expense(e.data(), e.id.hashCode))
+            .toList());
   }
 
   // ─── Group invite system ────────────────────────────────────────────────

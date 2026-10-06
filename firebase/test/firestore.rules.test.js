@@ -426,6 +426,67 @@ describe("group child document authorship", () => {
         .update({ addedBy: "owner" })
     );
   });
+
+  // Shape the real client writes in FirestoreService.insertExpense.
+  const clientExpense = () => ({
+    desc: "Taxi",
+    amount: 20,
+    cat: "🚕",
+    paidBy: "Mem",
+    paidById: "m2",
+    date: "2026-10-06",
+    receipt: false,
+    receiptUrl: null,
+    splits: null,
+    splitIds: { m1: 10, m2: 10 },
+    subcat: null,
+    addedBy: "member",
+    createdBy: "You",
+    updatedBy: null,
+    createdAt: new Date(),
+  });
+  const memberExpenses = () =>
+    testEnv
+      .authenticatedContext("member", { firebase: { sign_in_provider: "google.com" } })
+      .firestore()
+      .collection("groups")
+      .doc(groupId)
+      .collection("expenses");
+
+  it("allows a member to add an expense with the client's real shape", async () => {
+    await assertSucceeds(memberExpenses().add(clientExpense()));
+  });
+
+  it("blocks wrong-typed expense fields that would break other members' sync", async () => {
+    await assertFails(memberExpenses().add({ ...clientExpense(), date: 12345 }));
+    await assertFails(memberExpenses().add({ ...clientExpense(), receipt: "yes" }));
+    await assertFails(memberExpenses().add({ ...clientExpense(), createdBy: { x: 1 } }));
+  });
+
+  it("blocks oversized receipt URLs and padded expense docs", async () => {
+    await assertFails(
+      memberExpenses().add({ ...clientExpense(), receiptUrl: "x".repeat(3000) })
+    );
+    const padded = clientExpense();
+    for (let i = 0; i < 10; i++) padded[`junk${i}`] = i;
+    await assertFails(memberExpenses().add(padded));
+  });
+
+  it("validates settlement method/date types", async () => {
+    const settlements = testEnv
+      .authenticatedContext("member", { firebase: { sign_in_provider: "google.com" } })
+      .firestore()
+      .collection("groups")
+      .doc(groupId)
+      .collection("settlements");
+    const ok = {
+      from: "Mem", to: "Owner", fromId: "m2", toId: "m1", amount: 5,
+      method: "Cash", date: "2026-10-06", addedBy: "member", createdAt: new Date(),
+    };
+    await assertSucceeds(settlements.add(ok));
+    await assertFails(settlements.add({ ...ok, method: 7 }));
+    await assertFails(settlements.add({ ...ok, date: ["x"] }));
+  });
 });
 
 describe("user subcollection hardening", () => {

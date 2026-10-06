@@ -64,4 +64,4 @@ if (Test-Path $aab) {
   Write-Host "Build reported success but the .aab was not found at $aab" -ForegroundColor Yellow
 }
 Write-Host "Symbols saved to: $symbolDir" -ForegroundColor Green
-Write-Host "Next: commit the debug-symbols/ folder so this release's crashes stay decodable." -ForegroundColor Yellow
+Write-Host "Next: archive debug-symbols/$safeVersion privately (it is git-ignored; never publish it - it reverses --obfuscate)." -ForegroundColor Yellow
