@@ -11,8 +11,9 @@
 
   Obfuscation renames everything, so crash stack traces become unreadable
   symbols. The matching symbol files are written to debug-symbols/<version>/
-  and are COMMITTED to the repo (small, ~15 MB/release) so a release's crash
-  reports can always be decoded. After building, just commit the new folder.
+  and are git-ignored: they reverse --obfuscate, so never publish them. Archive
+  each release's folder privately (or upload to Crashlytics) so its crash
+  reports can still be decoded.
 
 .PARAMETER Flavor
   Build flavor (default: prod).

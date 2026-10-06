@@ -44,6 +44,14 @@ void main() {
       expect(e.createdBy, isNull);
     });
 
+    test('split shares keep their sign so balances match the author', () {
+      final e = CloudDocParser.expense({
+        'amount': 20,
+        'splitIds': {'a': -10, 'b': 30, 'c': double.nan},
+      }, 1);
+      expect(e.splitIds, {'a': -10.0, 'b': 30.0});
+    });
+
     test('negative and non-finite amounts are rejected', () {
       expect(CloudDocParser.expense({'amount': -5}, 1).amount, 0);
       expect(CloudDocParser.expense({'amount': double.infinity}, 1).amount, 0);

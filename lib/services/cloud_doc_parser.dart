@@ -17,7 +17,7 @@ class CloudDocParser {
     if (v is! Map) return null;
     final out = <String, double>{};
     v.forEach((k, val) {
-      if (val is num && val.isFinite && val >= 0) {
+      if (val is num && val.isFinite) {
         out[k.toString()] = val.toDouble();
       }
     });
