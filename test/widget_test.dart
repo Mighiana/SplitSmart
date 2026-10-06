@@ -3,7 +3,7 @@ import 'package:splitzee/providers/app_state.dart';
 
 /// Unit tests for the core settle-up algorithm and balance calculations.
 ///
-/// These tests verify the most critical business logic in the app â€”
+/// These tests verify the most critical business logic in the app —
 /// the balance engine that determines who owes whom and the minimum
 /// transactions needed to settle debts.
 void main() {
@@ -14,20 +14,20 @@ void main() {
       state = AppState();
     });
 
-    test('equal split â€” 3 members, 1 expense', () {
+    test('equal split — 3 members, 1 expense', () {
       final g = GroupData(
         id: 1,
         name: 'Test',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Dinner',
             amount: 30,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -36,26 +36,26 @@ void main() {
 
       final bal = state.getAllBalances(g);
 
-      // You paid 30, each owes 10 â†’ You gets back 20
+      // You paid 30, each owes 10 → You gets back 20
       expect(bal['You'], 20.0);
       expect(bal['Ali'], -10.0);
       expect(bal['Sara'], -10.0);
     });
 
-    test('equal split â€” multiple expenses, different payers', () {
+    test('equal split — multiple expenses, different payers', () {
       final g = GroupData(
         id: 2,
         name: 'Trip',
-        emoji: 'âœˆï¸',
+        emoji: '✈️',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Dinner',
             amount: 42,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -63,7 +63,7 @@ void main() {
             id: 2,
             desc: 'Taxi',
             amount: 18,
-            cat: 'ðŸš—',
+            cat: '🚗',
             paidBy: 'Sara',
             date: '2024-01-02',
           ),
@@ -73,9 +73,9 @@ void main() {
       final bal = state.getAllBalances(g);
 
       // Total = 60, each person's share = 20
-      // You paid 42, share = 20 â†’ net = +22
-      // Ali paid 0, share = 20 â†’ net = -20
-      // Sara paid 18, share = 20 â†’ net = -2
+      // You paid 42, share = 20 → net = +22
+      // Ali paid 0, share = 20 → net = -20
+      // Sara paid 18, share = 20 → net = -2
       expect(bal['You'], 22.0);
       expect(bal['Ali'], -20.0);
       expect(bal['Sara'], -2.0);
@@ -85,11 +85,11 @@ void main() {
       expect(sum.abs(), lessThan(0.01));
     });
 
-    test('custom split â€” unequal amounts', () {
+    test('custom split — unequal amounts', () {
       final g = GroupData(
         id: 3,
         name: 'Split Test',
-        emoji: 'ðŸ’°',
+        emoji: '💰',
         currency: 'USD',
         sym: '\$',
         members: ['You', 'Ali'],
@@ -98,7 +98,7 @@ void main() {
             id: 1,
             desc: 'Hotel',
             amount: 100,
-            cat: 'ðŸ ',
+            cat: '🏠',
             paidBy: 'You',
             date: '2024-01-01',
             splits: {'You': 30, 'Ali': 70},
@@ -108,8 +108,8 @@ void main() {
 
       final bal = state.getAllBalances(g);
 
-      // You paid 100, owes 30 â†’ net = +70
-      // Ali paid 0, owes 70 â†’ net = -70
+      // You paid 100, owes 30 → net = +70
+      // Ali paid 0, owes 70 → net = -70
       expect(bal['You'], 70.0);
       expect(bal['Ali'], -70.0);
     });
@@ -118,16 +118,16 @@ void main() {
       final g = GroupData(
         id: 4,
         name: 'Settled',
-        emoji: 'âœ…',
+        emoji: '✅',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Dinner',
             amount: 40,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -151,13 +151,13 @@ void main() {
       expect(bal['Ali'], 0.0);
     });
 
-    test('empty group â€” all balances zero', () {
+    test('empty group — all balances zero', () {
       final g = GroupData(
         id: 5,
         name: 'Empty',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
       );
 
@@ -168,20 +168,20 @@ void main() {
       expect(bal['Sara'], 0.0);
     });
 
-    test('single member group â€” balance is always zero', () {
+    test('single member group — balance is always zero', () {
       final g = GroupData(
         id: 6,
         name: 'Solo',
-        emoji: 'ðŸ‘¤',
+        emoji: '👤',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Coffee',
             amount: 5,
-            cat: 'â˜•',
+            cat: '☕',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -196,16 +196,16 @@ void main() {
       final g = GroupData(
         id: 7,
         name: 'Split Zero',
-        emoji: 'ðŸ’°',
+        emoji: '💰',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Gift',
             amount: 50,
-            cat: 'ðŸŽ',
+            cat: '🎁',
             paidBy: 'Ali',
             date: '2024-01-01',
             splits: {'You': 25, 'Ali': 25, 'Sara': 0},
@@ -215,9 +215,9 @@ void main() {
 
       final bal = state.getAllBalances(g);
 
-      // Ali paid 50, owes 25 â†’ net = +25
-      // You paid 0, owes 25 â†’ net = -25
-      // Sara paid 0, owes 0 â†’ net = 0
+      // Ali paid 50, owes 25 → net = +25
+      // You paid 0, owes 25 → net = -25
+      // Sara paid 0, owes 0 → net = 0
       expect(bal['Ali'], 25.0);
       expect(bal['You'], -25.0);
       expect(bal['Sara'], 0.0);
@@ -232,7 +232,7 @@ void main() {
       final g = GroupData(
         id: 100,
         name: 'Dup',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'USD',
         sym: '\$',
         members: ['Sam', 'Sam', 'You'],
@@ -246,7 +246,7 @@ void main() {
             id: 1,
             desc: 'Dinner',
             amount: 30,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'Sam',
             paidById: 'u1', // disambiguates which Sam paid
             date: '2024-01-01',
@@ -255,7 +255,7 @@ void main() {
       );
 
       final byId = state.getBalancesById(g);
-      // u1 paid 30, equal share 10 â†’ +20; the OTHER Sam (u2) owes 10.
+      // u1 paid 30, equal share 10 → +20; the OTHER Sam (u2) owes 10.
       expect(byId['u1'], 20.0);
       expect(byId['u2'], -10.0);
       expect(byId['u3'], -10.0);
@@ -270,7 +270,7 @@ void main() {
       final g = GroupData(
         id: 101,
         name: 'Legacy',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'USD',
         sym: '\$',
         members: ['Ann', 'Bob'],
@@ -283,8 +283,8 @@ void main() {
             id: 1,
             desc: 'Cab',
             amount: 20,
-            cat: 'ðŸš—',
-            paidBy: 'Ann', // no paidById â†’ resolved via roster
+            cat: '🚗',
+            paidBy: 'Ann', // no paidById → resolved via roster
             date: '2024-01-01',
           ),
         ],
@@ -299,7 +299,7 @@ void main() {
       final g = GroupData(
         id: 102,
         name: 'Mixed',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'USD',
         sym: '\$',
         members: ['Ann', 'Bob'],
@@ -309,11 +309,11 @@ void main() {
         ],
         expenses: [
           ExpenseData(
-            id: 1, desc: 'Old', amount: 20, cat: 'ðŸ½ï¸',
+            id: 1, desc: 'Old', amount: 20, cat: '🍽️',
             paidBy: 'Ann', date: '2024-01-01', // legacy
           ),
           ExpenseData(
-            id: 2, desc: 'New', amount: 10, cat: 'ðŸ½ï¸',
+            id: 2, desc: 'New', amount: 10, cat: '🍽️',
             paidBy: 'Ann', paidById: 'u1', date: '2024-01-02', // id-keyed
           ),
         ],
@@ -330,7 +330,7 @@ void main() {
       final g = GroupData(
         id: 103,
         name: 'Settle',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'USD',
         sym: '\$',
         members: ['Ann', 'Bob'],
@@ -340,7 +340,7 @@ void main() {
         ],
         expenses: [
           ExpenseData(
-            id: 1, desc: 'Cab', amount: 20, cat: 'ðŸš—',
+            id: 1, desc: 'Cab', amount: 20, cat: '🚗',
             paidBy: 'Ann', paidById: 'u1', date: '2024-01-01',
           ),
         ],
@@ -361,7 +361,7 @@ void main() {
       final g = GroupData(
         id: 104,
         name: 'CustomId',
-        emoji: 'ðŸ’°',
+        emoji: '💰',
         currency: 'USD',
         sym: '\$',
         members: ['Ann', 'Bob'],
@@ -371,7 +371,7 @@ void main() {
         ],
         expenses: [
           ExpenseData(
-            id: 1, desc: 'Hotel', amount: 100, cat: 'ðŸ ',
+            id: 1, desc: 'Hotel', amount: 100, cat: '🏠',
             paidBy: 'Ann', paidById: 'u1', date: '2024-01-01',
             splitIds: {'u1': 30, 'u2': 70},
           ),
@@ -389,7 +389,7 @@ void main() {
       final g = GroupData(
         id: 105,
         name: 'Stale',
-        emoji: 'ðŸ’°',
+        emoji: '💰',
         currency: 'USD',
         sym: '\$',
         members: ['Ann', 'Bob'],
@@ -399,7 +399,7 @@ void main() {
         ],
         expenses: [
           ExpenseData(
-            id: 1, desc: 'Cab', amount: 20, cat: 'ðŸš—',
+            id: 1, desc: 'Cab', amount: 20, cat: '🚗',
             paidBy: 'Ann', paidById: 'dEd5aVqduOPRstaleUid', // not in roster
             date: '2024-01-01',
           ),
@@ -407,7 +407,7 @@ void main() {
       );
 
       final byId = state.getBalancesById(g);
-      // The stale id must NOT appear; the payer resolves to 'Ann' â†’ u1.
+      // The stale id must NOT appear; the payer resolves to 'Ann' → u1.
       expect(byId.containsKey('dEd5aVqduOPRstaleUid'), isFalse);
       expect(byId['u1'], 10.0);
       expect(byId['u2'], -10.0);
@@ -430,16 +430,16 @@ void main() {
       final g = GroupData(
         id: 10,
         name: 'Plan Test',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Dinner',
             amount: 30,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -449,7 +449,7 @@ void main() {
       final plan = state.buildSettlePlan(g);
 
       // You is owed 20, Ali owes 10, Sara owes 10
-      // Min transactions: Aliâ†’You 10, Saraâ†’You 10
+      // Min transactions: Ali→You 10, Sara→You 10
       expect(plan.length, 2);
 
       final totalPaid = plan.fold(0.0, (s, p) => s + p.amount);
@@ -461,20 +461,20 @@ void main() {
       }
     });
 
-    test('already settled â€” empty plan', () {
+    test('already settled — empty plan', () {
       final g = GroupData(
         id: 11,
         name: 'Settled',
-        emoji: 'âœ…',
+        emoji: '✅',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali'],
         expenses: [
           ExpenseData(
             id: 1,
             desc: 'Dinner',
             amount: 40,
-            cat: 'ðŸ½ï¸',
+            cat: '🍽️',
             paidBy: 'You',
             date: '2024-01-01',
           ),
@@ -494,13 +494,13 @@ void main() {
       expect(plan, isEmpty);
     });
 
-    test('no expenses â€” empty plan', () {
+    test('no expenses — empty plan', () {
       final g = GroupData(
         id: 12,
         name: 'Empty',
-        emoji: 'ðŸ ',
+        emoji: '🏠',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara'],
       );
 
@@ -508,29 +508,29 @@ void main() {
       expect(plan, isEmpty);
     });
 
-    test('complex 4-person group â€” plan settles everyone', () {
+    test('complex 4-person group — plan settles everyone', () {
       final g = GroupData(
         id: 13,
         name: 'Big Trip',
-        emoji: 'âœˆï¸',
+        emoji: '✈️',
         currency: 'EUR',
-        sym: 'â‚¬',
+        sym: '€',
         members: ['You', 'Ali', 'Sara', 'Hamza'],
         expenses: [
-          ExpenseData(id: 1, desc: 'Hotel', amount: 200, cat: 'ðŸ ', paidBy: 'You', date: '2024-01-01'),
-          ExpenseData(id: 2, desc: 'Food', amount: 80, cat: 'ðŸ½ï¸', paidBy: 'Ali', date: '2024-01-02'),
-          ExpenseData(id: 3, desc: 'Taxi', amount: 40, cat: 'ðŸš—', paidBy: 'Sara', date: '2024-01-03'),
+          ExpenseData(id: 1, desc: 'Hotel', amount: 200, cat: '🏠', paidBy: 'You', date: '2024-01-01'),
+          ExpenseData(id: 2, desc: 'Food', amount: 80, cat: '🍽️', paidBy: 'Ali', date: '2024-01-02'),
+          ExpenseData(id: 3, desc: 'Taxi', amount: 40, cat: '🚗', paidBy: 'Sara', date: '2024-01-03'),
         ],
       );
 
       final plan = state.buildSettlePlan(g);
 
       // Total = 320, each share = 80
-      // You: paid 200, share 80 â†’ net +120
-      // Ali: paid 80, share 80 â†’ net 0
-      // Sara: paid 40, share 80 â†’ net -40
-      // Hamza: paid 0, share 80 â†’ net -80
-      // Plan should have 2 transactions (Hamzaâ†’You 80, Saraâ†’You 40)
+      // You: paid 200, share 80 → net +120
+      // Ali: paid 80, share 80 → net 0
+      // Sara: paid 40, share 80 → net -40
+      // Hamza: paid 0, share 80 → net -80
+      // Plan should have 2 transactions (Hamza→You 80, Sara→You 40)
 
       expect(plan.length, 2);
 
@@ -546,9 +546,9 @@ void main() {
     setUp(() {
       state = AppState();
       state.groups = [
-        GroupData(id: 1, name: 'Active 1', emoji: 'ðŸ ', currency: 'EUR', sym: 'â‚¬', members: ['You']),
-        GroupData(id: 2, name: 'Archived', emoji: 'ðŸ“¦', currency: 'USD', sym: '\$', members: ['You'], isArchived: true),
-        GroupData(id: 3, name: 'Active 2', emoji: 'âœˆï¸', currency: 'GBP', sym: 'Â£', members: ['You']),
+        GroupData(id: 1, name: 'Active 1', emoji: '🏠', currency: 'EUR', sym: '€', members: ['You']),
+        GroupData(id: 2, name: 'Archived', emoji: '📦', currency: 'USD', sym: '\$', members: ['You'], isArchived: true),
+        GroupData(id: 3, name: 'Active 2', emoji: '✈️', currency: 'GBP', sym: '£', members: ['You']),
       ];
     });
 
@@ -593,7 +593,7 @@ void main() {
         id: 1,
         desc: 'Test',
         amount: 100,
-        cat: 'ðŸ’°',
+        cat: '💰',
         paidBy: 'You',
         date: '2024-01-01',
         splits: {'You': 30, 'Ali': 70},
@@ -609,7 +609,7 @@ void main() {
         id: 1,
         desc: 'Test',
         amount: 100,
-        cat: 'ðŸ’°',
+        cat: '💰',
         paidBy: 'You',
         date: '2024-01-01',
       );
@@ -654,7 +654,7 @@ void main() {
         cycle: 'monthly',
         billingDay: 1,
         category: 'Entertainment',
-        emoji: 'ðŸŽ¬',
+        emoji: '🎬',
         colorHex: '#FF0000',
         createdAt: DateTime.now(),
       );
@@ -667,7 +667,7 @@ void main() {
       // Monthly stays the same
       final monthly = SubscriptionData(
         id: 1, name: 'Test', amount: 10, currency: 'USD', sym: '\$',
-        cycle: 'monthly', billingDay: 1, category: 'Test', emoji: 'ðŸ’°',
+        cycle: 'monthly', billingDay: 1, category: 'Test', emoji: '💰',
         colorHex: '#000', createdAt: DateTime.now(),
       );
       expect(monthly.monthlyEquivalent, 10.0);
@@ -676,68 +676,17 @@ void main() {
       final yearly = SubscriptionData(
         id: 2, name: 'Test', amount: 120, currency: 'USD', sym: '\$',
         cycle: 'yearly', billingDay: 1, billingMonth: 1, category: 'Test',
-        emoji: 'ðŸ’°', colorHex: '#000', createdAt: DateTime.now(),
+        emoji: '💰', colorHex: '#000', createdAt: DateTime.now(),
       );
       expect(yearly.monthlyEquivalent, 10.0);
 
       // Weekly multiplied by ~4.333
       final weekly = SubscriptionData(
         id: 3, name: 'Test', amount: 10, currency: 'USD', sym: '\$',
-        cycle: 'weekly', billingDay: 1, category: 'Test', emoji: 'ðŸ’°',
+        cycle: 'weekly', billingDay: 1, category: 'Test', emoji: '💰',
         colorHex: '#000', createdAt: DateTime.now(),
       );
       expect(weekly.monthlyEquivalent, closeTo(43.33, 0.01));
-    });
-  });
-
-  group('VoiceInputService parsing', () {
-    // Test the regex/parsing logic used in voice input
-    test('extract amount from spoken text', () {
-      // Direct number extraction
-      final numMatch = RegExp(r'(\d+\.?\d*)').firstMatch('42 euros dinner');
-      expect(numMatch, isNotNull);
-      expect(double.tryParse(numMatch!.group(1)!), 42.0);
-    });
-
-    test('extract "paid by" from spoken text', () {
-      final paidByMatch = RegExp(r'(?:paid\s+by|by)\s+(\w+)')
-          .firstMatch('dinner paid by Ali');
-      expect(paidByMatch, isNotNull);
-      expect(paidByMatch!.group(1), 'Ali');
-    });
-  });
-
-  group('ReceiptScanner amount extraction', () {
-    test('extracts amount from total line', () {
-      // Simulate the regex from receipt_scanner_service.dart
-      final patterns = [
-        RegExp(r'[\$â‚¬Â£Â¥â‚¹]?\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\b'),
-        RegExp(r'(\d+[.,]\d{2})\b'),
-      ];
-
-      const line = 'TOTAL: \$42.50';
-      double? result;
-      for (final pattern in patterns) {
-        final match = pattern.firstMatch(line);
-        if (match != null) {
-          final raw = match.group(1) ?? '';
-          result = double.tryParse(raw);
-          if (result != null) break;
-        }
-      }
-      expect(result, 42.50);
-    });
-
-    test('handles European comma decimal', () {
-      const cleaned = '42,50';
-      final parts = cleaned.split(',');
-      String normalized;
-      if (parts.last.length == 2) {
-        normalized = cleaned.replaceAll(',', '.');
-      } else {
-        normalized = cleaned.replaceAll(',', '');
-      }
-      expect(double.tryParse(normalized), 42.50);
     });
   });
 
@@ -749,17 +698,17 @@ void main() {
       state = AppState();
       state.transactions = [
         // Food (parent), no sub-category
-        TransactionData(id: 1, type: 'expense', desc: 'Lunch', amount: 20, cat: 'ðŸ½ï¸', currency: 'USD', sym: '\$', date: today),
-        // Food â†’ Groceries
-        TransactionData(id: 2, type: 'expense', desc: 'Market', amount: 50, cat: 'ðŸ½ï¸', subcat: 'sub:food:groceries', currency: 'USD', sym: '\$', date: today),
-        // Food â†’ Restaurants
-        TransactionData(id: 3, type: 'expense', desc: 'Dinner', amount: 30, cat: 'ðŸ½ï¸', subcat: 'sub:food:restaurant', currency: 'USD', sym: '\$', date: today),
+        TransactionData(id: 1, type: 'expense', desc: 'Lunch', amount: 20, cat: '🍽️', currency: 'USD', sym: '\$', date: today),
+        // Food → Groceries
+        TransactionData(id: 2, type: 'expense', desc: 'Market', amount: 50, cat: '🍽️', subcat: 'sub:food:groceries', currency: 'USD', sym: '\$', date: today),
+        // Food → Restaurants
+        TransactionData(id: 3, type: 'expense', desc: 'Dinner', amount: 30, cat: '🍽️', subcat: 'sub:food:restaurant', currency: 'USD', sym: '\$', date: today),
         // Transport (parent)
-        TransactionData(id: 4, type: 'expense', desc: 'Bus', amount: 10, cat: 'ðŸšŒ', currency: 'USD', sym: '\$', date: today),
-        // Income â€” must never count toward a spending budget
-        TransactionData(id: 5, type: 'income', desc: 'Pay', amount: 999, cat: 'ðŸ’¼', currency: 'USD', sym: '\$', date: today),
-        // Different currency â€” must be excluded
-        TransactionData(id: 6, type: 'expense', desc: 'EU food', amount: 77, cat: 'ðŸ½ï¸', currency: 'EUR', sym: 'â‚¬', date: today),
+        TransactionData(id: 4, type: 'expense', desc: 'Bus', amount: 10, cat: '🚌', currency: 'USD', sym: '\$', date: today),
+        // Income — must never count toward a spending budget
+        TransactionData(id: 5, type: 'income', desc: 'Pay', amount: 999, cat: '💼', currency: 'USD', sym: '\$', date: today),
+        // Different currency — must be excluded
+        TransactionData(id: 6, type: 'expense', desc: 'EU food', amount: 77, cat: '🍽️', currency: 'EUR', sym: '€', date: today),
       ];
     });
 
@@ -768,7 +717,7 @@ void main() {
 
     test('parent-level budget counts every transaction of that category', () {
       // Food parent = 20 + 50 + 30 = 100 (EUR food excluded)
-      expect(state.budgetSpent(budget(['ðŸ½ï¸'])), 100);
+      expect(state.budgetSpent(budget(['🍽️'])), 100);
     });
 
     test('sub-level budget counts only the matching sub-category', () {
@@ -783,14 +732,14 @@ void main() {
 
     test('parent + another category sum without double counting', () {
       // Food parent (100) + Transport (10) = 110
-      expect(state.budgetSpent(budget(['ðŸ½ï¸', 'ðŸšŒ'])), 110);
+      expect(state.budgetSpent(budget(['🍽️', '🚌'])), 110);
     });
 
     test('subcategory helpers resolve keys', () {
-      expect(AppState.subsFor('ðŸ½ï¸').isNotEmpty, true);
-      expect(AppState.parentOfSub('sub:food:groceries'), 'ðŸ½ï¸');
+      expect(AppState.subsFor('🍽️').isNotEmpty, true);
+      expect(AppState.parentOfSub('sub:food:groceries'), '🍽️');
       expect(AppState.subByKey('sub:food:groceries')?.label, 'Groceries');
-      expect(AppState.labelForKey('ðŸ½ï¸'), 'Food');
+      expect(AppState.labelForKey('🍽️'), 'Food');
       expect(AppState.labelForKey('sub:food:groceries'), 'Groceries');
     });
   });

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker>
+    <style>
+      .t{font-size:17px;font-weight:700;fill:#0f172a}
+      .s{font-size:13px;fill:#334155}
+      .m{font-size:12px;fill:#64748b;font-family:ui-monospace,Menlo,Consolas,monospace}
+      .h{font-size:14px;font-weight:700;letter-spacing:.08em;fill:#64748b}
+      .l{font-size:12.5px;fill:#334155;font-weight:600}
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:1.5}
+    </style>
+  </defs>
+  <rect width="1200" height="760" fill="#f8fafc"/>
+  <text x="40" y="48" font-size="24" font-weight="800" fill="#0f172a">Splitzee / SplitSmart — local-first architecture</text>
+  <text x="40" y="74" class="s">Every write is persisted to encrypted SQLite first; signed-in sessions mirror it to Firestore in the background.</text>
+
+  <!-- Device -->
+  <rect x="30" y="100" width="640" height="630" rx="18" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+  <text x="54" y="130" class="h">FLUTTER APP · ANDROID / iOS</text>
+
+  <rect x="60" y="148" width="580" height="78" rx="12" class="box"/>
+  <text x="80" y="178" class="t">Screens &amp; widgets</text>
+  <text x="80" y="200" class="s">Home · Groups · Add Expense · Settle Up · Overview · Planner · Goals · Reminders</text>
+  <text x="80" y="217" class="m">lib/screens  lib/widgets</text>
+
+  <rect x="60" y="262" width="580" height="104" rx="12" fill="#fff" stroke="#6366f1" stroke-width="2"/>
+  <text x="80" y="292" class="t">AppState — Provider ChangeNotifier</text>
+  <text x="80" y="314" class="s">In-memory groups, wallets, budgets, goals · balances by stable member ID</text>
+  <text x="80" y="333" class="s">greedy settle-up plan · AccountTier routing (local / guest / full)</text>
+  <text x="80" y="354" class="m">lib/providers/app_state.dart  lib/services/entitlement.dart</text>
+
+  <rect x="60" y="410" width="300" height="122" rx="12" class="box"/>
+  <text x="80" y="440" class="t">SQLCipher SQLite</text>
+  <text x="80" y="462" class="s">Source of truth for the UI</text>
+  <text x="80" y="481" class="s">Schema v19 · foreign keys on</text>
+  <text x="80" y="500" class="s">Subscriptions stay local-only</text>
+  <text x="80" y="520" class="m">database_service.dart</text>
+
+  <rect x="390" y="410" width="250" height="122" rx="12" class="box"/>
+  <text x="410" y="440" class="t">DbKeyService</text>
+  <text x="410" y="462" class="s">Random 256-bit key</text>
+  <text x="410" y="481" class="s">Android Keystore /</text>
+  <text x="410" y="500" class="s">iOS Keychain</text>
+  <text x="410" y="520" class="m">flutter_secure_storage</text>
+
+  <rect x="60" y="572" width="580" height="132" rx="12" class="box"/>
+  <text x="80" y="602" class="t">On-device services</text>
+  <text x="80" y="626" class="s">Local notifications (subscriptions, reminders) · voice-to-expense parser</text>
+  <text x="80" y="646" class="s">Category suggestions · PDF / CSV export · CSV import</text>
+  <text x="80" y="666" class="s">Encrypted backup &amp; restore · biometric app lock · QR invite share / scan</text>
+  <text x="80" y="690" class="m">lib/services/*</text>
+
+  <!-- Firebase -->
+  <rect x="730" y="100" width="440" height="630" rx="18" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <text x="754" y="130" class="h">FIREBASE · splitsmart-3898</text>
+
+  <rect x="760" y="148" width="380" height="96" rx="12" class="box"/>
+  <text x="780" y="178" class="t">Firebase Auth</text>
+  <text x="780" y="200" class="s">Email / password · Google Sign-In</text>
+  <text x="780" y="219" class="s">Anonymous guest → link to full account</text>
+
+  <rect x="760" y="270" width="380" height="146" rx="12" fill="#fff" stroke="#0f766e" stroke-width="2"/>
+  <text x="780" y="300" class="t">Cloud Firestore</text>
+  <text x="780" y="322" class="m">users/{uid}/wallets, transactions,</text>
+  <text x="780" y="340" class="m">   savingGoals, budgetLimits …</text>
+  <text x="780" y="358" class="m">groups/{id}/expenses, settlements</text>
+  <text x="780" y="376" class="m">inviteCodes/{code}</text>
+  <text x="780" y="402" class="s">Security rules deployed · emulator-tested</text>
+
+  <rect x="760" y="442" width="380" height="96" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="780" y="472" class="t">Cloud Storage — receipts</text>
+  <text x="780" y="494" class="s">Rules written, bucket not enabled (Blaze plan).</text>
+  <text x="780" y="513" class="s">Upload fails soft → receipt stays on device.</text>
+
+  <rect x="760" y="564" width="380" height="140" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="780" y="594" class="t">Cloud Functions — not deployed</text>
+  <text x="780" y="616" class="s">Source in firebase/functions:</text>
+  <text x="780" y="636" class="s">expense / settlement push, invite resolution,</text>
+  <text x="780" y="655" class="s">purchase verification, guest cleanup.</text>
+  <text x="780" y="679" class="s">Requires Blaze plan.</text>
+
+  <!-- arrows -->
+  <line x1="350" y1="226" x2="350" y2="258" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="210" y1="366" x2="210" y2="406" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+  <text x="222" y="392" class="l">① awaited write</text>
+  <line x1="390" y1="471" x2="364" y2="471" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M60 314 L44 314 L44 638 L56 638" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+
+  <path d="M640 290 L700 290 L700 196 L756 196" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  <text x="664" y="186" class="l">sign-in</text>
+  <path d="M640 330 L756 330" fill="none" stroke="#0f766e" stroke-width="2.5" marker-end="url(#g)"/>
+  <text x="648" y="302" class="l" fill="#0f766e">② background sync</text>
+  <text x="648" y="320" class="m">guest / full</text>
+  <path d="M640 352 L690 352 L690 490 L756 490" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+  <path d="M950 416 L950 438" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5"/>
+</svg>

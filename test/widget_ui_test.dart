@@ -33,9 +33,9 @@ void main() {
     testWidgets('EmojiBox maps a category emoji to its Material icon',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: EmojiBox(emoji: 'ðŸ½ï¸'))),
+        const MaterialApp(home: Scaffold(body: EmojiBox(emoji: '🍽️'))),
       );
-      // 'ðŸ½ï¸' (Food) resolves to restaurant_rounded via icon_map â€” and the box
+      // '🍽️' (Food) resolves to restaurant_rounded via icon_map — and the box
       // must render an Icon, never the raw emoji glyph (icons-only UI).
       expect(find.byIcon(Icons.restaurant_rounded), findsOneWidget);
     });
@@ -74,7 +74,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // White-on-teal (#0D7377) is ~5.6:1 â€” passes WCAG AA for normal text.
+      // White-on-teal (#0D7377) is ~5.6:1 — passes WCAG AA for normal text.
       await expectLater(tester, meetsGuideline(textContrastGuideline));
       // Material requires a >=48x48 logical-pixel tap target.
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));

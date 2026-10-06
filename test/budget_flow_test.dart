@@ -6,17 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:splitzee/providers/app_state.dart';
 import 'package:splitzee/screens/new_budget_screen.dart';
 
-/// Screen-flow (widget) tests for the New Budget screen â€” exercises the real
+/// Screen-flow (widget) tests for the New Budget screen — exercises the real
 /// widget tree with a Provider-backed AppState, no Firebase/DB writes triggered.
 /// Focuses on the subcategory picker added this cycle.
 void main() {
   setUpAll(() {
-    // Don't hit the network for fonts in tests â€” fall back immediately.
+    // Don't hit the network for fonts in tests — fall back immediately.
     GoogleFonts.config.allowRuntimeFetching = false;
     SharedPreferences.setMockInitialValues({});
   });
 
-  // Use .value so the provider does NOT dispose the AppState on unmount â€”
+  // Use .value so the provider does NOT dispose the AppState on unmount —
   // AppState.dispose() calls stopRealtimeServices() which touches Firestore
   // (uninitialized in tests). We own the instance and let it be GC'd.
   Widget harness(AppState state) => ChangeNotifierProvider<AppState>.value(
@@ -35,7 +35,7 @@ void main() {
     // Categories field defaults to "All categories".
     expect(find.text('All categories'), findsOneWidget);
     // The submit button sits below the fold in the test viewport (the form
-    // ListView builds lazily) â€” scroll it into view before asserting.
+    // ListView builds lazily) — scroll it into view before asserting.
     await tester.scrollUntilVisible(find.text('Create Budget'), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Create Budget'), findsOneWidget);
