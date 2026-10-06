@@ -11,8 +11,9 @@
 
   Obfuscation renames everything, so crash stack traces become unreadable
   symbols. The matching symbol files are written to debug-symbols/<version>/
-  and are COMMITTED to the repo (small, ~15 MB/release) so a release's crash
-  reports can always be decoded. After building, just commit the new folder.
+  and are git-ignored: they reverse --obfuscate, so never publish them. Archive
+  each release's folder privately (or upload to Crashlytics) so its crash
+  reports can still be decoded.
 
 .PARAMETER Flavor
   Build flavor (default: prod).
@@ -64,4 +65,4 @@ if (Test-Path $aab) {
   Write-Host "Build reported success but the .aab was not found at $aab" -ForegroundColor Yellow
 }
 Write-Host "Symbols saved to: $symbolDir" -ForegroundColor Green
-Write-Host "Next: commit the debug-symbols/ folder so this release's crashes stay decodable." -ForegroundColor Yellow
+Write-Host "Next: archive debug-symbols/$safeVersion privately (it is git-ignored; never publish it - it reverses --obfuscate)." -ForegroundColor Yellow

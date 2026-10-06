@@ -549,7 +549,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
           return payer == 'you' || (myName.isNotEmpty && payer == myName);
         })
         .fold<double>(0, (sum, e) => sum + e.amount);
-    final balanceLabel = bal < 0 ? l.youOweLabel.toUpperCase() : 'YOU OWE';
+    final balanceLabel = (bal < 0
+            ? l.youOweLabel
+            : bal > 0
+                ? l.youAreOwedLabel
+                : l.nothingOwed)
+        .toUpperCase();
     final balanceColor = bal < 0 ? const Color(0xFFE85A6A) : const Color(0xFF009B73);
 
     return Container(

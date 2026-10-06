@@ -201,6 +201,11 @@ parser, and widget rendering. The guest-join / premium Firestore rules have a se
 - `google-services.json` and the web `FirebaseOptions` in `lib/main.dart` contain Firebase **client** identifiers.
   These are not secrets; access is enforced by security rules and Auth.
 - Signing keys (`*.jks`, `*.keystore`, `key.properties`), `.env` files and service-account keys are git-ignored and not in the repository.
+- Obfuscation maps (`debug-symbols/`) and raw, unmasked screenshots are git-ignored: the maps would undo
+  `--obfuscate`, and the raw captures show real account details. Archive release symbols privately.
+- Shared group docs are written by other members' clients, so the app parses them type-safely
+  (`lib/services/cloud_doc_parser.dart`) and only loads remote receipt images from Firebase Storage hosts.
+  Firestore rules also bound the type, size and key count of expense and settlement docs.
 - Privacy policy: <https://mighiana.github.io/splitsmart-privacy/privacy_policy.html>
 
 ## Further docs
